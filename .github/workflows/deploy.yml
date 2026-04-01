@@ -92,7 +92,7 @@ jobs:
         }
 
       - name: ✍️ - Creating sign request to SignPath
-        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'windows-latest' && secrets.SIGNPATH_API_TOKEN != ''
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'windows-latest' && github.repository == 'tosuapp/tosu'
         uses: signpath/github-action-submit-signing-request@v1.1
         with:
           api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
