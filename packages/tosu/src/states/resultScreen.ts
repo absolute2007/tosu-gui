@@ -3,7 +3,8 @@ import { ClientType, measureTime, wLogger } from '@tosu/common';
 
 import { AbstractInstance } from '@/instances';
 import { AbstractState } from '@/states';
-import { calculateGrade } from '@/utils/calculators';
+import { calculateAccuracy, calculateGrade } from '@/utils/calculators';
+import { officialOsuPerformance } from '@/utils/officialOsuPerformance';
 import { defaultCalculatedMods, sanitizeMods } from '@/utils/osuMods';
 import { CalculateMods } from '@/utils/osuMods.types';
 
@@ -29,6 +30,7 @@ export class ResultScreen extends AbstractState {
     fcPP: number;
 
     previousBeatmap: string;
+    private officialPerformanceRequestKey: string;
 
     constructor(game: AbstractInstance) {
         super(game);
@@ -57,6 +59,7 @@ export class ResultScreen extends AbstractState {
         this.fcPP = 0;
 
         this.previousBeatmap = '';
+        this.officialPerformanceRequestKey = '';
     }
 
     @measureTime
@@ -203,6 +206,93 @@ export class ResultScreen extends AbstractState {
 
             curPerformance.free();
             fcPerformance.free();
+
+            if (this.mode === 0 && beatmapPP.officialCacheKey) {
+                const fullState = beatmapPP.performanceAttributes?.state;
+                const fcStatistics = {
+                    ...this.statistics,
+                    great: this.statistics.great + this.statistics.miss,
+                    miss: 0,
+                    sliderTailHit:
+                        fullState?.sliderEndHits ??
+                        this.statistics.sliderTailHit,
+                    smallTickHit:
+                        fullState?.osuSmallTickHits ??
+                        this.statistics.smallTickHit,
+                    largeTickHit:
+                        fullState?.osuLargeTickHits ??
+                        this.statistics.largeTickHit
+                } as Statistics;
+
+                const officialRequestKey = [
+                    beatmapPP.officialCacheKey,
+                    this.playerName,
+                    this.maxCombo,
+                    this.accuracy.toFixed(4),
+                    this.statistics.great,
+                    this.statistics.ok,
+                    this.statistics.meh,
+                    this.statistics.miss,
+                    this.statistics.sliderTailHit,
+                    this.statistics.smallTickHit,
+                    this.statistics.largeTickHit
+                ].join(':');
+
+                if (this.officialPerformanceRequestKey !== officialRequestKey) {
+                    this.officialPerformanceRequestKey = officialRequestKey;
+
+                    officialOsuPerformance
+                        .calculatePerformances({
+                            cacheKey: beatmapPP.officialCacheKey,
+                            scores: [
+                                {
+                                    statistics: this.statistics,
+                                    accuracy: this.accuracy / 100,
+                                    combo: this.maxCombo
+                                },
+                                {
+                                    statistics: fcStatistics,
+                                    accuracy:
+                                        calculateAccuracy({
+                                            isLazer:
+                                                this.game.client ===
+                                                ClientType.lazer,
+                                            mods: this.mods.array,
+                                            mode: this.mode,
+                                            statistics: fcStatistics
+                                        }) / 100,
+                                    combo: beatmapPP.calculatedMapAttributes
+                                        .maxCombo
+                                }
+                            ]
+                        })
+                        .then((results) => {
+                            if (
+                                this.officialPerformanceRequestKey !==
+                                officialRequestKey
+                            ) {
+                                return;
+                            }
+
+                            this.pp = results[0]?.pp || this.pp;
+                            this.fcPP = results[1]?.pp || this.fcPP;
+                        })
+                        .catch((error) => {
+                            if (
+                                this.officialPerformanceRequestKey !==
+                                officialRequestKey
+                            ) {
+                                return;
+                            }
+
+                            wLogger.debug(
+                                `%${ClientType[this.game.client]}%`,
+                                `Official osu!standard result PP fallback:`,
+                                error
+                            );
+                        });
+                }
+            }
 
             wLogger.time(
                 `%${ClientType[this.game.client]}%`,

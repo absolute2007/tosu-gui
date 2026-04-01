@@ -5,10 +5,10 @@
   "packageManager": "pnpm@10.10.0",
   "scripts": {
     "prepare": "husky install",
-    "start": "pnpm run -C packages/tosu run:dev",
-    "build:win": "pnpm run -C packages/tosu compile:win",
-    "build:linux": "pnpm run -C packages/tosu compile:linux",
-    "build:overlay": "pnpm run -C \"packages/ingame-overlay\" dist",
+    "start": "corepack pnpm run -C packages/tosu run:dev",
+    "build:win": "corepack pnpm run -C packages/tosu compile:win",
+    "build:linux": "corepack pnpm run -C packages/tosu compile:linux",
+    "build:overlay": "corepack pnpm run -C \"packages/ingame-overlay\" dist",
     "release": "standard-version",
     "prettier:fix": "prettier --write \"**/*.{js,jsx,ts,tsx,css}\"",
     "prettier:ci": "prettier --check \"**/*.{js,jsx,ts,tsx,css}\"",
@@ -38,8 +38,8 @@
   },
   "lint-staged": {
     "**/*.{js,ts}": [
-      "pnpm run prettier:fix",
-      "pnpm run lint:fix"
+      "corepack pnpm run prettier:fix",
+      "corepack pnpm run lint:fix"
     ]
   },
   "homepage": "https://github.com/tosuapp/tosu#readme",

@@ -14,4 +14,5 @@ _version.js
 **/tosu/.cache/
 logs/
 settings/
+packages/tosu/run-logs/
 packages/server/assets/homepage.min.css

@@ -8,7 +8,12 @@ import {
     LeaderboardPlayer,
     Statistics
 } from '@/states/types';
-import { calculateGrade, calculatePassedObjects } from '@/utils/calculators';
+import {
+    calculateAccuracy,
+    calculateGrade,
+    calculatePassedObjects
+} from '@/utils/calculators';
+import { officialOsuPerformance } from '@/utils/officialOsuPerformance';
 import { defaultCalculatedMods, sanitizeMods } from '@/utils/osuMods';
 import { CalculateMods, OsuMods } from '@/utils/osuMods.types';
 
@@ -90,6 +95,7 @@ export class Gameplay extends AbstractState {
     previousState: string = '';
     previousPassedObjects = 0;
     previousHitErrorIndex = 0;
+    private officialPerformanceRequestKey: string = '';
 
     constructor(game: AbstractInstance) {
         super(game);
@@ -137,6 +143,7 @@ export class Gameplay extends AbstractState {
 
         this.previousPassedObjects = 0;
         this.previousHitErrorIndex = 0;
+        this.officialPerformanceRequestKey = '';
 
         this.gradualPerformance = undefined;
         this.performanceAttributes = undefined;
@@ -164,6 +171,7 @@ export class Gameplay extends AbstractState {
         this.previousPassedObjects = 0;
         this.gradualPerformance = undefined;
         this.performanceAttributes = undefined;
+        this.officialPerformanceRequestKey = '';
     }
 
     resetHitErrors() {
@@ -558,7 +566,7 @@ export class Gameplay extends AbstractState {
             const maxJudgementsAmount =
                 this.mode === 3 &&
                 (this.game.client === ClientType.lazer ||
-                    this.mods.array.includes({ acronym: 'SV2' }))
+                    this.mods.array.some((mod) => mod.acronym === 'SV2'))
                     ? beatmapPP.calculatedMapAttributes.circles +
                       2 * beatmapPP.calculatedMapAttributes.sliders
                     : beatmapPP.calculatedMapAttributes.circles +
@@ -634,6 +642,139 @@ export class Gameplay extends AbstractState {
             if (fcPerformance) {
                 beatmapPP.currAttributes.fcPP = fcPerformance.pp;
                 beatmapPP.updatePPAttributes('fc', fcPerformance);
+            }
+
+            if (this.mode === 0 && beatmapPP.officialCacheKey) {
+                const currentStatistics = { ...this.statistics };
+                const fullState = this.performanceAttributes?.state;
+
+                const maxAchievableStatistics = {
+                    ...currentStatistics,
+                    great:
+                        beatmapPP.calculatedMapAttributes.circles +
+                        beatmapPP.calculatedMapAttributes.sliders +
+                        beatmapPP.calculatedMapAttributes.spinners -
+                        currentStatistics.ok -
+                        currentStatistics.meh -
+                        currentStatistics.miss
+                } as Statistics;
+
+                const fcStatistics = {
+                    ...currentStatistics,
+                    great: currentStatistics.great + currentStatistics.miss,
+                    miss: 0,
+                    sliderTailHit:
+                        fullState?.sliderEndHits ??
+                        currentStatistics.sliderTailHit,
+                    smallTickHit:
+                        fullState?.osuSmallTickHits ??
+                        currentStatistics.smallTickHit,
+                    largeTickHit:
+                        fullState?.osuLargeTickHits ??
+                        currentStatistics.largeTickHit
+                } as Statistics;
+
+                const officialRequestKey = [
+                    beatmapPP.officialCacheKey,
+                    passedObjects,
+                    this.maxCombo,
+                    this.accuracy.toFixed(4),
+                    currentStatistics.great,
+                    currentStatistics.ok,
+                    currentStatistics.meh,
+                    currentStatistics.miss,
+                    currentStatistics.sliderTailHit,
+                    currentStatistics.smallTickHit,
+                    currentStatistics.largeTickHit
+                ].join(':');
+
+                if (this.officialPerformanceRequestKey !== officialRequestKey) {
+                    this.officialPerformanceRequestKey = officialRequestKey;
+
+                    officialOsuPerformance
+                        .calculatePerformances({
+                            cacheKey: beatmapPP.officialCacheKey,
+                            scores: [
+                                {
+                                    statistics: currentStatistics,
+                                    accuracy: this.accuracy / 100,
+                                    combo: this.maxCombo,
+                                    passedObjects
+                                },
+                                {
+                                    statistics: maxAchievableStatistics,
+                                    accuracy:
+                                        calculateAccuracy({
+                                            isLazer:
+                                                this.game.client ===
+                                                ClientType.lazer,
+                                            mods: this.mods.array,
+                                            mode: this.mode,
+                                            statistics: maxAchievableStatistics
+                                        }) / 100,
+                                    combo: this.maxCombo
+                                },
+                                {
+                                    statistics: fcStatistics,
+                                    accuracy:
+                                        calculateAccuracy({
+                                            isLazer:
+                                                this.game.client ===
+                                                ClientType.lazer,
+                                            mods: this.mods.array,
+                                            mode: this.mode,
+                                            statistics: fcStatistics
+                                        }) / 100,
+                                    combo: beatmapPP.calculatedMapAttributes
+                                        .maxCombo
+                                }
+                            ]
+                        })
+                        .then((results) => {
+                            if (
+                                this.officialPerformanceRequestKey !==
+                                officialRequestKey
+                            ) {
+                                return;
+                            }
+
+                            const [current, maxAchievable, fc] = results;
+                            if (current) {
+                                beatmapPP.updateCurrentAttributes(
+                                    current.stars,
+                                    current.pp
+                                );
+                                beatmapPP.updatePPAttributes(
+                                    'curr',
+                                    current as any
+                                );
+                            }
+
+                            if (maxAchievable) {
+                                beatmapPP.currAttributes.maxAchievable =
+                                    maxAchievable.pp;
+                            }
+
+                            if (fc) {
+                                beatmapPP.currAttributes.fcPP = fc.pp;
+                                beatmapPP.updatePPAttributes('fc', fc as any);
+                            }
+                        })
+                        .catch((error) => {
+                            if (
+                                this.officialPerformanceRequestKey !==
+                                officialRequestKey
+                            ) {
+                                return;
+                            }
+
+                            wLogger.debug(
+                                `%${ClientType[this.game.client]}%`,
+                                `Official osu!standard gameplay PP fallback:`,
+                                error
+                            );
+                        });
+                }
             }
 
             this.previousPassedObjects = passedObjects;

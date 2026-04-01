@@ -7,10 +7,14 @@
         "genver": "npx genversion src/_version.js",
         "ts:run": "cross-env NODE_ENV=development ts-node --transpile-only -r tsconfig-paths/register --project tsconfig.json",
         "ts:compile": "ncc build src/index.ts -o dist -m -d",
-        "run:dev": "pnpm run genver && pnpm run ts:run src/index.ts",
-        "compile:prepare-htmls": "cp -rf node_modules/@tosu/server/assets ./dist",
-        "compile:win": "pnpm run genver && pnpm run ts:compile && pnpm run compile:prepare-htmls && pkg --output dist/tosu.exe --debug --config pkg.win.json --compress brotli dist/index.js && pnpm run ts:run src/postBuild.ts",
-        "compile:linux": "pnpm run genver && pnpm run ts:compile && pnpm run compile:prepare-htmls && pkg --output dist/tosu --debug --config pkg.linux.json --compress brotli dist/index.js"
+        "run:dev": "corepack pnpm run genver && corepack pnpm run ts:run src/index.ts",
+        "compile:prepare-htmls": "node scripts/copyServerAssets.js",
+        "build:overlay:win": "node scripts/buildOverlayRelease.js",
+        "official-pp:publish:win": "dotnet publish official-pp-helper/official-pp-helper.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist/target/official-pp/win-x64",
+        "official-pp:publish:linux": "dotnet publish official-pp-helper/official-pp-helper.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist/target/official-pp/linux-x64",
+        "prepare:release:win": "node scripts/prepareWindowsRelease.js",
+        "compile:win": "corepack pnpm run genver && corepack pnpm run ts:compile && corepack pnpm run compile:prepare-htmls && corepack pnpm run official-pp:publish:win && corepack pnpm run build:overlay:win && pkg --output dist/tosu.exe --debug --config pkg.win.json --compress brotli dist/index.js && corepack pnpm run ts:run src/postBuild.ts && corepack pnpm run prepare:release:win",
+        "compile:linux": "corepack pnpm run genver && corepack pnpm run ts:compile && corepack pnpm run compile:prepare-htmls && corepack pnpm run official-pp:publish:linux && pkg --output dist/tosu --debug --config pkg.linux.json --compress brotli dist/index.js"
     },
     "dependencies": {
         "@kotrikd/rosu-pp": "3.1.0",

@@ -7,7 +7,9 @@ import { BeatmapDecoder } from 'osu-parsers';
 import { BeatmapStrains } from '@/api/types/v1';
 import { AbstractInstance } from '@/instances';
 import { AbstractState } from '@/states';
+import { Statistics } from '@/states/types';
 import { fixDecimals, safeJoin } from '@/utils/converters';
+import { officialOsuPerformance } from '@/utils/officialOsuPerformance';
 import { sanitizeMods } from '@/utils/osuMods';
 import { CalculateMods, ModsLazer } from '@/utils/osuMods.types';
 
@@ -85,6 +87,79 @@ interface KiaiPoint {
     end: number;
 }
 
+function buildOsuAccuracyStatistics(
+    totalObjects: number,
+    accuracy: number
+): Statistics {
+    const empty = {
+        perfect: 0,
+        great: 0,
+        good: 0,
+        ok: 0,
+        meh: 0,
+        miss: 0,
+        smallTickMiss: 0,
+        smallTickHit: 0,
+        largeTickMiss: 0,
+        largeTickHit: 0,
+        smallBonus: 0,
+        largeBonus: 0,
+        ignoreMiss: 0,
+        ignoreHit: 0,
+        comboBreak: 0,
+        sliderTailHit: 0,
+        legacyComboIncrease: 0
+    } as Statistics;
+
+    if (totalObjects <= 0) {
+        return empty;
+    }
+
+    const maxPoints = totalObjects * 6;
+    const targetDeficit = maxPoints * (1 - accuracy / 100);
+
+    let best = {
+        great: totalObjects,
+        ok: 0,
+        meh: 0,
+        diff: Number.POSITIVE_INFINITY
+    };
+
+    for (let meh = 0; meh <= Math.min(totalObjects, 4); meh++) {
+        const okBase = (targetDeficit - 5 * meh) / 4;
+        const candidates = new Set([
+            Math.floor(okBase),
+            Math.round(okBase),
+            Math.ceil(okBase)
+        ]);
+
+        for (const ok of candidates) {
+            if (ok < 0) continue;
+
+            const great = totalObjects - meh - ok;
+            if (great < 0) continue;
+
+            const achieved = ((6 * great + 2 * ok + meh) / maxPoints) * 100;
+            const diff = Math.abs(achieved - accuracy);
+
+            if (
+                diff < best.diff ||
+                (diff === best.diff && meh < best.meh) ||
+                (diff === best.diff && meh === best.meh && ok < best.ok)
+            ) {
+                best = { great, ok, meh, diff };
+            }
+        }
+    }
+
+    return {
+        ...empty,
+        great: best.great,
+        ok: best.ok,
+        meh: best.meh
+    };
+}
+
 export class BeatmapPP extends AbstractState {
     isKiai: boolean;
     isBreak: boolean;
@@ -138,6 +213,10 @@ export class BeatmapPP extends AbstractState {
     timingPoints: TimingPoint[] = [];
     breaks: BreakPoint[] = [];
     kiais: KiaiPoint[] = [];
+    officialCacheKey: string = '';
+    private officialPrepareRequestKey: string = '';
+    private officialPpAccRequestKey: string = '';
+    private officialPreparedCacheKey: string = '';
 
     constructor(game: AbstractInstance) {
         super(game);
@@ -228,6 +307,10 @@ export class BeatmapPP extends AbstractState {
         this.timingPoints = [];
         this.breaks = [];
         this.kiais = [];
+        this.officialCacheKey = '';
+        this.officialPrepareRequestKey = '';
+        this.officialPpAccRequestKey = '';
+        this.officialPreparedCacheKey = '';
     }
 
     updatePPAttributes(
@@ -570,6 +653,139 @@ export class BeatmapPP extends AbstractState {
             };
 
             attributes.free();
+
+            if (currentMode !== 0) {
+                this.officialCacheKey = '';
+                this.officialPrepareRequestKey = '';
+                this.officialPpAccRequestKey = '';
+                this.officialPreparedCacheKey = '';
+            } else {
+                const officialCacheKey = `${mapPath}:${currentMods.checksum}:${this.game.client}`;
+                this.officialCacheKey = officialCacheKey;
+
+                if (
+                    this.officialPrepareRequestKey === officialCacheKey ||
+                    this.officialPreparedCacheKey === officialCacheKey
+                ) {
+                    this.game.resetReportCount('beatmapPP updateMapMetadata');
+                    return;
+                }
+
+                this.officialPrepareRequestKey = officialCacheKey;
+
+                officialOsuPerformance
+                    .prepareBeatmap({
+                        cacheKey: officialCacheKey,
+                        isLazer: this.game.client === ClientType.lazer,
+                        mapPath,
+                        mods: sanitizeMods(currentMods.array)
+                    })
+                    .then((prepared) => {
+                        if (
+                            this.officialPrepareRequestKey !== officialCacheKey
+                        ) {
+                            return;
+                        }
+
+                        this.officialPreparedCacheKey = officialCacheKey;
+
+                        this.calculatedMapAttributes = {
+                            ...this.calculatedMapAttributes,
+                            arConverted: prepared.arConverted,
+                            csConverted: prepared.csConverted,
+                            hpConverted: prepared.hpConverted,
+                            odConverted: prepared.odConverted,
+                            circles: prepared.circles,
+                            sliders: prepared.sliders,
+                            spinners: prepared.spinners,
+                            maxCombo: prepared.maxCombo,
+                            fullStars: prepared.stars,
+                            stars: prepared.stars,
+                            aim: prepared.aim,
+                            speed: prepared.speed,
+                            flashlight: prepared.flashlight,
+                            sliderFactor: prepared.sliderFactor,
+                            hitWindow: prepared.hitWindow
+                        };
+
+                        if (!config.calculatePP) {
+                            return;
+                        }
+
+                        const totalObjects =
+                            prepared.circles +
+                            prepared.sliders +
+                            prepared.spinners;
+                        const scores = [
+                            100, 99, 98, 97, 96, 95, 94, 93, 92, 91, 90
+                        ].map((acc) => ({
+                            statistics: buildOsuAccuracyStatistics(
+                                totalObjects,
+                                acc
+                            ),
+                            accuracy: acc / 100,
+                            combo: prepared.maxCombo
+                        }));
+
+                        this.officialPpAccRequestKey = officialCacheKey;
+
+                        return officialOsuPerformance
+                            .calculatePerformances({
+                                cacheKey: officialCacheKey,
+                                scores
+                            })
+                            .then((performances) => {
+                                if (
+                                    this.officialPpAccRequestKey !==
+                                    officialCacheKey
+                                ) {
+                                    return;
+                                }
+
+                                const ppAcc = {} as BeatmapPPAcc;
+                                const labels = [
+                                    '100',
+                                    '99',
+                                    '98',
+                                    '97',
+                                    '96',
+                                    '95',
+                                    '94',
+                                    '93',
+                                    '92',
+                                    '91',
+                                    '90'
+                                ] as const;
+
+                                labels.forEach((label, index) => {
+                                    ppAcc[label] = fixDecimals(
+                                        performances[index]?.pp || 0
+                                    );
+                                });
+
+                                this.ppAcc = ppAcc;
+                                this.currAttributes.fcPP =
+                                    this.currAttributes.fcPP === 0
+                                        ? this.ppAcc[100] || 0
+                                        : this.currAttributes.fcPP;
+                            });
+                    })
+                    .catch((error) => {
+                        if (
+                            this.officialPrepareRequestKey !== officialCacheKey
+                        ) {
+                            return;
+                        }
+
+                        this.officialPrepareRequestKey = '';
+
+                        wLogger.debug(
+                            `%${ClientType[this.game.client]}%`,
+                            `Official osu!standard PP fallback:`,
+                            error
+                        );
+                    });
+            }
 
             this.game.resetReportCount('beatmapPP updateMapMetadata');
         } catch (exc) {
