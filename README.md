@@ -1,12 +1,11 @@
 <p align="center">
-  <a href="https://github.com/tosuapp/tosu/blob/master/LICENSE" target="_blank"><img alt="License: GPL--3.0" src="https://img.shields.io/github/license/tosuapp/tosu?style=for-the-badge&color=%23A27456" /></a>
-  <img alt="Version" src="https://img.shields.io/github/release/tosuapp/tosu.svg?style=for-the-badge&color=%235686A2" />
+  <a href="https://github.com/absolute2007/tosu-mix/blob/main/LICENSE" target="_blank"><img alt="License: GPL--3.0" src="https://img.shields.io/github/license/absolute2007/tosu-mix?style=for-the-badge&color=%23A27456" /></a>
+  <img alt="Version" src="https://img.shields.io/github/release/absolute2007/tosu-mix.svg?style=for-the-badge&color=%235686A2" />
   <img src="https://img.shields.io/badge/node-%3E%3D20.11.1-45915E.svg?style=for-the-badge&logo=node.js&logoColor=white" />
-  <a href="https://twitter.com/kotrik0" target="_blank"><img alt="Twitter: kotrik0" src="https://img.shields.io/badge/kotrik0-5593ba?style=for-the-badge&logo=x&logoColor=white" /></a>
 </p>
 
 
-<h1 align="center">Welcome to tosu 👋</h1>
+<h1 align="center">tosu-mix</h1>
 <div align="center">
   <img src=".github/logo.png" />
 </div>
@@ -14,44 +13,54 @@
 <br>
 
 <p align="center">
-  <img src="https://img.shields.io/github/issues/tosuapp/tosu?style=for-the-badge&color=%23a35f56" />
-  <img src="https://img.shields.io/github/issues-closed/tosuapp/tosu?style=for-the-badge&color=%237256a3&label=" />
-  <img src="https://img.shields.io/github/issues-pr/tosuapp/tosu?style=for-the-badge&color=%2354935b" />
-  <img src="https://img.shields.io/github/issues-pr-closed/tosuapp/tosu?style=for-the-badge&color=%237256a3&label=" />
+  <img src="https://img.shields.io/github/issues/absolute2007/tosu-mix?style=for-the-badge&color=%23a35f56" />
+  <img src="https://img.shields.io/github/issues-closed/absolute2007/tosu-mix?style=for-the-badge&color=%237256a3&label=" />
+  <img src="https://img.shields.io/github/issues-pr/absolute2007/tosu-mix?style=for-the-badge&color=%2354935b" />
+  <img src="https://img.shields.io/github/issues-pr-closed/absolute2007/tosu-mix?style=for-the-badge&color=%237256a3&label=" />
 </p>
 
 <div  align="center">
-  <a href="https://github.com/tosuapp/tosu/releases/latest"><img src=".github/button-download.png" /></a>
-  <a href="https://discord.gg/WX7BTs8kwh"><img src=".github/button-discord.png" /></a>
+  <a href="https://github.com/absolute2007/tosu-mix/releases/latest"><img src=".github/button-download.png" /></a>
   <a href="https://github.com/tosuapp/counters/tree/master/counters"><img src=".github/button-counters.png" /></a>
 </div>
 
 <br>
 
 ```text
-Tosu is a memory reader for osu! that sends data to overlays (aka pp counters) via WebSocket API, with extra features.
+tosu-mix is a standalone Windows fork of tosu with an updated osu!standard PP pipeline based on the official ppy/osu calculator.
 ```
 > [!NOTE]
 > Supports stable and osu! lazer. <br> Compatible with _**gosumemory**_ and _**streamCompanion**_ overlays.
+> This fork specifically fixes standard PP after the 2025 PP rework and ships a ready-to-run standalone package with bundled in-game overlay.
 
 <br>
 
 Installation guide
 ---
-1. Download [tosu](https://github.com/tosuapp/tosu/releases/latest)
-2. Extract tosu.exe to a `Folder`
+1. Download the latest release from [Releases](https://github.com/absolute2007/tosu-mix/releases/latest)
+2. Extract `tosu-*-win-x64.zip` to any folder
 3. Run `tosu.exe`
-4. Go to [http://127.0.0.1:24050](http://127.0.0.1:24050)
-5. Now you in overlays dashboard, in here you can download counters, or tweek settings of tosu
-6. Here you can watch showcase of dashboard: [link](https://youtu.be/3eW4TD_zwhM)
-8. Have fun!
+4. Open [http://127.0.0.1:24050](http://127.0.0.1:24050)
+5. Configure overlays or enable the in-game overlay
+---
+
+<br>
+
+What this fork changes
+---
+- [x] Uses the official `ppy/osu` calculator for `osu!standard` PP
+- [x] Fixes menu PP, live gameplay PP, and result-screen PP for standard after the 2025 PP rework
+- [x] Bundles the in-game overlay into the standalone Windows release
+- [x] Bundles the helper required for the official PP calculator into the standalone Windows release
+- [x] Keeps the original websocket and overlay compatibility
 ---
 
 <br>
 
 Features
 ---
-- [x] All _**Gamemodes**_ are supported. Using [rosu-pp](https://github.com/MaxOhn/rosu-pp) for pp calculations
+- [x] All _**Gamemodes**_ are supported
+- [x] `osu!standard` PP is calculated using the official `ppy/osu` ruleset implementation in this fork
 - [x] gosuMemory _**compatible**_ api
 - [x] streamCompanion _**compatible**_ api
 - [x] Lazer support
@@ -77,10 +86,28 @@ Features
 
 In-game overlay
 ---
-- To enable it, you need to edit `tosu.env`, and turn on `ENABLE_INGAME_OVERLAY=true` (make it equal `true`)
-- Tutorial: TBA
+- Standalone releases already ship with `ENABLE_INGAME_OVERLAY=true`
+- Default hotkey: `Ctrl + Shift + Space`
+- You can still change overlay behavior in `tosu.env`
 ---
 
+
+<br>
+
+Build
+---
+Windows standalone release:
+```powershell
+corepack pnpm install
+corepack pnpm build:win
+```
+
+The ready-to-run bundle will be created in:
+`packages/tosu/dist/release/tosu-<version>-win-x64`
+
+The release zip will be created in:
+`packages/tosu/dist/release/tosu-<version>-win-x64.zip`
+---
 
 <br>
 
@@ -138,7 +165,7 @@ api
 Support
 ---
 - Give a ⭐️ if this project helped you!
-- If you need help setting up this program or have any suggestions/comissions, feel free to go to the [discord](https://discord.gg/WX7BTs8kwh) channel above in the `🔵 tosu` section
+- Open an issue in this repository if something in the fork is broken
 ---
 
 <br/>
@@ -186,7 +213,7 @@ Sponsorship & Thank notice
 
 ## 🤝 Contributing
 
-Contributions, issues and feature requests are welcome!<br />Feel free to check [issues page](https://github.com/tosuapp/tosu/issues). You can also take a look at the [contributing guide](https://github.com/tosuapp/tosu/blob/master/CONTRIBUTING.md).
+Contributions, issues and feature requests are welcome.<br />Check the [issues page](https://github.com/absolute2007/tosu-mix/issues).
 
 <br />
 
@@ -194,9 +221,9 @@ Contributions, issues and feature requests are welcome!<br />Feel free to check 
 
 <a href="https://www.star-history.com/#tosuapp/tosu&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=tosuapp/tosu&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=tosuapp/tosu&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=tosuapp/tosu&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=absolute2007/tosu-mix&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=absolute2007/tosu-mix&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=absolute2007/tosu-mix&type=Date" />
  </picture>
 </a>
 
@@ -205,4 +232,4 @@ Contributions, issues and feature requests are welcome!<br />Feel free to check 
 ## 📝 License
 
 Copyright © 2023-2026 [Mikhail Babynichev](https://github.com/KotRikD).<br />
-This project is [LGPL-3.0](https://github.com/tosuapp/tosu/blob/master/LICENSE) licensed.
+This fork is distributed under [LGPL-3.0](https://github.com/absolute2007/tosu-mix/blob/main/LICENSE).
