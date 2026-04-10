@@ -200,14 +200,20 @@ export class ResultScreen extends AbstractState {
             const fcPerformance = new rosu.Performance(fcCalcOptions).calculate(
                 curPerformance
             );
-
-            this.pp = curPerformance.pp;
-            this.fcPP = fcPerformance.pp;
+            const fallbackCurrentPP = curPerformance.pp;
+            const fallbackFcPP = fcPerformance.pp;
+            const useOfficialStandard =
+                this.mode === 0 && beatmapPP.officialCacheKey !== '';
 
             curPerformance.free();
             fcPerformance.free();
 
-            if (this.mode === 0 && beatmapPP.officialCacheKey) {
+            if (!useOfficialStandard) {
+                this.pp = fallbackCurrentPP;
+                this.fcPP = fallbackFcPP;
+            }
+
+            if (useOfficialStandard) {
                 const fullState = beatmapPP.performanceAttributes?.state;
                 const fcStatistics = {
                     ...this.statistics,
@@ -284,6 +290,9 @@ export class ResultScreen extends AbstractState {
                             ) {
                                 return;
                             }
+
+                            this.pp = fallbackCurrentPP;
+                            this.fcPP = fallbackFcPP;
 
                             wLogger.debug(
                                 `%${ClientType[this.game.client]}%`,

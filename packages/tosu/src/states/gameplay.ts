@@ -554,14 +554,17 @@ export class Gameplay extends AbstractState {
                 offset - 1
             );
 
-            if (currPerformance) {
-                beatmapPP.updateCurrentAttributes(
-                    currPerformance.difficulty.stars,
-                    currPerformance.pp
-                );
-
-                beatmapPP.updatePPAttributes('curr', currPerformance);
-            }
+            const fallbackCurrent = currPerformance
+                ? {
+                      stars: currPerformance.difficulty.stars,
+                      pp: currPerformance.pp,
+                      ppAccuracy: currPerformance.ppAccuracy || 0,
+                      ppAim: currPerformance.ppAim || 0,
+                      ppDifficulty: currPerformance.ppDifficulty || 0,
+                      ppFlashlight: currPerformance.ppFlashlight || 0,
+                      ppSpeed: currPerformance.ppSpeed || 0
+                  }
+                : undefined;
 
             const maxJudgementsAmount =
                 this.mode === 3 &&
@@ -606,10 +609,7 @@ export class Gameplay extends AbstractState {
                 calcOptions
             ).calculate(this.performanceAttributes);
 
-            if (maxAchievablePerformance) {
-                beatmapPP.currAttributes.maxAchievable =
-                    maxAchievablePerformance.pp;
-            }
+            const fallbackMaxAchievable = maxAchievablePerformance?.pp;
 
             if (this.mode === 3) {
                 delete calcOptions.nGeki;
@@ -639,12 +639,47 @@ export class Gameplay extends AbstractState {
                 this.performanceAttributes
             );
 
-            if (fcPerformance) {
-                beatmapPP.currAttributes.fcPP = fcPerformance.pp;
-                beatmapPP.updatePPAttributes('fc', fcPerformance);
+            const fallbackFc = fcPerformance
+                ? {
+                      pp: fcPerformance.pp,
+                      ppAccuracy: fcPerformance.ppAccuracy || 0,
+                      ppAim: fcPerformance.ppAim || 0,
+                      ppDifficulty: fcPerformance.ppDifficulty || 0,
+                      ppFlashlight: fcPerformance.ppFlashlight || 0,
+                      ppSpeed: fcPerformance.ppSpeed || 0
+                  }
+                : undefined;
+            const useOfficialStandard =
+                this.mode === 0 && beatmapPP.officialCacheKey !== '';
+
+            currPerformance?.free();
+            maxAchievablePerformance?.free();
+            fcPerformance?.free();
+
+            if (!useOfficialStandard) {
+                if (fallbackCurrent) {
+                    beatmapPP.updateCurrentAttributes(
+                        fallbackCurrent.stars,
+                        fallbackCurrent.pp
+                    );
+                    beatmapPP.updatePPAttributes(
+                        'curr',
+                        fallbackCurrent as any
+                    );
+                }
+
+                if (fallbackMaxAchievable !== undefined) {
+                    beatmapPP.currAttributes.maxAchievable =
+                        fallbackMaxAchievable;
+                }
+
+                if (fallbackFc) {
+                    beatmapPP.currAttributes.fcPP = fallbackFc.pp;
+                    beatmapPP.updatePPAttributes('fc', fallbackFc as any);
+                }
             }
 
-            if (this.mode === 0 && beatmapPP.officialCacheKey) {
+            if (useOfficialStandard) {
                 const currentStatistics = { ...this.statistics };
                 const fullState = this.performanceAttributes?.state;
 
@@ -766,6 +801,30 @@ export class Gameplay extends AbstractState {
                                 officialRequestKey
                             ) {
                                 return;
+                            }
+
+                            if (fallbackCurrent) {
+                                beatmapPP.updateCurrentAttributes(
+                                    fallbackCurrent.stars,
+                                    fallbackCurrent.pp
+                                );
+                                beatmapPP.updatePPAttributes(
+                                    'curr',
+                                    fallbackCurrent as any
+                                );
+                            }
+
+                            if (fallbackMaxAchievable !== undefined) {
+                                beatmapPP.currAttributes.maxAchievable =
+                                    fallbackMaxAchievable;
+                            }
+
+                            if (fallbackFc) {
+                                beatmapPP.currAttributes.fcPP = fallbackFc.pp;
+                                beatmapPP.updatePPAttributes(
+                                    'fc',
+                                    fallbackFc as any
+                                );
                             }
 
                             wLogger.debug(
