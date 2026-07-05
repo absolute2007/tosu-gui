@@ -4,8 +4,6 @@
   "version": "1.0.0",
   "description": "Desktop GUI for tosu — osu! memory reader with in-game overlay",
   "main": "dist-electron/main.js",
-  "author": "tosu-gui",
-  "license": "GPL-3.0",
   "scripts": {
     "dev": "vite",
     "start": "node scripts/start.js",
