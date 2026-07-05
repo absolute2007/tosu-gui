@@ -1,0 +1,82 @@
+{
+  "name": "tosu-gui",
+  "productName": "tosu GUI",
+  "version": "1.0.0",
+  "description": "Desktop GUI for tosu — osu! memory reader with in-game overlay",
+  "main": "dist-electron/main.js",
+  "author": "tosu-gui",
+  "license": "GPL-3.0",
+  "scripts": {
+    "dev": "vite",
+    "start": "node scripts/start.js",
+    "build": "tsc && vite build && electron-builder",
+    "preview": "vite preview",
+    "generate-icon": "node scripts/generate-icon.js",
+    "postinstall": "node scripts/copy-fonts.js && node scripts/generate-icon.js && (node scripts/download-tosu.js || echo tosu download skipped - place tosu.exe in resources/tosu/) && node scripts/patch-ingame-overlay.js",
+    "patch-overlay": "node scripts/patch-ingame-overlay.js",
+    "download-tosu": "node scripts/download-tosu.js"
+  },
+  "dependencies": {
+    "lucide-react": "^0.511.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.4.1",
+    "electron": "^36.2.0",
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^2.1.8",
+    "sf-pro": "^1.0.4",
+    "sharp": "^0.34.5",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "build": {
+    "appId": "app.tosu.gui",
+    "productName": "tosu GUI",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/tosu",
+        "to": "tosu",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "resources/icon.ico",
+      "executableName": "tosu-gui"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "icon": "resources/icon.png"
+    }
+  }
+}
