@@ -7,7 +7,9 @@ interface Props {
   dirty: boolean
   saving: boolean
   checkTosuUpdates: boolean
+  closeToTray: boolean
   onCheckTosuUpdatesChange: (enabled: boolean) => void
+  onCloseToTrayChange: (enabled: boolean) => void
   onUpdate: <K extends keyof TosuAppSettings>(key: K, value: TosuAppSettings[K]) => void
   onSave: () => void
 }
@@ -17,7 +19,9 @@ export function SettingsPage({
   dirty,
   saving,
   checkTosuUpdates,
+  closeToTray,
   onCheckTosuUpdatesChange,
+  onCloseToTrayChange,
   onUpdate,
   onSave,
 }: Props) {
@@ -38,6 +42,17 @@ export function SettingsPage({
             </div>
             <div className="setting-control">
               <Toggle checked={checkTosuUpdates} onChange={onCheckTosuUpdatesChange} />
+            </div>
+          </div>
+          <div className="setting-row">
+            <div className="setting-info">
+              <div className="setting-label">Сворачивать в трей</div>
+              <div className="setting-desc">
+                Если включено — крестик скрывает окно в системный трей. Если выключено — программа полностью закрывается
+              </div>
+            </div>
+            <div className="setting-control">
+              <Toggle checked={closeToTray} onChange={onCloseToTrayChange} />
             </div>
           </div>
         </div>
