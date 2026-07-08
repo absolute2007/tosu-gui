@@ -4,11 +4,13 @@
 
 Обычное окно приложения, а не вкладка браузера: статус, счётчики, оверлей, настройки, обновление tosu.
 
+**Сайт:** [absolute2007.github.io/tosu-gui](https://absolute2007.github.io/tosu-gui/)
+
 ## Скачать
 
 Windows 10/11 (x64), osu! Stable или Lazer.
 
-1. Открой [releases](https://github.com/absolute2007/tosu-gui/releases/latest)
+1. Открой [сайт](https://absolute2007.github.io/tosu-gui/) или [releases](https://github.com/absolute2007/tosu-gui/releases/latest)
 2. Поставь setup `.exe` или распакуй `.zip`
 3. Запусти **tosu GUI**
 
