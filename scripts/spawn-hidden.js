@@ -14,34 +14,26 @@ function spawnHidden(command, args, options = {}) {
   })
 }
 
-/** Launch Electron GUI detached from the launcher terminal. */
+/**
+ * Launch Electron GUI so it survives after the bat/node launcher exits.
+ * Do NOT use `cmd /c start` here — with windowsHide it often fails to show the window.
+ */
 function spawnApp(command, args, options = {}) {
   const cwd = path.resolve(options.cwd || process.cwd())
   const env = options.env || process.env
-  const appDir = args[0] === '.' ? cwd : path.resolve(cwd, args[0])
+  const appDir = args[0] === '.' ? cwd : path.resolve(cwd, args[0] || '.')
 
-  if (isWin) {
-    // `start` ignores spawn cwd — must pass /D explicitly.
-    return spawn(
-      'cmd.exe',
-      ['/d', '/c', 'start', '""', '/D', cwd, command, appDir],
-      {
-        env,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-        shell: false,
-      }
-    )
-  }
-
-  return spawn(command, [appDir], {
+  const child = spawn(command, [appDir], {
     cwd,
     env,
-    stdio: 'ignore',
     detached: true,
-    ...options,
+    stdio: 'ignore',
+    windowsHide: false,
+    shell: false,
   })
+
+  child.unref()
+  return child
 }
 
 module.exports = { spawnHidden, spawnApp, CREATE_NO_WINDOW, isWin }

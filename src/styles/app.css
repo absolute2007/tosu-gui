@@ -1,16 +1,28 @@
 .app-shell {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--bg-window);
   overflow: hidden;
+  border-radius: var(--radius-window);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--bg-window);
+  /* Soft edge so the curve reads clearly against the desktop */
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35);
+}
+
+html.window-maximized .app-shell {
+  border-radius: 0;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .app-body {
   flex: 1;
   display: flex;
   min-height: 0;
+  background: transparent;
 }
 
 .app-content {
@@ -28,7 +40,8 @@
   margin: 12px 16px 0;
   border-radius: var(--radius-group);
   background: var(--bg-grouped);
-  border: 1px solid rgba(10, 132, 255, 0.35);
+  border: 0.5px solid rgba(10, 132, 255, 0.4);
+  box-shadow: var(--shadow-card);
 }
 
 .update-banner-content {
@@ -72,33 +85,40 @@
 
 .page {
   flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
-  padding: 28px 32px 32px;
+  padding: 22px 28px 28px;
+  /* Isolate paint for smoother scroll on long lists */
+  contain: layout style;
 }
 
 .page-header {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .page-title {
   font-family: var(--font-display);
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 600;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.022em;
   color: var(--text-primary);
 }
 
 .page-subtitle {
-  margin-top: 2px;
+  margin-top: 3px;
   font-size: 13px;
   color: var(--text-secondary);
+  letter-spacing: -0.01em;
 }
 
 .glass-card {
   border-radius: var(--radius-group);
   overflow: hidden;
+  isolation: isolate;
 }
 
+/* Header sits outside the body; keep body clipped so hover fills stay rounded */
 .glass-card:has(> .card-header) {
   background: transparent;
   overflow: visible;
@@ -106,28 +126,36 @@
 
 .glass-card:not(:has(> .card-header)) {
   background: var(--bg-grouped);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--hairline);
+  overflow: hidden;
 }
 
 .glass-card + .glass-card {
-  margin-top: 20px;
+  margin-top: 18px;
 }
 
 .card-header {
-  padding: 0 0 6px 12px;
-  font-size: 13px;
-  font-weight: 400;
+  padding: 0 0 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-secondary);
   text-transform: none;
-  letter-spacing: normal;
+  letter-spacing: -0.01em;
 }
 
 .glass-card > .card-header + .card-body {
   background: var(--bg-grouped);
   border-radius: var(--radius-group);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--hairline);
+  overflow: hidden;
 }
 
 .card-body {
   padding: 0;
+  overflow: hidden;
+  border-radius: inherit;
 }
 
 .setting-row {
@@ -227,20 +255,20 @@
 
 .glass-input {
   background: var(--bg-input);
-  border: 1px solid var(--separator-opaque);
+  border: 0.5px solid var(--separator-opaque);
   border-radius: var(--radius-control);
   color: var(--text-primary);
   padding: 4px 8px;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
   min-width: 80px;
-  height: 24px;
+  height: 26px;
   font-variant-numeric: tabular-nums;
 }
 
 .glass-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.28);
 }
 
 .glass-input.-wide {
@@ -263,11 +291,12 @@
   gap: 5px;
   padding: 5px 12px;
   border-radius: var(--radius-control);
-  border: 1px solid transparent;
+  border: 0.5px solid transparent;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.14s var(--ease-out), border-color 0.14s var(--ease-out), filter 0.14s var(--ease-out);
   white-space: nowrap;
 }
 
@@ -288,26 +317,31 @@
 .btn-primary {
   background: var(--accent);
   color: #fff;
+  box-shadow: 0 1px 2px rgba(10, 132, 255, 0.25);
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
 }
 
+.btn-primary:active:not(:disabled) {
+  filter: brightness(0.94);
+}
+
 .btn-ghost {
-  background: var(--bg-grouped);
+  background: var(--bg-fill);
   color: var(--text-primary);
-  border-color: var(--separator-opaque);
+  border-color: var(--hairline);
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background: var(--bg-grouped-hover);
+  background: var(--bg-fill-strong);
 }
 
 .btn-danger {
   background: transparent;
   color: var(--danger);
-  border-color: rgba(255, 69, 58, 0.35);
+  border-color: rgba(255, 69, 58, 0.32);
 }
 
 .btn-danger:hover:not(:disabled) {
@@ -428,8 +462,21 @@
   flex-direction: column;
 }
 
+.page-slot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .page-slot[hidden] {
-  display: none;
+  display: none !important;
+}
+
+.page-slot > .page {
+  flex: 1;
+  min-height: 0;
 }
 
 .counter-item {
@@ -437,7 +484,12 @@
   align-items: center;
   gap: 14px;
   padding: 10px 16px;
-  transition: background 0.1s;
+  transition: background 0.12s var(--ease-out);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 92px;
+  contain: layout style;
+  /* Keep hover fill inside rounded card (first/last rows) */
+  border-radius: 0;
 }
 
 .counter-item.-has-download {
@@ -456,15 +508,26 @@
   background: var(--bg-grouped-hover);
 }
 
+.counter-list > .counter-item:first-child {
+  border-top-left-radius: calc(var(--radius-group) - 1px);
+  border-top-right-radius: calc(var(--radius-group) - 1px);
+}
+
+.counter-list > .counter-item:last-child {
+  border-bottom-left-radius: calc(var(--radius-group) - 1px);
+  border-bottom-right-radius: calc(var(--radius-group) - 1px);
+}
+
 .counter-preview {
   position: relative;
   width: 128px;
   height: 72px;
   border-radius: var(--radius-control);
-  background: #141414;
-  border: 1px solid var(--separator);
+  background: rgba(20, 20, 20, 0.85);
+  border: 0.5px solid var(--hairline);
   overflow: hidden;
   flex-shrink: 0;
+  contain: strict;
 }
 
 .counter-preview.-large {
@@ -560,15 +623,15 @@
   position: fixed;
   bottom: 20px;
   right: 20px;
-  padding: 8px 14px;
+  padding: 9px 14px;
   border-radius: var(--radius-group);
-  background: var(--bg-grouped);
-  border: 1px solid var(--separator-opaque);
+  background: var(--bg-elevated);
+  border: 0.5px solid var(--hairline);
   font-size: 13px;
   font-weight: 400;
   z-index: 100;
-  animation: slideUp 0.2s ease;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: slideUp 0.2s var(--ease-spring);
+  box-shadow: var(--shadow-toast);
 }
 
 .toast.-success { color: var(--success); }
@@ -582,19 +645,23 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.42);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 50;
-  animation: fadeIn 0.15s ease;
+  animation: fadeIn 0.15s var(--ease-out);
 }
 
 .modal {
   width: min(480px, 90vw);
   max-height: 80vh;
   overflow-y: auto;
-  animation: scaleIn 0.18s ease;
+  background: var(--bg-elevated);
+  border: 0.5px solid var(--hairline);
+  border-radius: var(--radius-group);
+  box-shadow: var(--shadow-toast);
+  animation: scaleIn 0.18s var(--ease-spring);
 }
 
 .modal-title {
@@ -642,23 +709,24 @@
   display: flex;
   gap: 2px;
   margin-bottom: 16px;
-  padding: 2px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: var(--radius-control);
-  border: 1px solid var(--separator);
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 9px;
+  border: 0.5px solid var(--hairline);
   width: fit-content;
 }
 
 .tab-btn {
-  padding: 4px 12px;
-  border-radius: 4px;
+  padding: 5px 12px;
+  border-radius: 7px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 400;
+  letter-spacing: -0.01em;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.14s var(--ease-out), color 0.14s var(--ease-out);
 }
 
 .tab-btn:hover {
@@ -666,8 +734,10 @@
 }
 
 .tab-btn.-active {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--bg-fill-strong);
   color: var(--text-primary);
+  font-weight: 500;
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.2);
 }
 
 .overlay-status-card .card-body {

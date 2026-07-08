@@ -6,9 +6,13 @@ export function TitleBar() {
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
-    const unsubscribe = window.tosuGui.onMaximizeChanged(setMaximized)
+    const unsubscribe = window.tosuGui.onMaximizeChanged((value) => {
+      setMaximized(value)
+      document.documentElement.classList.toggle('window-maximized', value)
+    })
     return () => {
       unsubscribe()
+      document.documentElement.classList.remove('window-maximized')
     }
   }, [])
 

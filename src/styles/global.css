@@ -39,22 +39,33 @@
 }
 
 :root {
-  --bg-window: #1e1e1e;
-  --bg-sidebar: #282828;
-  --bg-content: #1e1e1e;
-  --bg-grouped: #323232;
-  --bg-grouped-hover: #3a3a3c;
-  --bg-input: rgba(0, 0, 0, 0.25);
+  /*
+    Same charcoal hues as the original UI, but translucent so acrylic/vibrancy
+    can frost the desktop. Dense enough to stay matte and readable (not glass-clear).
+  */
+  /* Dense matte film (no DWM acrylic — that breaks rounded corners on Windows) */
+  --bg-window: rgba(30, 30, 30, 0.92);
+  --bg-sidebar: rgba(40, 40, 40, 0.88);
+  --bg-content: rgba(30, 30, 30, 0.84);
+  --bg-titlebar: rgba(36, 36, 36, 0.9);
+  --bg-grouped: rgba(50, 50, 50, 0.92);
+  --bg-grouped-hover: rgba(58, 58, 60, 0.96);
+  --bg-input: rgba(0, 0, 0, 0.3);
+  --bg-elevated: rgba(48, 48, 50, 0.94);
+  --bg-fill: rgba(255, 255, 255, 0.09);
+  --bg-fill-strong: rgba(255, 255, 255, 0.14);
 
-  --separator: rgba(255, 255, 255, 0.08);
-  --separator-opaque: #424244;
+  --separator: rgba(255, 255, 255, 0.1);
+  --separator-opaque: rgba(66, 66, 68, 0.9);
+  --hairline: rgba(255, 255, 255, 0.12);
 
-  --text-primary: rgba(255, 255, 255, 0.85);
-  --text-secondary: rgba(255, 255, 255, 0.55);
-  --text-tertiary: rgba(255, 255, 255, 0.35);
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.58);
+  --text-tertiary: rgba(255, 255, 255, 0.38);
 
   --accent: #0a84ff;
   --accent-hover: #409cff;
+  --accent-soft: rgba(10, 132, 255, 0.25);
   --success: #32d74b;
   --danger: #ff453a;
   --warning: #ffd60a;
@@ -62,15 +73,24 @@
   --switch-off: rgba(120, 120, 128, 0.36);
   --switch-on: #32d74b;
 
+  --radius-window: 12px;
   --radius-group: 10px;
-  --radius-control: 6px;
-  --radius-pill: 6px;
+  --radius-control: 7px;
+  --radius-pill: 8px;
 
-  --sidebar-width: 210px;
-  --titlebar-height: 52px;
+  --sidebar-width: 212px;
+  --titlebar-height: 48px;
+
+  --shadow-card:
+    0 0.5px 0 rgba(255, 255, 255, 0.08) inset,
+    0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-toast: 0 10px 32px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(255, 255, 255, 0.08);
 
   --font-text: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
   --font-display: 'SF Pro Display', 'SF Pro Text', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 * {
@@ -83,7 +103,7 @@ html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--bg-window);
+  background: transparent;
 }
 
 body {
@@ -91,7 +111,7 @@ body {
   font-size: 13px;
   line-height: 1.35;
   color: var(--text-primary);
-  background: var(--bg-window);
+  background: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
@@ -107,8 +127,8 @@ input, select, textarea {
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
 }
 
 ::-webkit-scrollbar-track {
