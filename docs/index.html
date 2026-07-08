@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tosu GUI</title>
+    <meta
+      name="description"
+      content="Desktop GUI for tosu — osu! memory reader with counters, overlay, and settings."
+    />
+    <link rel="icon" href="assets/icon.png" type="image/png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <div class="brand">
+          <img class="brand-icon" src="assets/icon.svg" width="36" height="36" alt="" />
+          <h1 class="brand-name">tosu GUI</h1>
+        </div>
+        <a
+          class="header-link"
+          href="https://github.com/absolute2007/tosu-gui"
+          rel="noopener noreferrer"
+        >
+          GitHub
+        </a>
+      </header>
+
+      <p class="lead">
+        Десктопный GUI для
+        <a href="https://github.com/tosuapp/tosu" rel="noopener noreferrer">tosu</a>
+        — memory reader для osu! с in-game оверлеем. Статус, счётчики, оверлей и настройки
+        в обычном окне, без вкладки браузера. <code>tosu.exe</code> уже внутри сборки.
+      </p>
+      <p class="lead-en">
+        Desktop GUI for tosu: status, counters, overlay, and settings for osu! Stable or Lazer.
+      </p>
+
+      <section class="download" aria-labelledby="download-heading">
+        <h2 id="download-heading" class="sr-only">Скачать</h2>
+        <div class="download-row">
+          <label class="version-label" for="version">
+            Версия
+            <select id="version" disabled>
+              <option value="">…</option>
+            </select>
+          </label>
+          <a id="download-setup" class="btn btn-primary" href="#" aria-disabled="true">
+            Setup (.exe)
+          </a>
+          <a id="download-zip" class="btn btn-ghost" href="#" aria-disabled="true">ZIP</a>
+        </div>
+        <p id="download-meta" class="download-meta">Загрузка списка релизов…</p>
+        <p class="download-note">Windows 10/11 · x64</p>
+      </section>
+
+      <section class="shots" aria-labelledby="shots-heading">
+        <h2 id="shots-heading">Скриншоты</h2>
+        <div class="shot-stack">
+          <figure class="shot shot-main">
+            <img
+              src="assets/screenshots/Main.png"
+              alt="Главное окно: статус tosu и подключение к osu!"
+              width="1464"
+              height="935"
+              loading="lazy"
+            />
+            <figcaption>Статус</figcaption>
+          </figure>
+          <figure class="shot shot-overlay">
+            <img
+              src="assets/screenshots/Overlay.png"
+              alt="Настройки внутриигрового оверлея и PP-счётчиков"
+              width="1184"
+              height="1117"
+              loading="lazy"
+            />
+            <figcaption>Оверлей</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <a href="https://github.com/absolute2007/tosu-gui/releases" rel="noopener noreferrer"
+          >Все релизы</a
+        >
+        <span class="sep">·</span>
+        <a href="https://github.com/tosuapp/tosu" rel="noopener noreferrer">tosu</a>
+      </footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
