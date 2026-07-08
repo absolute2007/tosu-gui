@@ -6,12 +6,14 @@ export interface GuiSettings {
   disableAntialiasing: boolean
   checkTosuUpdates: boolean
   dismissedTosuVersion: string | null
+  closeToTray: boolean
 }
 
 const DEFAULTS: GuiSettings = {
   disableAntialiasing: true,
   checkTosuUpdates: true,
   dismissedTosuVersion: null,
+  closeToTray: false,
 }
 
 function getSettingsPath() {

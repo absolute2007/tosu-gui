@@ -50,6 +50,8 @@ function getRendererUrl() {
 
 function getAppIcon() {
   const candidates = [
+    path.join(process.resourcesPath, 'icons', 'icon.ico'),
+    path.join(process.resourcesPath, 'icons', 'icon.png'),
     path.join(app.getAppPath(), 'resources', 'icon.ico'),
     path.join(app.getAppPath(), 'resources', 'icon.png'),
     path.join(app.getAppPath(), 'public', 'icon.png'),
@@ -61,11 +63,37 @@ function getAppIcon() {
     if (!image.isEmpty()) return image
   }
 
+  if (isWin) {
+    const exeIcon = nativeImage.createFromPath(process.execPath)
+    if (!exeIcon.isEmpty()) return exeIcon
+  }
+
   return undefined
 }
 
-function showMainWindow() {
+function hideToTray() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  createTray()
+  mainWindow.setSkipTaskbar(true)
+  mainWindow.hide()
+}
+
+function requestAppClose() {
   if (!mainWindow) return
+
+  const { closeToTray } = readGuiSettings()
+  if (closeToTray) {
+    hideToTray()
+    return
+  }
+
+  isQuitting = true
+  mainWindow.close()
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.setSkipTaskbar(false)
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.center()
   if (!mainWindow.isVisible()) mainWindow.show()
@@ -123,9 +151,14 @@ function createWindow() {
   })
 
   mainWindow.on('close', (event) => {
-    if (!isQuitting) {
+    if (isQuitting) return
+
+    const { closeToTray } = readGuiSettings()
+    if (closeToTray) {
       event.preventDefault()
-      mainWindow?.minimize()
+      hideToTray()
+    } else {
+      isQuitting = true
     }
   })
 
@@ -151,6 +184,9 @@ function createTray() {
       getAppIcon,
       () => {
         isQuitting = true
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.destroy()
+        }
         app.quit()
       }
     )
@@ -304,7 +340,7 @@ ipcMain.handle('window:maximize', () => {
   if (mainWindow?.isMaximized()) mainWindow.unmaximize()
   else mainWindow?.maximize()
 })
-ipcMain.handle('window:close', () => mainWindow?.minimize())
+ipcMain.handle('window:close', () => requestAppClose())
 
 ipcMain.handle('shell:open-external', async (_e, url: string) => {
   await shell.openExternal(url)

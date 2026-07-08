@@ -10,6 +10,7 @@ import { useTosuSocket } from './hooks/useTosuSocket'
 import { useCounterDownloads } from './hooks/useCounterDownloads'
 import { useTosuSettings } from './hooks/useTosuSettings'
 import { useTosuUpdate } from './hooks/useTosuUpdate'
+import { useGuiSettings } from './hooks/useGuiSettings'
 import { UpdateBanner } from './components/UpdateBanner'
 import type { TosuStatus } from '../electron/preload'
 import './styles/app.css'
@@ -43,6 +44,7 @@ export default function App() {
   const tosuSettings = useTosuSettings(tosuStatus, showToast)
   const counterDownloads = useCounterDownloads(showToast)
   const tosuUpdate = useTosuUpdate(showToast, refreshStatus)
+  const guiSettings = useGuiSettings()
 
   useEffect(() => {
     refreshStatus()
@@ -130,7 +132,9 @@ export default function App() {
               dirty={tosuSettings.dirty}
               saving={tosuSettings.saving}
               checkTosuUpdates={tosuUpdate.checkEnabled}
+              closeToTray={guiSettings.closeToTray}
               onCheckTosuUpdatesChange={tosuUpdate.setCheckTosuUpdates}
+              onCloseToTrayChange={guiSettings.setCloseToTraySetting}
               onUpdate={tosuSettings.update}
               onSave={tosuSettings.save}
             />
