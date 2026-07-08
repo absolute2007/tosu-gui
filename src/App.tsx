@@ -48,8 +48,34 @@ export default function App() {
 
   useEffect(() => {
     refreshStatus()
-    const interval = setInterval(refreshStatus, 5000)
-    return () => clearInterval(interval)
+
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    const startPolling = () => {
+      if (interval) return
+      interval = setInterval(refreshStatus, 5000)
+    }
+
+    const stopPolling = () => {
+      if (!interval) return
+      clearInterval(interval)
+      interval = null
+    }
+
+    const onVisibility = () => {
+      if (document.hidden) stopPolling()
+      else {
+        void refreshStatus()
+        startPolling()
+      }
+    }
+
+    startPolling()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      stopPolling()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [refreshStatus])
 
   const handleRestart = async () => {

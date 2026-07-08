@@ -12,19 +12,34 @@ import { patchIngameOverlay } from './overlay-patch'
 import { getInstalledVersion, TosuUpdater } from './tosu-updater'
 
 const isWin = process.platform === 'win32'
-const APP_NAME = 'tosu GUI'
+const isDevBuild = !app.isPackaged
+const APP_NAME = isDevBuild ? 'tosu GUI Dev' : 'tosu GUI'
 
+// Dev must NOT share single-instance lock / userData with the installed release,
+// otherwise start-gui.bat focuses the old installed window and looks like "old build".
 app.setName(APP_NAME)
 process.title = APP_NAME
+if (isDevBuild) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'tosu-gui-dev'))
+}
 if (isWin) {
-  app.setAppUserModelId('app.tosu.gui')
+  app.setAppUserModelId(isDevBuild ? 'app.tosu.gui.dev' : 'app.tosu.gui')
 }
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
+  console.warn('[app] another instance holds the lock — quitting this process')
   app.quit()
   process.exit(0)
 }
+
+console.log(
+  '[app] starting',
+  APP_NAME,
+  isDevBuild ? '(dev)' : '(packaged)',
+  'main=',
+  __filename
+)
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -103,7 +118,12 @@ function showMainWindow() {
 
 function createWindow() {
   const icon = getAppIcon()
+  const isMac = process.platform === 'darwin'
 
+  // Transparent HWND + CSS border-radius = real rounded corners.
+  // Do NOT use backgroundMaterial here: DWM acrylic is always a full rectangle and
+  // paints square wedges outside the CSS radius (or OS rounding fails on frameless).
+  // Matte look comes from dense translucent CSS over the desktop.
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 760,
@@ -111,16 +131,26 @@ function createWindow() {
     minHeight: 640,
     center: true,
     frame: false,
-    transparent: false,
-    backgroundColor: '#1e1e1e',
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: true,
+    roundedCorners: false,
+    thickFrame: true,
     autoHideMenuBar: true,
     title: APP_NAME,
     icon,
-    show: true,
+    show: false,
+    ...(isMac
+      ? {
+          vibrancy: 'under-window' as const,
+          visualEffectState: 'active' as const,
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: true,
     },
   })
 

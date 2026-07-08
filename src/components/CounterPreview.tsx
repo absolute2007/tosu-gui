@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ImageOff, Loader2 } from 'lucide-react'
 import type { TosuCounter } from '../../electron/tosu-api'
 
@@ -24,6 +24,8 @@ function getLiveUrl(counter: TosuCounter, baseUrl: string): string | null {
 }
 
 const LIVE_LOAD_TIMEOUT_MS = 12_000
+/** Buffer so scrolling stays smooth without mounting every off-screen iframe */
+const VIEW_ROOT_MARGIN = '160px 0px'
 
 export function CounterPreview({
   counter,
@@ -33,6 +35,8 @@ export function CounterPreview({
   sessionKey = 0,
   liveReady = true,
 }: Props) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [inView, setInView] = useState(false)
   const [liveFailed, setLiveFailed] = useState(false)
   const [imageFailed, setImageFailed] = useState(false)
   const [liveLoaded, setLiveLoaded] = useState(false)
@@ -43,13 +47,28 @@ export function CounterPreview({
   const iframeKey = `${sessionKey}-${liveUrl ?? ''}`
 
   useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setInView(entry.isIntersecting)
+      },
+      { root: null, rootMargin: VIEW_ROOT_MARGIN, threshold: 0.01 }
+    )
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
     setLiveFailed(false)
     setImageFailed(false)
     setLiveLoaded(false)
   }, [liveUrl, imageUrl, iframeKey])
 
   useEffect(() => {
-    if (!preferLive || !liveUrl || !liveReady || liveFailed) {
+    if (!preferLive || !liveUrl || !liveReady || liveFailed || !inView) {
       if (loadTimerRef.current) {
         clearTimeout(loadTimerRef.current)
         loadTimerRef.current = null
@@ -58,7 +77,10 @@ export function CounterPreview({
     }
 
     loadTimerRef.current = setTimeout(() => {
-      if (!liveLoaded) setLiveFailed(true)
+      setLiveLoaded((loaded) => {
+        if (!loaded) setLiveFailed(true)
+        return loaded
+      })
     }, LIVE_LOAD_TIMEOUT_MS)
 
     return () => {
@@ -67,17 +89,30 @@ export function CounterPreview({
         loadTimerRef.current = null
       }
     }
-  }, [preferLive, liveUrl, liveReady, liveFailed, liveLoaded, iframeKey])
+  }, [preferLive, liveUrl, liveReady, liveFailed, iframeKey, inView])
 
   const className = variant === 'large' ? 'counter-preview -large' : 'counter-preview'
-  const canShowLive = preferLive && liveUrl && liveReady && !liveFailed
+  const canShowLive = preferLive && Boolean(liveUrl) && liveReady && !liveFailed && inView
 
-  if (canShowLive) {
-    return (
-      <div className={className}>
+  let body: ReactNode
+  let modifier = ''
+
+  if (canShowLive && liveUrl) {
+    body = (
+      <>
         {!liveLoaded && (
           <div className="counter-preview-loading">
-            <Loader2 size={16} className="spin" />
+            {imageUrl && !imageFailed ? (
+              <img
+                src={imageUrl}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                onError={() => setImageFailed(true)}
+              />
+            ) : (
+              <Loader2 size={16} className="spin" />
+            )}
           </div>
         )}
         <iframe
@@ -85,36 +120,48 @@ export function CounterPreview({
           src={liveUrl}
           title={counter.name}
           sandbox="allow-scripts allow-same-origin"
+          loading="lazy"
           onLoad={() => setLiveLoaded(true)}
         />
-      </div>
+      </>
     )
-  }
-
-  if (preferLive && liveUrl && !liveReady && !liveFailed) {
-    return (
-      <div className={`${className} -loading`}>
-        <Loader2 size={16} className="spin" />
-      </div>
-    )
-  }
-
-  if (imageUrl && !imageFailed) {
-    return (
-      <div className={className}>
+  } else if (preferLive && liveUrl && liveReady && !liveFailed && !inView) {
+    // Off-screen: static image only — no iframe cost while scrolling
+    if (imageUrl && !imageFailed) {
+      body = (
         <img
           src={imageUrl}
           alt={counter.name}
           loading="lazy"
+          decoding="async"
           onError={() => setImageFailed(true)}
         />
-      </div>
+      )
+    } else {
+      modifier = ' -loading'
+      body = <Loader2 size={14} className="spin" style={{ opacity: 0.45 }} />
+    }
+  } else if (preferLive && liveUrl && !liveReady && !liveFailed) {
+    modifier = ' -loading'
+    body = <Loader2 size={16} className="spin" />
+  } else if (imageUrl && !imageFailed) {
+    body = (
+      <img
+        src={imageUrl}
+        alt={counter.name}
+        loading="lazy"
+        decoding="async"
+        onError={() => setImageFailed(true)}
+      />
     )
+  } else {
+    modifier = ' -empty'
+    body = <ImageOff size={18} strokeWidth={1.5} />
   }
 
   return (
-    <div className={`${className} -empty`}>
-      <ImageOff size={18} strokeWidth={1.5} />
+    <div ref={rootRef} className={`${className}${modifier}`}>
+      {body}
     </div>
   )
 }
