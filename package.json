@@ -1,7 +1,7 @@
 {
   "name": "tosu-gui",
   "productName": "tosu GUI",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Desktop GUI for tosu — osu! memory reader with in-game overlay",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -15,6 +15,7 @@
     "download-tosu": "node scripts/download-tosu.js"
   },
   "dependencies": {
+    "@electron/asar": "^3.4.1",
     "lucide-react": "^0.511.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -49,6 +50,13 @@
       {
         "from": "resources/tosu",
         "to": "tosu",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/overlay-patch",
+        "to": "overlay-patch",
         "filter": [
           "**/*"
         ]

@@ -49,10 +49,39 @@ const tosuProcess = new TosuProcess()
 const tosuApi = new TosuApi()
 const tosuSocket = new TosuSocketBridge()
 const tosuUpdater = new TosuUpdater()
+let lastAutoRecoverAt = 0
 
 function startSocketBridge() {
   tosuSocket.setWindow(mainWindow)
   tosuSocket.connect(getTosuBaseUrl())
+}
+
+/** If tosu died and nobody is updating/restarting, try to bring it back (throttled). */
+function maybeRecoverTosu() {
+  // Never race with user restart / update / quit — force:true here used to kill a healthy start.
+  if (
+    isQuitting ||
+    tosuProcess.isRunning() ||
+    tosuProcess.isUpdating() ||
+    tosuProcess.isBusy()
+  ) {
+    return
+  }
+  const now = Date.now()
+  if (now - lastAutoRecoverAt < 20_000) return
+  lastAutoRecoverAt = now
+  console.log('[tosu] status poll: process down, attempting recover…')
+  void tosuProcess
+    .start()
+    .then(() => {
+      if (isQuitting) return
+      tosuApi.setBaseUrl(getTosuBaseUrl())
+      tosuApi.setEnvPath(tosuProcess.getEnvPath())
+      startSocketBridge()
+    })
+    .catch((err) => {
+      console.error('[tosu] auto-recover failed:', err)
+    })
 }
 
 function getTosuBaseUrl() {
@@ -278,8 +307,10 @@ app.on('before-quit', () => {
 })
 
 ipcMain.handle('tosu:status', async () => {
+  maybeRecoverTosu()
   return {
     running: tosuProcess.isRunning(),
+    busy: tosuProcess.isBusy(),
     port: tosuProcess.port,
     baseUrl: getTosuBaseUrl(),
     pid: tosuProcess.pid,
@@ -288,6 +319,9 @@ ipcMain.handle('tosu:status', async () => {
 })
 
 ipcMain.handle('tosu:restart', async () => {
+  if (tosuProcess.isUpdating()) {
+    throw new Error('Идёт обновление tosu — подождите окончания')
+  }
   tosuSocket.disconnect()
   await tosuProcess.restart()
   tosuApi.setBaseUrl(getTosuBaseUrl())
@@ -391,6 +425,10 @@ ipcMain.handle('tosu:dismiss-update', async (_e, version: string) => {
 })
 
 ipcMain.handle('tosu:install-update', async () => {
+  if (tosuProcess.isUpdating()) {
+    throw new Error('Обновление уже выполняется')
+  }
+
   const tosuDir = tosuProcess.getTosuDir()
   const sendProgress = (progress: import('./tosu-updater').UpdateProgress) => {
     mainWindow?.webContents.send('tosu:update-progress', progress)
@@ -408,9 +446,10 @@ ipcMain.handle('tosu:install-update', async () => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Ошибка обновления'
     sendProgress({ phase: 'error', progress: 0, message })
+    tosuProcess.endUpdate()
 
     try {
-      await tosuProcess.start({ startupTimeoutMs: 60_000 })
+      await tosuProcess.startAfterUpdate({ startupTimeoutMs: 60_000 })
       tosuApi.setBaseUrl(getTosuBaseUrl())
       tosuApi.setEnvPath(tosuProcess.getEnvPath())
       startSocketBridge()
@@ -421,9 +460,14 @@ ipcMain.handle('tosu:install-update', async () => {
     throw new Error(message)
   }
 
+  // Overlay prep is best-effort only — never abort the update restart because of it
   sendProgress({ phase: 'restarting', progress: 93, message: 'Подготовка оверлея…' })
-  await ensureGameOverlay(tosuDir, installedVersion)
-  patchIngameOverlay(tosuDir)
+  try {
+    await ensureGameOverlay(tosuDir, installedVersion)
+    await patchIngameOverlay(tosuDir)
+  } catch (overlayErr) {
+    console.warn('[tosu] overlay prepare after update failed (non-fatal):', overlayErr)
+  }
 
   sendProgress({ phase: 'restarting', progress: 95, message: 'Перезапуск tosu…' })
   const guiSettings = readGuiSettings()
@@ -431,12 +475,15 @@ ipcMain.handle('tosu:install-update', async () => {
 
   let restartFailed = false
   try {
-    await tosuProcess.start({ startupTimeoutMs: 60_000 })
+    // Always force-respawn after files were replaced (even if a stale child ref exists)
+    await tosuProcess.startAfterUpdate({ startupTimeoutMs: 30_000 })
     tosuApi.setBaseUrl(getTosuBaseUrl())
     tosuApi.setEnvPath(tosuProcess.getEnvPath())
     startSocketBridge()
+    sendProgress({ phase: 'done', progress: 100, message: 'Готово' })
   } catch (restartErr) {
     restartFailed = true
+    tosuProcess.endUpdate()
     console.error('[tosu] restart after update failed:', restartErr)
   }
 

@@ -79,13 +79,20 @@ export default function App() {
   }, [refreshStatus])
 
   const handleRestart = async () => {
+    if (tosuUpdate.installing) {
+      showToast('Дождитесь окончания обновления', 'error')
+      return
+    }
     setRestarting(true)
     try {
       await window.tosuGui.restart()
       await refreshStatus()
       showToast('tosu перезапущен', 'success')
-    } catch {
-      showToast('Ошибка перезапуска', 'error')
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err ?? 'Ошибка перезапуска')
+      // Electron wraps invoke errors: "Error invoking remote method 'x': Error: actual"
+      const msg = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
+      showToast(msg || 'Ошибка перезапуска', 'error')
     } finally {
       setRestarting(false)
     }
@@ -120,7 +127,7 @@ export default function App() {
               game={game}
               tosuStatus={tosuStatus}
               onRestart={handleRestart}
-              restarting={restarting}
+              restarting={restarting || tosuUpdate.installing}
               onCheckUpdate={() => void tosuUpdate.checkForUpdate(true)}
               checkingUpdate={tosuUpdate.installing}
             />

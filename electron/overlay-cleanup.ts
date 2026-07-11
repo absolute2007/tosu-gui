@@ -24,24 +24,69 @@ export function isGameOverlayBroken(tosuDir: string) {
   const overlayDir = getGameOverlayDir(tosuDir)
   if (!fs.existsSync(overlayDir)) return false
   if (isGameOverlayValid(tosuDir)) return false
-  return fs.readdirSync(overlayDir).length > 0
+  try {
+    return fs.readdirSync(overlayDir).length > 0
+  } catch {
+    return true
+  }
 }
 
-export async function removeGameOverlay(tosuDir: string) {
+/**
+ * Best-effort delete. Never throws — overlay must not block tosu start.
+ * Returns true if the directory is gone.
+ */
+export async function removeGameOverlay(tosuDir: string): Promise<boolean> {
   const overlayDir = getGameOverlayDir(tosuDir)
-  if (!fs.existsSync(overlayDir)) return
+  if (!fs.existsSync(overlayDir)) return true
 
-  const maxAttempts = 12
+  const maxAttempts = 4
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       fs.rmSync(overlayDir, { recursive: true, force: true })
-      return
-    } catch {
-      await sleep(500 * (attempt + 1))
+      if (!fs.existsSync(overlayDir)) return true
+    } catch (err) {
+      console.warn('[overlay] remove attempt failed:', err)
     }
+
+    // Windows often holds locks briefly — try rename-aside as fallback
+    try {
+      const aside = `${overlayDir}.old-${Date.now()}`
+      fs.renameSync(overlayDir, aside)
+      // delete renamed copy in background-ish (sync, short)
+      try {
+        fs.rmSync(aside, { recursive: true, force: true })
+      } catch {
+        console.warn('[overlay] left aside dir for later cleanup:', aside)
+      }
+      if (!fs.existsSync(overlayDir)) return true
+    } catch {
+      /* continue */
+    }
+
+    await sleep(200 * (attempt + 1))
   }
 
-  throw new Error('Не удалось очистить game-overlay — закройте osu! и перезапустите tosu GUI')
+  console.warn('[overlay] could not fully remove game-overlay — continuing without it')
+  return !fs.existsSync(overlayDir)
+}
+
+/**
+ * Clean up leftover game-overlay.old-* dirs from failed removals (best effort).
+ */
+export function cleanupOverlayAsideDirs(tosuDir: string) {
+  try {
+    for (const name of fs.readdirSync(tosuDir)) {
+      if (!name.startsWith('game-overlay.old-') && !name.startsWith('game-overlay.broken-')) continue
+      const full = path.join(tosuDir, name)
+      try {
+        fs.rmSync(full, { recursive: true, force: true })
+      } catch {
+        /* leave for next run */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function normalizeVersion(version: string) {
@@ -50,45 +95,83 @@ function normalizeVersion(version: string) {
 
 function writeOverlayVersion(tosuDir: string, tosuVersion: string) {
   const versionPath = path.join(getGameOverlayDir(tosuDir), 'version')
-  fs.writeFileSync(versionPath, normalizeVersion(tosuVersion), 'utf8')
+  try {
+    fs.writeFileSync(versionPath, normalizeVersion(tosuVersion), 'utf8')
+  } catch (err) {
+    console.warn('[overlay] could not write version file:', err)
+  }
 }
 
-export async function seedGameOverlayIfMissing(tosuDir: string) {
+function findBundledOverlaySeed(): string | null {
+  // Packaged: we only have resources/tosu; if overlay is complete there, no seed needed.
+  // Dev: allow copying from a known-good sibling install.
+  for (const seed of SEED_OVERLAY_PATHS) {
+    if (fs.existsSync(path.join(seed, 'tosu-ingame-overlay.exe'))) return seed
+  }
+  return null
+}
+
+export async function seedGameOverlayIfMissing(tosuDir: string): Promise<boolean> {
   if (isGameOverlayValid(tosuDir)) return true
 
   if (isGameOverlayBroken(tosuDir)) {
     await removeGameOverlay(tosuDir)
   }
 
+  // If still present and still broken, cannot seed into it cleanly
+  if (isGameOverlayValid(tosuDir)) return true
+  if (fs.existsSync(getGameOverlayDir(tosuDir)) && isGameOverlayBroken(tosuDir)) {
+    console.warn('[overlay] broken game-overlay still present; skip seed')
+    return false
+  }
+
+  const seed = findBundledOverlaySeed()
+  if (!seed) return false
+
   const dest = getGameOverlayDir(tosuDir)
-  for (const seed of SEED_OVERLAY_PATHS) {
-    if (!fs.existsSync(path.join(seed, 'tosu-ingame-overlay.exe'))) continue
+  try {
     if (fs.existsSync(dest)) {
-      fs.rmSync(dest, { recursive: true, force: true })
+      await removeGameOverlay(tosuDir)
     }
+    if (fs.existsSync(dest)) return false
     fs.cpSync(seed, dest, { recursive: true })
     console.log('[overlay] seeded game-overlay from', seed)
-    return true
+    return isGameOverlayValid(tosuDir)
+  } catch (err) {
+    console.warn('[overlay] seed failed:', err)
+    return false
   }
-
-  return false
 }
 
-/** Restore overlay after tosu.exe-only updates and skip broken built-in overlay updater. */
-export async function ensureGameOverlay(tosuDir: string, tosuVersion?: string | null) {
-  if (isGameOverlayBroken(tosuDir)) {
-    await removeGameOverlay(tosuDir)
-  }
+/**
+ * Best-effort overlay restore. Never throws.
+ * Returns true only if a valid overlay exists after the call.
+ */
+export async function ensureGameOverlay(tosuDir: string, tosuVersion?: string | null): Promise<boolean> {
+  try {
+    cleanupOverlayAsideDirs(tosuDir)
 
-  let seeded = false
-  if (!isGameOverlayValid(tosuDir)) {
-    seeded = await seedGameOverlayIfMissing(tosuDir)
-    if (!seeded) return false
-  }
+    if (isGameOverlayBroken(tosuDir)) {
+      console.log('[overlay] broken game-overlay detected, trying to remove…')
+      await removeGameOverlay(tosuDir)
+    }
 
-  if (tosuVersion && seeded) {
-    writeOverlayVersion(tosuDir, tosuVersion)
-  }
+    let seeded = false
+    if (!isGameOverlayValid(tosuDir)) {
+      seeded = await seedGameOverlayIfMissing(tosuDir)
+      if (!seeded) {
+        console.warn('[overlay] game-overlay missing/invalid — tosu will start without it')
+        return false
+      }
+    }
 
-  return isGameOverlayValid(tosuDir)
+    if (tosuVersion && seeded) {
+      writeOverlayVersion(tosuDir, tosuVersion)
+    }
+
+    return isGameOverlayValid(tosuDir)
+  } catch (err) {
+    console.warn('[overlay] ensureGameOverlay failed (non-fatal):', err)
+    return isGameOverlayValid(tosuDir)
+  }
 }
