@@ -5,6 +5,7 @@ import type { GuiSettings } from './gui-settings'
 
 export interface TosuStatus {
   running: boolean
+  busy?: boolean
   port: number
   baseUrl: string
   pid: number | null

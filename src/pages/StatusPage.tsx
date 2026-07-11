@@ -53,8 +53,16 @@ export function StatusPage({
         <div className="card-body">
           <StatusRow label="tosu">
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-              <span className={`status-dot ${tosuStatus?.running ? '-online' : '-offline'}`} />
-              {tosuStatus?.running ? 'Работает' : 'Остановлен'}
+              <span
+                className={`status-dot ${
+                  tosuStatus?.running ? '-online' : tosuStatus?.busy ? '-waiting' : '-offline'
+                }`}
+              />
+              {tosuStatus?.running
+                ? 'Работает'
+                : tosuStatus?.busy
+                  ? 'Запуск…'
+                  : 'Остановлен'}
             </span>
           </StatusRow>
           <StatusRow label="osu!">
@@ -101,9 +109,14 @@ export function StatusPage({
       )}
 
       <div style={{ marginTop: 20, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button className="btn btn-ghost" onClick={onRestart} disabled={restarting}>
+        <button
+          className="btn btn-ghost"
+          onClick={onRestart}
+          disabled={restarting}
+          title={restarting ? 'Подождите…' : 'Остановить и снова запустить tosu'}
+        >
           <RefreshCw size={14} className={restarting ? 'spin' : ''} />
-          Перезапустить tosu
+          {restarting ? 'Перезапуск…' : 'Перезапустить tosu'}
         </button>
         {onCheckUpdate && (
           <button className="btn btn-ghost" onClick={onCheckUpdate} disabled={checkingUpdate}>
