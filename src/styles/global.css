@@ -39,24 +39,20 @@
 }
 
 :root {
-  /*
-    Same charcoal hues as the original UI, but translucent so acrylic/vibrancy
-    can frost the desktop. Dense enough to stay matte and readable (not glass-clear).
-  */
-  /* Dense matte film (no DWM acrylic — that breaks rounded corners on Windows) */
-  --bg-window: rgba(30, 30, 30, 0.92);
-  --bg-sidebar: rgba(40, 40, 40, 0.88);
-  --bg-content: rgba(30, 30, 30, 0.84);
-  --bg-titlebar: rgba(36, 36, 36, 0.9);
-  --bg-grouped: rgba(50, 50, 50, 0.92);
-  --bg-grouped-hover: rgba(58, 58, 60, 0.96);
-  --bg-input: rgba(0, 0, 0, 0.3);
-  --bg-elevated: rgba(48, 48, 50, 0.94);
+  /* Solid matte chrome — opaque HWND keeps native Windows animations. */
+  --bg-window: #1e1e1e;
+  --bg-sidebar: #282828;
+  --bg-content: #1e1e1e;
+  --bg-titlebar: #242424;
+  --bg-grouped: #323232;
+  --bg-grouped-hover: #3a3a3c;
+  --bg-input: rgba(0, 0, 0, 0.28);
+  --bg-elevated: #303032;
   --bg-fill: rgba(255, 255, 255, 0.09);
   --bg-fill-strong: rgba(255, 255, 255, 0.14);
 
   --separator: rgba(255, 255, 255, 0.1);
-  --separator-opaque: rgba(66, 66, 68, 0.9);
+  --separator-opaque: #424244;
   --hairline: rgba(255, 255, 255, 0.12);
 
   --text-primary: rgba(255, 255, 255, 0.92);
@@ -79,6 +75,7 @@
   --radius-pill: 8px;
 
   --sidebar-width: 212px;
+  --beatmap-panel-width: 268px;
   --titlebar-height: 48px;
 
   --shadow-card:
@@ -103,7 +100,7 @@ html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: transparent;
+  background: var(--bg-window);
 }
 
 body {
@@ -111,7 +108,7 @@ body {
   font-size: 13px;
   line-height: 1.35;
   color: var(--text-primary);
-  background: transparent;
+  background: var(--bg-window);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none;

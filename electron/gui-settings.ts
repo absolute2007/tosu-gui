@@ -7,6 +7,8 @@ export interface GuiSettings {
   checkTosuUpdates: boolean
   dismissedTosuVersion: string | null
   closeToTray: boolean
+  /** Right-side current beatmap panel. When false, panel is hidden and its data is not processed. */
+  showBeatmapPanel: boolean
 }
 
 const DEFAULTS: GuiSettings = {
@@ -14,6 +16,7 @@ const DEFAULTS: GuiSettings = {
   checkTosuUpdates: true,
   dismissedTosuVersion: null,
   closeToTray: false,
+  showBeatmapPanel: true,
 }
 
 function getSettingsPath() {

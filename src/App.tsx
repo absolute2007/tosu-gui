@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { TitleBar } from './components/TitleBar'
 import { Sidebar } from './components/Sidebar'
+import { BeatmapPanel } from './components/BeatmapPanel'
 import { Toast } from './components/Toast'
 import { StatusPage } from './pages/StatusPage'
 import { CountersPage } from './pages/CountersPage'
@@ -28,8 +29,6 @@ export default function App() {
   const [restarting, setRestarting] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
 
-  const game = useTosuSocket(tosuStatus?.baseUrl ?? '')
-
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type })
   }, [])
@@ -45,6 +44,11 @@ export default function App() {
   const counterDownloads = useCounterDownloads(showToast)
   const tosuUpdate = useTosuUpdate(showToast, refreshStatus)
   const guiSettings = useGuiSettings()
+
+  // Panel data (cover URL, leaderboard PB) is only parsed when the panel is enabled
+  const game = useTosuSocket(tosuStatus?.baseUrl ?? '', {
+    beatmapPanelEnabled: guiSettings.showBeatmapPanel,
+  })
 
   useEffect(() => {
     refreshStatus()
@@ -166,8 +170,10 @@ export default function App() {
               saving={tosuSettings.saving}
               checkTosuUpdates={tosuUpdate.checkEnabled}
               closeToTray={guiSettings.closeToTray}
+              showBeatmapPanel={guiSettings.showBeatmapPanel}
               onCheckTosuUpdatesChange={tosuUpdate.setCheckTosuUpdates}
               onCloseToTrayChange={guiSettings.setCloseToTraySetting}
+              onShowBeatmapPanelChange={guiSettings.setShowBeatmapPanelSetting}
               onUpdate={tosuSettings.update}
               onSave={tosuSettings.save}
             />
@@ -176,6 +182,7 @@ export default function App() {
             <div className="page"><div className="empty-state">Загрузка...</div></div>
           )}
         </main>
+        {guiSettings.showBeatmapPanel && <BeatmapPanel game={game} />}
       </div>
       {toast && (
         <Toast

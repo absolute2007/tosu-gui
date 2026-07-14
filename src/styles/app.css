@@ -5,24 +5,18 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: var(--radius-window);
-  border: 1px solid rgba(255, 255, 255, 0.14);
   background: var(--bg-window);
-  /* Soft edge so the curve reads clearly against the desktop */
-  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35);
 }
 
 html.window-maximized .app-shell {
   border-radius: 0;
-  border-color: transparent;
-  box-shadow: none;
 }
 
 .app-body {
   flex: 1;
   display: flex;
   min-height: 0;
-  background: transparent;
+  background: var(--bg-window);
 }
 
 .app-content {
