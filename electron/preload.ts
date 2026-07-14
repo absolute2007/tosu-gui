@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { TosuCounter, TosuAppSettings, CounterSetting } from './tosu-api'
 import type { TosuUpdateInfo, UpdateProgress } from './tosu-updater'
 import type { GuiSettings } from './gui-settings'
+import type { OnlineBeatmapScore } from './osu-user-score'
 
 export interface TosuStatus {
   running: boolean
@@ -57,6 +58,14 @@ const api = {
   getGuiSettings: (): Promise<GuiSettings> => ipcRenderer.invoke('gui:get-settings'),
   saveGuiSettings: (updates: Partial<GuiSettings>): Promise<GuiSettings> =>
     ipcRenderer.invoke('gui:save-settings', updates),
+  getUserBeatmapScore: (payload: {
+    userId: number
+    userName: string
+    beatmapId: number
+    beatmapChecksum: string
+    mode: string
+    osuPath: string
+  }): Promise<OnlineBeatmapScore> => ipcRenderer.invoke('osu:user-beatmap-score', payload),
   onUpdateProgress: (callback: (progress: UpdateProgress) => void) => {
     const handler = (_event: unknown, payload: UpdateProgress) => callback(payload)
     ipcRenderer.on('tosu:update-progress', handler)

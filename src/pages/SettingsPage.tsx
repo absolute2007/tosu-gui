@@ -8,8 +8,10 @@ interface Props {
   saving: boolean
   checkTosuUpdates: boolean
   closeToTray: boolean
+  showBeatmapPanel: boolean
   onCheckTosuUpdatesChange: (enabled: boolean) => void
   onCloseToTrayChange: (enabled: boolean) => void
+  onShowBeatmapPanelChange: (enabled: boolean) => void
   onUpdate: <K extends keyof TosuAppSettings>(key: K, value: TosuAppSettings[K]) => void
   onSave: () => void
 }
@@ -20,8 +22,10 @@ export function SettingsPage({
   saving,
   checkTosuUpdates,
   closeToTray,
+  showBeatmapPanel,
   onCheckTosuUpdatesChange,
   onCloseToTrayChange,
+  onShowBeatmapPanelChange,
   onUpdate,
   onSave,
 }: Props) {
@@ -53,6 +57,17 @@ export function SettingsPage({
             </div>
             <div className="setting-control">
               <Toggle checked={closeToTray} onChange={onCloseToTrayChange} />
+            </div>
+          </div>
+          <div className="setting-row">
+            <div className="setting-info">
+              <div className="setting-label">Панель текущей карты</div>
+              <div className="setting-desc">
+                Правая панель с обложкой и данными карты. Если выключено — панель скрыта и данные для неё не обрабатываются
+              </div>
+            </div>
+            <div className="setting-control">
+              <Toggle checked={showBeatmapPanel} onChange={onShowBeatmapPanelChange} />
             </div>
           </div>
         </div>

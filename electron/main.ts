@@ -10,6 +10,7 @@ import { setupTray } from './tray'
 import { ensureGameOverlay } from './overlay-cleanup'
 import { patchIngameOverlay } from './overlay-patch'
 import { getInstalledVersion, TosuUpdater } from './tosu-updater'
+import { lookupUserBeatmapScore } from './osu-user-score'
 
 const isWin = process.platform === 'win32'
 const isDevBuild = !app.isPackaged
@@ -149,21 +150,20 @@ function createWindow() {
   const icon = getAppIcon()
   const isMac = process.platform === 'darwin'
 
-  // Transparent HWND + CSS border-radius = real rounded corners.
-  // Do NOT use backgroundMaterial here: DWM acrylic is always a full rectangle and
-  // paints square wedges outside the CSS radius (or OS rounding fails on frameless).
-  // Matte look comes from dense translucent CSS over the desktop.
+  // Opaque frameless window restores native Windows minimize/maximize animations.
+  // Transparent layered HWNDs disable DWM window animations and can stall CSS transitions.
+  // Solid chrome + OS roundedCorners (Win 11) keeps the matte look without acrylic wedges.
   mainWindow = new BrowserWindow({
-    width: 1180,
+    width: 1240,
     height: 760,
-    minWidth: 960,
+    minWidth: 1020,
     minHeight: 640,
     center: true,
     frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
+    transparent: false,
+    backgroundColor: '#1e1e1e',
     hasShadow: true,
-    roundedCorners: false,
+    roundedCorners: true,
     thickFrame: true,
     autoHideMenuBar: true,
     title: APP_NAME,
@@ -415,6 +415,31 @@ ipcMain.handle('gui:get-settings', async () => readGuiSettings())
 ipcMain.handle('gui:save-settings', async (_e, updates: Partial<ReturnType<typeof readGuiSettings>>) => {
   return writeGuiSettings(updates)
 })
+
+ipcMain.handle(
+  'osu:user-beatmap-score',
+  async (
+    _e,
+    payload: {
+      userId?: number
+      userName?: string
+      beatmapId?: number
+      beatmapChecksum?: string
+      mode?: string
+      osuPath?: string
+    }
+  ) => {
+    return lookupUserBeatmapScore({
+      userId: Number(payload?.userId) || 0,
+      userName: typeof payload?.userName === 'string' ? payload.userName : '',
+      beatmapId: Number(payload?.beatmapId) || 0,
+      beatmapChecksum:
+        typeof payload?.beatmapChecksum === 'string' ? payload.beatmapChecksum : '',
+      mode: typeof payload?.mode === 'string' ? payload.mode : 'osu',
+      osuPath: typeof payload?.osuPath === 'string' ? payload.osuPath : '',
+    })
+  }
+)
 
 ipcMain.handle('tosu:check-update', async () => {
   return tosuUpdater.checkForUpdate(tosuProcess.getTosuDir())

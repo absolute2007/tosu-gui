@@ -87,27 +87,6 @@ export function StatusPage({
         </div>
       </div>
 
-      {game.connected && (
-        <div className="glass-card">
-          <div className="card-header">Текущая карта</div>
-          <div className="card-body">
-            <StatusRow label="Название">{game.beatmapTitle}</StatusRow>
-            <StatusRow label="Исполнитель">{game.beatmapArtist}</StatusRow>
-            <StatusRow label="PP (текущий)">{game.ppCurrent}</StatusRow>
-            <StatusRow label="PP (FC)">{game.ppFc}</StatusRow>
-            <StatusRow label="Звёзды">{game.stars}★</StatusRow>
-            <StatusRow label="BPM">{game.bpm}</StatusRow>
-            {game.state === 'play' && (
-              <>
-                <StatusRow label="Точность">{game.accuracy}%</StatusRow>
-                <StatusRow label="Комбо">{game.combo}x</StatusRow>
-              </>
-            )}
-            {game.mods && <StatusRow label="Моды">{game.mods}</StatusRow>}
-          </div>
-        </div>
-      )}
-
       <div style={{ marginTop: 20, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button
           className="btn btn-ghost"
