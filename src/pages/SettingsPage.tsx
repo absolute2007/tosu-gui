@@ -6,9 +6,11 @@ interface Props {
   settings: TosuAppSettings
   dirty: boolean
   saving: boolean
+  checkAppUpdates: boolean
   checkTosuUpdates: boolean
   closeToTray: boolean
   showBeatmapPanel: boolean
+  onCheckAppUpdatesChange: (enabled: boolean) => void
   onCheckTosuUpdatesChange: (enabled: boolean) => void
   onCloseToTrayChange: (enabled: boolean) => void
   onShowBeatmapPanelChange: (enabled: boolean) => void
@@ -20,9 +22,11 @@ export function SettingsPage({
   settings,
   dirty,
   saving,
+  checkAppUpdates,
   checkTosuUpdates,
   closeToTray,
   showBeatmapPanel,
+  onCheckAppUpdatesChange,
   onCheckTosuUpdatesChange,
   onCloseToTrayChange,
   onShowBeatmapPanelChange,
@@ -37,17 +41,36 @@ export function SettingsPage({
       </div>
 
       <div className="glass-card">
-        <div className="card-header">Общие</div>
+        <div className="card-header">Обновления</div>
         <div className="card-body">
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Проверка обновлений</div>
-              <div className="setting-desc">tosu GUI проверяет новые версии на GitHub и предлагает обновиться</div>
+              <div className="setting-label">Обновления tosu GUI</div>
+              <div className="setting-desc">
+                Проверять новые версии этой программы на GitHub и предлагать установить
+              </div>
+            </div>
+            <div className="setting-control">
+              <Toggle checked={checkAppUpdates} onChange={onCheckAppUpdatesChange} />
+            </div>
+          </div>
+          <div className="setting-row">
+            <div className="setting-info">
+              <div className="setting-label">Обновления tosu</div>
+              <div className="setting-desc">
+                Проверять новые версии tosu.exe и in-game overlay
+              </div>
             </div>
             <div className="setting-control">
               <Toggle checked={checkTosuUpdates} onChange={onCheckTosuUpdatesChange} />
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="glass-card">
+        <div className="card-header">Общие</div>
+        <div className="card-body">
           <div className="setting-row">
             <div className="setting-info">
               <div className="setting-label">Сворачивать в трей</div>

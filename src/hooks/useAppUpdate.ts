@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { TosuUpdateInfo, UpdateProgress } from '../../electron/tosu-updater'
+import type { AppUpdateInfo, AppUpdateProgress } from '../../electron/app-updater'
 
-export function useTosuUpdate(
-  onToast: (msg: string, type: 'success' | 'error') => void,
-  onInstalled?: () => void
-) {
-  const [updateInfo, setUpdateInfo] = useState<TosuUpdateInfo | null>(null)
+export function useAppUpdate(onToast: (msg: string, type: 'success' | 'error') => void) {
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null)
   const [visible, setVisible] = useState(false)
   const [installing, setInstalling] = useState(false)
-  const [progress, setProgress] = useState<UpdateProgress | null>(null)
+  const [progress, setProgress] = useState<AppUpdateProgress | null>(null)
   const [checkEnabled, setCheckEnabled] = useState(true)
   const dismissedRef = useRef<string | null>(null)
   const checkingRef = useRef(false)
@@ -16,8 +13,8 @@ export function useTosuUpdate(
   const loadGuiSettings = useCallback(async () => {
     try {
       const settings = await window.tosuGui.getGuiSettings()
-      setCheckEnabled(settings.checkTosuUpdates)
-      dismissedRef.current = settings.dismissedTosuVersion
+      setCheckEnabled(settings.checkAppUpdates)
+      dismissedRef.current = settings.dismissedAppVersion
     } catch {
       /* ignore */
     }
@@ -31,8 +28,16 @@ export function useTosuUpdate(
       const notify = opts?.notify ?? force
       checkingRef.current = true
       try {
-        const info = await window.tosuGui.checkTosuUpdate()
+        const info = await window.tosuGui.checkAppUpdate()
         setUpdateInfo(info)
+
+        if (info.unsupported) {
+          if (notify) {
+            onToast(info.error || 'Автообновление только в установленной версии', 'error')
+          }
+          setVisible(false)
+          return info
+        }
 
         if (info.error && notify) {
           onToast(info.error, 'error')
@@ -44,11 +49,10 @@ export function useTosuUpdate(
             info.latestVersion &&
             (force || dismissed !== info.latestVersion)
         )
-
         setVisible(shouldShow)
 
         if (notify && !info.updateAvailable && !info.error) {
-          onToast(`tosu актуален (v${info.currentVersion})`, 'success')
+          onToast(`tosu GUI актуален (v${info.currentVersion})`, 'success')
         }
         return info
       } catch (err) {
@@ -69,10 +73,9 @@ export function useTosuUpdate(
       setVisible(false)
       return
     }
-
     dismissedRef.current = updateInfo.latestVersion
     setVisible(false)
-    await window.tosuGui.dismissTosuUpdate(updateInfo.latestVersion)
+    await window.tosuGui.dismissAppUpdate(updateInfo.latestVersion)
   }, [updateInfo])
 
   const install = useCallback(async () => {
@@ -82,41 +85,29 @@ export function useTosuUpdate(
     setProgress({ phase: 'downloading', progress: 0, message: 'Подготовка…' })
 
     try {
-      const result = await window.tosuGui.installTosuUpdate()
+      await window.tosuGui.installAppUpdate()
+      // App usually quits here; if not, show a note
+      onToast('Установщик запущен — подтвердите обновление', 'success')
       setVisible(false)
-      setUpdateInfo((prev) =>
-        prev
-          ? {
-              ...prev,
-              currentVersion: result.version,
-              updateAvailable: false,
-            }
-          : prev
-      )
-      if (result.restartFailed) {
-        onToast(
-          `tosu обновлён до v${result.version}, но не запустился — нажмите «Перезапустить tosu»`,
-          'error'
-        )
-      } else {
-        onToast(`tosu обновлён до v${result.version}`, 'success')
-      }
-      await onInstalled?.()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка обновления'
-      onToast(msg, 'error')
+      const raw = err instanceof Error ? err.message : String(err ?? 'Ошибка обновления')
+      const msg = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
+      onToast(msg || 'Ошибка обновления', 'error')
     } finally {
       setInstalling(false)
       setProgress(null)
     }
-  }, [installing, onInstalled, onToast])
+  }, [installing, onToast])
 
-  const setCheckTosuUpdates = useCallback(async (enabled: boolean) => {
-    setCheckEnabled(enabled)
-    const settings = await window.tosuGui.saveGuiSettings({ checkTosuUpdates: enabled })
-    dismissedRef.current = settings.dismissedTosuVersion
-    if (enabled) void checkForUpdate(true)
-  }, [checkForUpdate])
+  const setCheckAppUpdates = useCallback(
+    async (enabled: boolean) => {
+      setCheckEnabled(enabled)
+      const settings = await window.tosuGui.saveGuiSettings({ checkAppUpdates: enabled })
+      dismissedRef.current = settings.dismissedAppVersion
+      if (enabled) void checkForUpdate(true)
+    },
+    [checkForUpdate]
+  )
 
   useEffect(() => {
     void loadGuiSettings()
@@ -127,7 +118,7 @@ export function useTosuUpdate(
 
     const timer = setTimeout(() => {
       void checkForUpdate()
-    }, 4000)
+    }, 5000)
 
     const interval = setInterval(() => {
       void checkForUpdate()
@@ -140,7 +131,7 @@ export function useTosuUpdate(
   }, [checkEnabled, checkForUpdate])
 
   useEffect(() => {
-    const unsubscribe = window.tosuGui.onUpdateProgress((next) => {
+    const unsubscribe = window.tosuGui.onAppUpdateProgress((next) => {
       setProgress(next)
     })
     return () => {
@@ -157,6 +148,6 @@ export function useTosuUpdate(
     checkForUpdate,
     dismiss,
     install,
-    setCheckTosuUpdates,
+    setCheckAppUpdates,
   }
 }

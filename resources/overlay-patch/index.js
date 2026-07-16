@@ -1,1 +1,282 @@
-"use strict";const s=require("electron"),w=require("node:events"),m=require("@asdf-overlay/electron/input/conv"),f=require("node:path"),i=require("@asdf-overlay/core"),v=require("@asdf-overlay/electron/input"),k=require("@asdf-overlay/electron/surface");class h{constructor(e){if(this.keys=e,e.length>32)throw new Error("Keybind keys cannot be more than 32 keys")}keys;state=4294967295;update(e,t){const n=this.keys.findIndex(r=>m.mapKeycode(e.code)===r);return n===-1?!1:t==="Pressed"?(this.state&=~(1<<n),!(this.state<<32-this.keys.length)):(this.state|=1<<n,!1)}}async function S(o){await o.loadFile(f.join(__dirname,"../renderer/index.html"))}const x=f.join(__dirname,"../preload/index.js");class p{constructor(e,t,n,r,l){this.pid=e,this.windowId=t,this.overlay=n,this.window=r,this.luid=l,n.event.once("disconnected",()=>{this.window.destroy(),this.event.emit("destroyed")}),n.event.on("resized",(d,a,u)=>{d===this.windowId&&(console.debug("window resized hwnd:",d,"width:",a,"height:",u),this.window.setSize(a,u))});let c=!1;n.event.on("input_blocking_ended",()=>{this.closeConfiguration(),this.input?.disconnect(),c=!1}),n.event.on("keyboard_input",(d,a)=>{a.kind==="Key"&&this.keybind.update(a.key,a.state)&&(c=!c,n.blockInput(t,c),c&&(this.input=v.ElectronOverlayInput.connect({id:t,overlay:n},r.webContents),this.openConfiguration()))}),this.surface=k.ElectronOverlaySurface.connect({id:t,overlay:n},l,r.webContents)}pid;windowId;overlay;window;luid;event=new w;keybind=new h([]);surface;input=null;openConfiguration(){this.window.webContents.send("inputCaptureStart"),this.window.focusOnWebView()}closeConfiguration(){this.window.webContents.send("inputCaptureEnd"),this.window.blurWebView()}destroy(){this.input?.disconnect(),this.surface.disconnect(),this.overlay.destroy()}static async initialize(e){const t=await i.Overlay.attach(i.defaultDllDir().replaceAll("app.asar","app.asar.unpacked"),e,5e3),[n,r,l,c]=await new Promise(a=>t.event.once("added",(u,y,b,g)=>a([u,y,b,g])));console.debug("found hwnd:",n,"for pid:",e),await t.setPosition(n,i.length(0),i.length(0)),await t.setAnchor(n,i.length(0),i.length(0)),await t.setMargin(n,i.length(0),i.length(0),i.length(0),i.length(0)),await t.listenInput(n,!1,!0);const d=new s.BrowserWindow({webPreferences:{offscreen:{useSharedTexture:!0,sharedTexturePixelFormat:"argb"},transparent:!0,backgroundThrottling:!1,preload:x},show:!1});return d.setSize(r,l,!1),new p(e,n,t,d,c)}}class C{map=new Map;keybindKeys=["Control","Shift","Space"];maxFps=60;async runIpc(){for await(const e of w.on(process,"message"))for(const t of e)if(t!=null)try{await this.handleEvent(t)}catch(n){console.error("IPC:",n)}}async runOverlay(e){if(this.map.has(e)){console.debug("Already attached to process",e);return}try{console.log("initializing ingame overlay pid:",e);const t=await p.initialize(e);t.window.webContents.setFrameRate(this.maxFps),t.keybind=new h(this.keybindKeys),this.map.set(e,t);try{await S(t.window.webContents),console.log("warn: Initialized successfully")}catch(n){console.error("Unnable connect to ingame overlay:",n)}t.event.once("destroyed",()=>{this.map.delete(e)})}catch(t){console.error("Injection failed:",t)}}reloadAll(){for(const e of this.map.values())e.window.reload()}destroy(){for(const e of this.map.values())e.destroy()}updateKeybind(e){this.keybindKeys=e.split(/\s*\+\s*/);for(const t of this.map.values())t.keybind=new h(this.keybindKeys);console.debug(`Keybind updated to ${this.keybindKeys.join(" + ")}`)}updateMaxFps(e){this.maxFps=e;for(const t of this.map.values())t.window.webContents.setFrameRate(e);console.debug(`MaxFps updated to ${e}`)}async handleEvent(e){e.cmd==="add"?await this.runOverlay(e.pid):e.cmd==="keybind"?this.updateKeybind(e.keybind):e.cmd==="maxFps"&&this.updateMaxFps(e.maxFps)}}s.protocol.registerSchemesAsPrivileged([{scheme:"tosu",privileges:{standard:!0,secure:!0,supportFetchAPI:!0,bypassCSP:!0,stream:!0}}]);function q(){s.session.defaultSession.webRequest.onBeforeSendHeaders({urls:["ws://localhost:24050/*","http://localhost:24050/*"]},(o,e)=>{o.requestHeaders.Referer="http://localhost:24050",e({requestHeaders:o.requestHeaders})}),s.protocol.handle("tosu",o=>o.url.startsWith("tosu://server")?new Response("",{status:308,headers:{Location:o.url.replace("tosu://server","http://localhost:24050")}}):new Response("Bad request",{status:400}))}s.app.commandLine.appendSwitch("force_high_performance_gpu");s.app.commandLine.appendSwitch("high-dpi-support","1");s.app.commandLine.appendSwitch("force-device-scale-factor","1");s.app.commandLine.appendSwitch("in-process-gpu");s.app.commandLine.appendSwitch("disable-direct-composition");(async()=>{if(!s.app.requestSingleInstanceLock()||!process.channel)return;console.log("warn: Starting..."),s.Menu.setApplicationMenu(null),s.app.on("window-all-closed",()=>{}),new C().runIpc(),await s.app.whenReady(),q()})().catch(o=>{console.error(o)});
+"use strict";
+/**
+ * Tray-free tosu ingame-overlay main process (based on @tosu/ingame-overlay 4.25.x).
+ * Replaces dist/src/index.js and drops bytecode so Electron loads plain JS.
+ */
+const { app, BrowserWindow, Menu, protocol, session } = require("electron");
+const { on } = require("node:events");
+const EventEmitter = require("node:events");
+const path = require("node:path");
+const { Overlay, defaultDllDir, length } = require("@asdf-overlay/core");
+const { mapKeycode } = require("@asdf-overlay/electron/input/conv");
+const { ElectronOverlayInput } = require("@asdf-overlay/electron/input");
+const { ElectronOverlaySurface } = require("@asdf-overlay/electron/surface");
+
+class Keybind {
+  constructor(keys) {
+    if (keys.length > 32) throw new Error("Keybind keys cannot be more than 32 keys");
+    this.keys = keys;
+    this.state = 0xffffffff;
+  }
+
+  update(key, state) {
+    const index = this.keys.findIndex((keybindKey) => mapKeycode(key.code) === keybindKey);
+    if (index === -1) return false;
+    if (state === "Pressed") {
+      this.state &= ~(1 << index);
+      return !(this.state << (32 - this.keys.length));
+    }
+    this.state |= 1 << index;
+    return false;
+  }
+}
+
+async function loadMainPage(webContents) {
+  await webContents.loadFile(path.join(__dirname, "../renderer/index.html"));
+}
+
+const preloadPath = path.join(__dirname, "../preload/index.js");
+
+class OverlayProcess {
+  constructor(pid, windowId, overlay, window, luid) {
+    this.pid = pid;
+    this.windowId = windowId;
+    this.overlay = overlay;
+    this.window = window;
+    this.luid = luid;
+    this.event = new EventEmitter();
+    this.keybind = new Keybind([]);
+    this.input = null;
+
+    overlay.event.once("disconnected", () => {
+      this.window.destroy();
+      this.event.emit("destroyed");
+    });
+
+    overlay.event.on("resized", (hwnd, width, height) => {
+      if (hwnd !== this.windowId) return;
+      console.debug("window resized hwnd:", hwnd, "width:", width, "height:", height);
+      this.window.setSize(width, height);
+    });
+
+    let configurationEnabled = false;
+    overlay.event.on("input_blocking_ended", () => {
+      this.closeConfiguration();
+      this.input?.disconnect();
+      configurationEnabled = false;
+    });
+
+    overlay.event.on("keyboard_input", (_, input) => {
+      if (input.kind === "Key" && this.keybind.update(input.key, input.state)) {
+        configurationEnabled = !configurationEnabled;
+        overlay.blockInput(windowId, configurationEnabled);
+        if (configurationEnabled) {
+          this.input = ElectronOverlayInput.connect(
+            { id: windowId, overlay },
+            window.webContents
+          );
+          this.openConfiguration();
+        }
+      }
+    });
+
+    this.surface = ElectronOverlaySurface.connect(
+      { id: windowId, overlay },
+      luid,
+      window.webContents
+    );
+
+    // asdf-overlay 1.2+ surfaces emit paint errors instead of crashing silently
+    if (this.surface.events && typeof this.surface.events.on === "function") {
+      this.surface.events.on("error", (error) => {
+        console.error(error);
+      });
+    }
+  }
+
+  openConfiguration() {
+    this.window.webContents.send("inputCaptureStart");
+    this.window.focusOnWebView();
+  }
+
+  closeConfiguration() {
+    this.window.webContents.send("inputCaptureEnd");
+    this.window.blurWebView();
+  }
+
+  destroy() {
+    this.input?.disconnect();
+    this.surface.disconnect();
+    this.overlay.destroy();
+  }
+
+  static async initialize(pid) {
+    const overlay = await Overlay.attach(
+      defaultDllDir().replaceAll("app.asar", "app.asar.unpacked"),
+      pid,
+      5000
+    );
+
+    const [hwnd, width, height, luid] = await new Promise((resolve) =>
+      overlay.event.once("added", (h, w, ht, l) => resolve([h, w, ht, l]))
+    );
+    console.debug("found hwnd:", hwnd, "for pid:", pid);
+
+    await overlay.setPosition(hwnd, length(0), length(0));
+    await overlay.setAnchor(hwnd, length(0), length(0));
+    await overlay.setMargin(hwnd, length(0), length(0), length(0), length(0));
+    await overlay.listenInput(hwnd, false, true);
+
+    const window = new BrowserWindow({
+      webPreferences: {
+        offscreen: {
+          useSharedTexture: true,
+          sharedTexturePixelFormat: "argb",
+        },
+        transparent: true,
+        backgroundThrottling: false,
+        preload: preloadPath,
+      },
+      show: false,
+    });
+    window.setSize(width, height, false);
+
+    return new OverlayProcess(pid, hwnd, overlay, window, luid);
+  }
+}
+
+class OverlayManager {
+  constructor() {
+    this.map = new Map();
+    this.keybindKeys = ["Control", "Shift", "Space"];
+    this.maxFps = 60;
+  }
+
+  async runIpc() {
+    for await (const events of on(process, "message")) {
+      for (const msg of events) {
+        if (msg == null) continue;
+        try {
+          await this.handleEvent(msg);
+        } catch (exc) {
+          console.error("IPC:", exc);
+        }
+      }
+    }
+  }
+
+  async runOverlay(pid) {
+    if (this.map.has(pid)) {
+      console.debug("Already attached to process", pid);
+      return;
+    }
+
+    try {
+      console.log("initializing ingame overlay pid:", pid);
+      const overlay = await OverlayProcess.initialize(pid);
+      overlay.window.webContents.setFrameRate(this.maxFps);
+      overlay.keybind = new Keybind(this.keybindKeys);
+      this.map.set(pid, overlay);
+      try {
+        await loadMainPage(overlay.window.webContents);
+        console.log("warn: Initialized successfully");
+      } catch (exc) {
+        console.error("Unnable connect to ingame overlay:", exc);
+      }
+      overlay.event.once("destroyed", () => {
+        this.map.delete(pid);
+      });
+    } catch (exc) {
+      console.error("Injection failed:", exc);
+    }
+  }
+
+  reloadAll() {
+    for (const overlay of this.map.values()) overlay.window.reload();
+  }
+
+  destroy() {
+    for (const overlay of this.map.values()) overlay.destroy();
+  }
+
+  updateKeybind(keybind) {
+    this.keybindKeys = keybind.split(/\s*\+\s*/);
+    for (const overlay of this.map.values()) {
+      overlay.keybind = new Keybind(this.keybindKeys);
+    }
+    console.debug(`Keybind updated to ${this.keybindKeys.join(" + ")}`);
+  }
+
+  updateMaxFps(maxFps) {
+    this.maxFps = maxFps;
+    for (const overlay of this.map.values()) {
+      overlay.window.webContents.setFrameRate(maxFps);
+    }
+    console.debug(`MaxFps updated to ${maxFps}`);
+  }
+
+  async handleEvent(message) {
+    if (message.cmd === "add") await this.runOverlay(message.pid);
+    else if (message.cmd === "keybind") this.updateKeybind(message.keybind);
+    else if (message.cmd === "maxFps") this.updateMaxFps(message.maxFps);
+  }
+}
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "tosu",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+      stream: true,
+    },
+  },
+]);
+
+function registerTosuProtocol() {
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ["ws://localhost:24050/*", "http://localhost:24050/*"] },
+    (details, callback) => {
+      details.requestHeaders.Referer = "http://localhost:24050";
+      callback({ requestHeaders: details.requestHeaders });
+    }
+  );
+
+  protocol.handle("tosu", (req) => {
+    if (!req.url.startsWith("tosu://server")) {
+      return new Response("Bad request", { status: 400 });
+    }
+    return new Response("", {
+      status: 308,
+      headers: {
+        Location: req.url.replace("tosu://server", "http://localhost:24050"),
+      },
+    });
+  });
+}
+
+app.commandLine.appendSwitch("force_high_performance_gpu");
+app.commandLine.appendSwitch("high-dpi-support", "1");
+app.commandLine.appendSwitch("force-device-scale-factor", "1");
+app.commandLine.appendSwitch("in-process-gpu");
+app.commandLine.appendSwitch("disable-direct-composition");
+
+(async () => {
+  // Single instance + must be spawned by tosu with IPC channel
+  if (!app.requestSingleInstanceLock() || !process.channel) return;
+
+  console.log("warn: Starting...");
+  Menu.setApplicationMenu(null);
+  app.on("window-all-closed", () => {});
+
+  const manager = new OverlayManager();
+  manager.runIpc();
+
+  await app.whenReady();
+  registerTosuProtocol();
+  // Tray intentionally omitted — tosu GUI owns the system tray.
+})().catch((exc) => {
+  console.error(exc);
+});

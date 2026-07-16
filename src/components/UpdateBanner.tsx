@@ -1,30 +1,50 @@
 import { Download, ExternalLink, X } from 'lucide-react'
-import type { TosuUpdateInfo, UpdateProgress } from '../../electron/tosu-updater'
 
-interface Props {
-  info: TosuUpdateInfo
-  installing: boolean
-  progress: UpdateProgress | null
-  onInstall: () => void
-  onDismiss: () => void
-  onOpenRelease: () => void
+export interface UpdateBannerProgress {
+  progress: number
+  message: string
 }
 
-export function UpdateBanner({ info, installing, progress, onInstall, onDismiss, onOpenRelease }: Props) {
+interface Props {
+  title: string
+  fromVersion: string
+  toVersion: string | null
+  installing: boolean
+  progress: UpdateBannerProgress | null
+  releaseUrl?: string | null
+  installLabel?: string
+  onInstall: () => void
+  onDismiss: () => void
+  onOpenRelease?: () => void
+}
+
+export function UpdateBanner({
+  title,
+  fromVersion,
+  toVersion,
+  installing,
+  progress,
+  releaseUrl,
+  installLabel = 'Обновить',
+  onInstall,
+  onDismiss,
+  onOpenRelease,
+}: Props) {
   const progressLabel = installing && progress ? progress.message : null
 
   return (
     <div className="update-banner">
       <div className="update-banner-content">
         <div className="update-banner-text">
-          <div className="update-banner-title">Доступно обновление tosu</div>
+          <div className="update-banner-title">{title}</div>
           <div className="update-banner-desc">
-            v{info.currentVersion} → v{info.latestVersion}
+            v{fromVersion}
+            {toVersion ? ` → v${toVersion}` : ''}
             {progressLabel ? ` · ${progressLabel}` : ''}
           </div>
         </div>
         <div className="update-banner-actions">
-          {info.releaseUrl && (
+          {releaseUrl && onOpenRelease && (
             <button className="btn btn-ghost" onClick={onOpenRelease} disabled={installing}>
               <ExternalLink size={14} />
               Релиз
@@ -32,7 +52,7 @@ export function UpdateBanner({ info, installing, progress, onInstall, onDismiss,
           )}
           <button className="btn btn-primary" onClick={onInstall} disabled={installing}>
             <Download size={14} />
-            {installing ? 'Обновление…' : 'Обновить'}
+            {installing ? 'Обновление…' : installLabel}
           </button>
           <button
             className="btn btn-ghost update-banner-close"
