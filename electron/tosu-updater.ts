@@ -184,6 +184,101 @@ async function mergeInstall(sourceRoot: string, destDir: string) {
 
 }
 
+/**
+ * Install the matching in-game overlay package for a tosu version.
+ * Recent tosu releases ship tosu.exe alone; the overlay is a separate
+ * asset (`tosu-overlay-vX.Y.Z.zip`) and must track the same version.
+ */
+export async function installMatchingOverlay(
+  tosuDir: string,
+  version: string,
+  onProgress?: (progress: UpdateProgress) => void
+): Promise<boolean> {
+  const tag = `v${normalizeVersion(version)}`
+  const assetName = `tosu-overlay-${tag}.zip`
+  const downloadUrl = `https://github.com/tosuapp/tosu/releases/download/${tag}/${assetName}`
+  const zipPath = path.join(tosuDir, `.update-${assetName}`)
+  const extractDir = path.join(tosuDir, '.overlay-update-tmp')
+  const destOverlay = path.join(tosuDir, 'game-overlay')
+
+  onProgress?.({
+    phase: 'installing',
+    progress: 91,
+    message: 'Загрузка in-game overlay…',
+  })
+
+  try {
+    await downloadFile(downloadUrl, zipPath, (pct) => {
+      // Map 0–80 download scale into a narrow install band
+      const mapped = 91 + (pct / 80) * 3
+      onProgress?.({
+        phase: 'installing',
+        progress: Math.min(94, mapped),
+        message: `Загрузка overlay… ${Math.round(pct)}%`,
+      })
+    })
+
+    fs.rmSync(extractDir, { recursive: true, force: true })
+    fs.mkdirSync(extractDir, { recursive: true })
+    extractZip(zipPath, extractDir)
+
+    // Archive is the game-overlay folder contents (exe + resources + version)
+    const hasExe = fs.existsSync(path.join(extractDir, 'tosu-ingame-overlay.exe'))
+    const nested = path.join(extractDir, 'game-overlay')
+    const sourceRoot = hasExe
+      ? extractDir
+      : fs.existsSync(path.join(nested, 'tosu-ingame-overlay.exe'))
+        ? nested
+        : null
+
+    if (!sourceRoot) {
+      throw new Error('tosu-ingame-overlay.exe не найден в архиве overlay')
+    }
+
+    if (fs.existsSync(destOverlay)) {
+      await replacePath(sourceRoot, destOverlay, 'game-overlay')
+    } else {
+      fs.cpSync(sourceRoot, destOverlay, { recursive: true })
+    }
+
+    // Ensure version file matches (archive usually includes it)
+    const versionFile = path.join(destOverlay, 'version')
+    if (!fs.existsSync(versionFile)) {
+      fs.writeFileSync(versionFile, normalizeVersion(version), 'utf8')
+    }
+
+    // Drop tray-patch marker so the new asar is re-patched on next start
+    const marker = path.join(destOverlay, 'resources', '.tray-patch-v1')
+    if (fs.existsSync(marker)) {
+      try {
+        fs.unlinkSync(marker)
+      } catch {
+        /* ignore */
+      }
+    }
+
+    onProgress?.({
+      phase: 'installing',
+      progress: 94,
+      message: 'Overlay установлен',
+    })
+    return true
+  } catch (err) {
+    console.warn('[tosu-updater] overlay install failed (non-fatal):', err)
+    // Leave version-mismatched or missing overlay for tosu to fetch on start
+    return false
+  } finally {
+    fs.rmSync(extractDir, { recursive: true, force: true })
+    if (fs.existsSync(zipPath)) {
+      try {
+        fs.unlinkSync(zipPath)
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
 function downloadFile(url: string, dest: string, onProgress: (pct: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const follow = (fetchUrl: string, redirects = 0) => {
@@ -319,6 +414,10 @@ export class TosuUpdater {
       onProgress({ phase: 'installing', progress: 90, message: 'Установка…' })
       await mergeInstall(sourceRoot, tosuDir)
       fs.writeFileSync(path.join(tosuDir, 'version'), info.latestVersion, 'utf8')
+
+      // tosu-windows zip no longer embeds game-overlay — fetch the matching
+      // overlay package so version stamps stay in sync and rendering works.
+      await installMatchingOverlay(tosuDir, info.latestVersion, onProgress)
 
       if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath)
       fs.rmSync(extractDir, { recursive: true, force: true })

@@ -11,6 +11,13 @@ import { ensureGameOverlay } from './overlay-cleanup'
 import { patchIngameOverlay } from './overlay-patch'
 import { getInstalledVersion, TosuUpdater } from './tosu-updater'
 import { lookupUserBeatmapScore } from './osu-user-score'
+import {
+  checkAppUpdate,
+  downloadAndInstallAppUpdate,
+  getAppVersion,
+  isAppUpdateDownloading,
+  setupAppUpdater,
+} from './app-updater'
 
 const isWin = process.platform === 'win32'
 const isDevBuild = !app.isPackaged
@@ -265,6 +272,7 @@ if (gotLock) {
   app.whenReady().then(() => {
     createWindow()
     createTray()
+    setupAppUpdater(() => mainWindow)
 
     tosuApi.setBaseUrl(getTosuBaseUrl())
     tosuApi.setEnvPath(tosuProcess.getEnvPath())
@@ -315,12 +323,13 @@ ipcMain.handle('tosu:status', async () => {
     baseUrl: getTosuBaseUrl(),
     pid: tosuProcess.pid,
     version: getInstalledVersion(tosuProcess.getTosuDir()),
+    appVersion: getAppVersion(),
   }
 })
 
 ipcMain.handle('tosu:restart', async () => {
-  if (tosuProcess.isUpdating()) {
-    throw new Error('Идёт обновление tosu — подождите окончания')
+  if (tosuProcess.isUpdating() || isAppUpdateDownloading()) {
+    throw new Error('Идёт обновление — подождите окончания')
   }
   tosuSocket.disconnect()
   await tosuProcess.restart()
@@ -449,8 +458,47 @@ ipcMain.handle('tosu:dismiss-update', async (_e, version: string) => {
   writeGuiSettings({ dismissedTosuVersion: version })
 })
 
-ipcMain.handle('tosu:install-update', async () => {
+ipcMain.handle('app:check-update', async () => {
+  return checkAppUpdate()
+})
+
+ipcMain.handle('app:dismiss-update', async (_e, version: string) => {
+  writeGuiSettings({ dismissedAppVersion: version })
+})
+
+ipcMain.handle('app:install-update', async () => {
+  if (isAppUpdateDownloading()) {
+    throw new Error('Обновление уже выполняется')
+  }
   if (tosuProcess.isUpdating()) {
+    throw new Error('Сначала дождитесь окончания обновления tosu')
+  }
+
+  const sendProgress = (progress: import('./app-updater').AppUpdateProgress) => {
+    mainWindow?.webContents.send('app:update-progress', progress)
+  }
+
+  await downloadAndInstallAppUpdate(sendProgress, async () => {
+    isQuitting = true
+    tosuSocket.disconnect()
+    try {
+      if (tosuProcess.isRunning() || tosuProcess.isBusy()) {
+        await tosuProcess.stopForUpdate()
+        tosuProcess.endUpdate()
+      } else {
+        tosuProcess.stop()
+      }
+    } catch (err) {
+      console.warn('[app-updater] failed to stop tosu before install:', err)
+    }
+    writeGuiSettings({ dismissedAppVersion: null })
+  })
+
+  return { ok: true }
+})
+
+ipcMain.handle('tosu:install-update', async () => {
+  if (tosuProcess.isUpdating() || isAppUpdateDownloading()) {
     throw new Error('Обновление уже выполняется')
   }
 

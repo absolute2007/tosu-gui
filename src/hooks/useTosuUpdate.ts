@@ -23,29 +23,46 @@ export function useTosuUpdate(
     }
   }, [])
 
-  const checkForUpdate = useCallback(async (force = false) => {
-    if (checkingRef.current) return
-    if (!force && !checkEnabled) return
+  const checkForUpdate = useCallback(
+    async (force = false, opts?: { notify?: boolean }) => {
+      if (checkingRef.current) return null
+      if (!force && !checkEnabled) return null
 
-    checkingRef.current = true
-    try {
-      const info = await window.tosuGui.checkTosuUpdate()
-      setUpdateInfo(info)
+      const notify = opts?.notify ?? force
+      checkingRef.current = true
+      try {
+        const info = await window.tosuGui.checkTosuUpdate()
+        setUpdateInfo(info)
 
-      const dismissed = dismissedRef.current
-      const shouldShow = Boolean(
-        info.updateAvailable &&
-          info.latestVersion &&
-          (force || dismissed !== info.latestVersion)
-      )
+        if (info.error && notify) {
+          onToast(info.error, 'error')
+        }
 
-      setVisible(shouldShow)
-    } catch {
-      /* ignore */
-    } finally {
-      checkingRef.current = false
-    }
-  }, [checkEnabled])
+        const dismissed = dismissedRef.current
+        const shouldShow = Boolean(
+          info.updateAvailable &&
+            info.latestVersion &&
+            (force || dismissed !== info.latestVersion)
+        )
+
+        setVisible(shouldShow)
+
+        if (notify && !info.updateAvailable && !info.error) {
+          onToast(`tosu актуален (v${info.currentVersion})`, 'success')
+        }
+        return info
+      } catch (err) {
+        if (notify) {
+          const msg = err instanceof Error ? err.message : 'Ошибка проверки обновлений'
+          onToast(msg, 'error')
+        }
+        return null
+      } finally {
+        checkingRef.current = false
+      }
+    },
+    [checkEnabled, onToast]
+  )
 
   const dismiss = useCallback(async () => {
     if (!updateInfo?.latestVersion) {

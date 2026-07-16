@@ -80,8 +80,11 @@ export function StatusPage({
             </span>
           </StatusRow>
           <StatusRow label="Состояние">{stateLabel}</StatusRow>
-          <StatusRow label="Версия">
+          <StatusRow label="Версия tosu">
             {tosuStatus?.version ? `v${tosuStatus.version}` : '—'}
+          </StatusRow>
+          <StatusRow label="Версия GUI">
+            {tosuStatus?.appVersion ? `v${tosuStatus.appVersion}` : '—'}
           </StatusRow>
           <StatusRow label="Порт">{tosuStatus?.port ?? '—'}</StatusRow>
         </div>
@@ -98,9 +101,14 @@ export function StatusPage({
           {restarting ? 'Перезапуск…' : 'Перезапустить tosu'}
         </button>
         {onCheckUpdate && (
-          <button className="btn btn-ghost" onClick={onCheckUpdate} disabled={checkingUpdate}>
+          <button
+            className="btn btn-ghost"
+            onClick={onCheckUpdate}
+            disabled={checkingUpdate}
+            title="Проверить обновления tosu GUI и tosu"
+          >
             <Download size={14} className={checkingUpdate ? 'spin' : ''} />
-            Проверить обновления
+            {checkingUpdate ? 'Проверка…' : 'Проверить обновления'}
           </button>
         )}
       </div>

@@ -10,8 +10,8 @@ import {
   isGameOverlayBroken,
   removeGameOverlay,
 } from './overlay-cleanup'
-import { getInstalledVersion } from './tosu-updater'
 import { patchIngameOverlay } from './overlay-patch'
+import { getInstalledVersion, installMatchingOverlay } from './tosu-updater'
 
 const DEFAULT_PORT = 24050
 const DEFAULT_STARTUP_TIMEOUT_MS = 20000
@@ -344,7 +344,18 @@ export class TosuProcess {
         await removeGameOverlay(tosuDir)
       }
 
-      const overlayReady = await ensureGameOverlay(tosuDir, getInstalledVersion(tosuDir))
+      const tosuVersion = getInstalledVersion(tosuDir)
+      let overlayReady = await ensureGameOverlay(tosuDir, tosuVersion)
+
+      // If missing/mismatched, try downloading the matching tosu-overlay zip ourselves
+      // (tosu would also do this on start, but GitHub API failures used to leave users
+      // stuck with a stamped-old overlay that never painted).
+      if (!overlayReady && tosuVersion) {
+        console.log('[tosu] fetching matching game-overlay for', tosuVersion)
+        await installMatchingOverlay(tosuDir, tosuVersion)
+        overlayReady = await ensureGameOverlay(tosuDir, tosuVersion)
+      }
+
       if (!overlayReady) {
         console.warn('[tosu] game-overlay unavailable — starting tosu without overlay prep')
         return
