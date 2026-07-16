@@ -1,4 +1,4 @@
-import { Activity, Layers, LayoutGrid, Settings } from 'lucide-react'
+import { Activity, Layers, LayoutGrid, Map as MapIcon, Settings } from 'lucide-react'
 import type { Page } from '../App'
 import { AppIcon } from './AppIcon'
 import './Sidebar.css'
@@ -6,6 +6,7 @@ import './Sidebar.css'
 const NAV: { id: Page; label: string; icon: typeof Activity }[] = [
   { id: 'status', label: 'Статус', icon: Activity },
   { id: 'counters', label: 'Счётчики', icon: LayoutGrid },
+  { id: 'maps', label: 'Карты', icon: MapIcon },
   { id: 'overlay', label: 'Оверлей', icon: Layers },
   { id: 'settings', label: 'Настройки', icon: Settings },
 ]

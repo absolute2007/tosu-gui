@@ -13,6 +13,13 @@ export interface GuiSettings {
   closeToTray: boolean
   /** Right-side current beatmap panel. When false, panel is hidden and its data is not processed. */
   showBeatmapPanel: boolean
+  /** Path to osu!stable Songs folder for map downloads. Empty = auto-detect. */
+  songsPath: string
+  /**
+   * Hotkey for Maps UI inside inject overlay (fullscreen-safe).
+   * Written to tosu/maps-overlay-keybind.txt for tosu-ingame-overlay.
+   */
+  mapsOverlayKeybind: string
 }
 
 const DEFAULTS: GuiSettings = {
@@ -23,6 +30,8 @@ const DEFAULTS: GuiSettings = {
   dismissedAppVersion: null,
   closeToTray: false,
   showBeatmapPanel: true,
+  songsPath: '',
+  mapsOverlayKeybind: 'Control + Shift + M',
 }
 
 function getSettingsPath() {

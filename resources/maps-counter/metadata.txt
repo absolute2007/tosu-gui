@@ -1,0 +1,7 @@
+Usecase: ingame
+Name: Maps Browser
+Version: 1.0.0
+Author: tosu-gui
+CompatibleWith: tosu
+Resolution: 480x640
+authorLinks: https://github.com/absolute2007/tosu-gui

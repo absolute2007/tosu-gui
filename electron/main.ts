@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron'
 import type { Tray } from 'electron'
+import fs from 'fs'
 import path from 'path'
 import { TosuProcess } from './tosu-process'
 import { TosuApi } from './tosu-api'
@@ -18,6 +19,26 @@ import {
   isAppUpdateDownloading,
   setupAppUpdater,
 } from './app-updater'
+import {
+  cancelMapDownload,
+  detectDefaultSongsPath,
+  downloadMapSet,
+  DownloadCancelledError,
+  pickSongsDirectory,
+  resolveSongsPath,
+  scanLocalSetIds,
+  searchMapSets,
+  type MapDownloadProgress,
+  type MapSearchParams,
+} from './beatmap-maps'
+import {
+  clearOsuSession,
+  fetchOsuAccount,
+  loginWithOsuWindow,
+} from './osu-session'
+import { emitMapsHttpProgress, startMapsHttpServer, stopMapsHttpServer } from './maps-http-server'
+import { ensureMapsCounter } from './ensure-maps-counter'
+import { writeMapsKeybindFile } from './maps-keybind-file'
 
 const isWin = process.platform === 'win32'
 const isDevBuild = !app.isPackaged
@@ -52,6 +73,11 @@ console.log(
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
+
+function broadcastMapsProgress(progress: MapDownloadProgress) {
+  mainWindow?.webContents.send('maps:download-progress', progress)
+  emitMapsHttpProgress(progress)
+}
 
 const tosuProcess = new TosuProcess()
 const tosuApi = new TosuApi()
@@ -273,6 +299,23 @@ if (gotLock) {
     createWindow()
     createTray()
     setupAppUpdater(() => mainWindow)
+    // Local API for in-game Maps counter only (no external always-on-top window)
+    startMapsHttpServer({
+      getParent: () => mainWindow,
+      getOverlayKeybind: () => {
+        try {
+          const envPath = tosuProcess.getEnvPath()
+          if (envPath && fs.existsSync(envPath)) {
+            const raw = fs.readFileSync(envPath, 'utf8')
+            const m = raw.match(/^INGAME_OVERLAY_KEYBIND=(.+)$/m)
+            if (m?.[1]?.trim()) return m[1].trim()
+          }
+        } catch {
+          /* ignore */
+        }
+        return 'Control + Shift + Space'
+      },
+    })
 
     tosuApi.setBaseUrl(getTosuBaseUrl())
     tosuApi.setEnvPath(tosuProcess.getEnvPath())
@@ -280,8 +323,11 @@ if (gotLock) {
     void (async () => {
       try {
         await tosuProcess.start()
+        const tosuDir = tosuProcess.getTosuDir()
+        ensureMapsCounter(tosuDir)
         const guiSettings = readGuiSettings()
-        setOverlayAntialiasing(tosuProcess.getTosuDir(), guiSettings.disableAntialiasing)
+        writeMapsKeybindFile(tosuDir, guiSettings.mapsOverlayKeybind)
+        setOverlayAntialiasing(tosuDir, guiSettings.disableAntialiasing)
         startSocketBridge()
       } catch (err) {
         console.error('Failed to start tosu:', err)
@@ -306,6 +352,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  stopMapsHttpServer()
   tosuSocket.disconnect()
   tosuProcess.stop()
   if (tray) {
@@ -391,6 +438,10 @@ ipcMain.handle('tosu:save-counter-settings', async (_e, name: string, settings: 
 })
 
 ipcMain.handle('tosu:delete-counter', async (_e, name: string) => {
+  const { isProtectedMapsCounter } = await import('./ensure-maps-counter')
+  if (isProtectedMapsCounter(String(name || ''))) {
+    throw new Error('Счётчик Maps Browser нельзя удалить — только выключить оверлей или убрать с экрана в игре')
+  }
   return tosuApi.deleteCounter(name)
 })
 
@@ -422,8 +473,122 @@ ipcMain.handle('shell:open-external', async (_e, url: string) => {
 ipcMain.handle('gui:get-settings', async () => readGuiSettings())
 
 ipcMain.handle('gui:save-settings', async (_e, updates: Partial<ReturnType<typeof readGuiSettings>>) => {
-  return writeGuiSettings(updates)
+  const next = writeGuiSettings(updates)
+  if (updates && Object.prototype.hasOwnProperty.call(updates, 'mapsOverlayKeybind')) {
+    try {
+      writeMapsKeybindFile(tosuProcess.getTosuDir(), next.mapsOverlayKeybind)
+    } catch {
+      /* ignore */
+    }
+  }
+  return next
 })
+
+function getResolvedSongsPath(): string | null {
+  const gui = readGuiSettings()
+  return resolveSongsPath(gui.songsPath || null)
+}
+
+ipcMain.handle('maps:search', async (_e, params: MapSearchParams) => {
+  return searchMapSets(params || {})
+})
+
+ipcMain.handle('maps:get-songs-path', async () => {
+  const gui = readGuiSettings()
+  const resolved = resolveSongsPath(gui.songsPath || null)
+  return {
+    configured: gui.songsPath || '',
+    resolved,
+    detected: detectDefaultSongsPath(),
+  }
+})
+
+ipcMain.handle('maps:pick-songs-path', async () => {
+  const picked = await pickSongsDirectory(mainWindow)
+  if (!picked) return { cancelled: true as const, configured: readGuiSettings().songsPath || '', resolved: getResolvedSongsPath() }
+  writeGuiSettings({ songsPath: picked })
+  return { cancelled: false as const, configured: picked, resolved: resolveSongsPath(picked) }
+})
+
+ipcMain.handle('maps:open-songs-folder', async () => {
+  const songs = getResolvedSongsPath()
+  if (!songs) throw new Error('Папка Songs не найдена')
+  await shell.openPath(songs)
+  return { ok: true }
+})
+
+ipcMain.handle('maps:local-sets', async () => {
+  const songs = getResolvedSongsPath()
+  if (!songs) return { songsPath: null as string | null, setIds: [] as number[] }
+  return { songsPath: songs, setIds: scanLocalSetIds(songs) }
+})
+
+ipcMain.handle('maps:auth-status', async () => fetchOsuAccount())
+
+ipcMain.handle('maps:login', async () => {
+  return loginWithOsuWindow(mainWindow)
+})
+
+ipcMain.handle('maps:logout', async () => {
+  await clearOsuSession()
+  return fetchOsuAccount()
+})
+
+ipcMain.handle('maps:cancel-download', async (_e, setId: number) => {
+  const id = Number(setId) || 0
+  if (!id) return { ok: false }
+  const ok = cancelMapDownload(id)
+  if (ok) {
+    broadcastMapsProgress({
+      setId: id,
+      phase: 'cancelled',
+      progress: 0,
+      message: 'Отменено',
+    })
+  }
+  return { ok }
+})
+
+ipcMain.handle(
+  'maps:download',
+  async (
+    _e,
+    payload: { setId?: number; artist?: string; title?: string }
+  ) => {
+    const setId = Number(payload?.setId) || 0
+    if (!setId) throw new Error('Некорректный set id')
+
+    const songs = getResolvedSongsPath()
+    if (!songs) throw new Error('Укажите папку Songs osu! в Настройках')
+
+    const send = (progress: MapDownloadProgress) => {
+      broadcastMapsProgress(progress)
+    }
+
+    try {
+      const result = await downloadMapSet(
+        setId,
+        songs,
+        send,
+        {
+          artist: typeof payload?.artist === 'string' ? payload.artist : '',
+          title: typeof payload?.title === 'string' ? payload.title : '',
+        }
+      )
+      try {
+        await shell.openPath(result.filePath)
+      } catch (openErr) {
+        console.warn('[maps] openPath after download failed:', openErr)
+      }
+      return { ok: true, ...result }
+    } catch (err) {
+      if (err instanceof DownloadCancelledError) {
+        return { ok: false, cancelled: true as const }
+      }
+      throw err
+    }
+  }
+)
 
 ipcMain.handle(
   'osu:user-beatmap-score',
