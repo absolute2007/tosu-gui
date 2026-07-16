@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Maps Browser</title>
+  <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="top">
+      <div class="top-title">Карты</div>
+      <div class="top-actions">
+        <span id="auth-label" class="auth-label">…</span>
+        <button type="button" id="btn-login" class="btn -primary" hidden>Войти</button>
+      </div>
+    </header>
+    <p class="hint" id="hint"></p>
+    <div class="toolbar">
+      <input id="q" class="input" type="search" placeholder="Поиск…" autocomplete="off" spellcheck="false" />
+    </div>
+    <div class="filters-label">Статус</div>
+    <div class="statuses" id="statuses">
+      <button type="button" data-status="ranked" class="chip -on">Ranked</button>
+      <button type="button" data-status="any" class="chip">Любой</button>
+      <button type="button" data-status="qualified" class="chip">Qualified</button>
+      <button type="button" data-status="loved" class="chip">Loved</button>
+      <button type="button" data-status="pending" class="chip">Pending</button>
+      <button type="button" data-status="graveyard" class="chip">Graveyard</button>
+    </div>
+    <div class="filters-label">Режим</div>
+    <div class="modes" id="modes">
+      <button type="button" data-mode="any" class="chip -on">Все</button>
+      <button type="button" data-mode="osu" class="chip">osu!</button>
+      <button type="button" data-mode="taiko" class="chip">Taiko</button>
+      <button type="button" data-mode="fruits" class="chip">Catch</button>
+      <button type="button" data-mode="mania" class="chip">Mania</button>
+    </div>
+    <div id="list" class="list"></div>
+    <div class="footer">
+      <button type="button" id="btn-more" class="btn" hidden>Показать ещё</button>
+      <div id="status-line" class="status-line"></div>
+    </div>
+  </div>
+  <script src="index.js"></script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { BeatmapPanel } from './components/BeatmapPanel'
 import { Toast } from './components/Toast'
 import { StatusPage } from './pages/StatusPage'
 import { CountersPage } from './pages/CountersPage'
+import { MapsPage } from './pages/MapsPage'
 import { OverlayPage } from './pages/OverlayPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { useTosuSocket } from './hooks/useTosuSocket'
@@ -17,7 +18,7 @@ import { UpdateBanner } from './components/UpdateBanner'
 import type { TosuStatus } from '../electron/preload'
 import './styles/app.css'
 
-export type Page = 'status' | 'counters' | 'overlay' | 'settings'
+export type Page = 'status' | 'counters' | 'maps' | 'overlay' | 'settings'
 
 interface ToastState {
   message: string
@@ -222,6 +223,13 @@ export default function App() {
               onToast={showToast}
             />
           </div>
+          <div className="page-slot" hidden={page !== 'maps'}>
+            <MapsPage
+              visible={page === 'maps'}
+              onToast={showToast}
+              onOpenSettings={() => setPage('settings')}
+            />
+          </div>
           {page === 'overlay' && tosuSettings.settings && (
             <OverlayPage
               baseUrl={tosuStatus?.baseUrl ?? ''}
@@ -247,10 +255,16 @@ export default function App() {
               checkTosuUpdates={tosuUpdate.checkEnabled}
               closeToTray={guiSettings.closeToTray}
               showBeatmapPanel={guiSettings.showBeatmapPanel}
+              songsPath={guiSettings.songsPath}
+              songsPathResolved={guiSettings.songsPathResolved}
+              mapsOverlayKeybind={guiSettings.mapsOverlayKeybind}
               onCheckAppUpdatesChange={appUpdate.setCheckAppUpdates}
               onCheckTosuUpdatesChange={tosuUpdate.setCheckTosuUpdates}
               onCloseToTrayChange={guiSettings.setCloseToTraySetting}
               onShowBeatmapPanelChange={guiSettings.setShowBeatmapPanelSetting}
+              onMapsOverlayKeybindChange={guiSettings.setMapsOverlayKeybindSetting}
+              onPickSongsPath={guiSettings.pickSongsPath}
+              onClearSongsPath={guiSettings.clearSongsPath}
               onUpdate={tosuSettings.update}
               onSave={tosuSettings.save}
             />

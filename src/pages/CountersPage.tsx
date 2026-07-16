@@ -49,13 +49,24 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
     if (tab === 'available') loadAvailable(search)
   }, [tab, search, loadAvailable])
 
+  const isProtectedCounter = (folderName: string) => {
+    const n = folderName.toLowerCase()
+    return n.includes('maps browser') && n.includes('tosu-gui')
+  }
+
   const handleDelete = async (name: string) => {
+    if (isProtectedCounter(name)) {
+      onToast('Maps Browser нельзя удалить — только выключить in-game overlay', 'error')
+      return
+    }
     try {
       await window.tosuGui.deleteCounter(name)
       onToast('Счётчик удалён', 'success')
       reloadLocal()
-    } catch {
-      onToast('Не удалось удалить', 'error')
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err)
+      const msg = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
+      onToast(msg || 'Не удалось удалить', 'error')
     }
   }
 
@@ -137,9 +148,15 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
                         <button className="btn btn-ghost btn-sm" onClick={() => window.tosuGui.openCounterFolder(c.folderName)}>
                           <FolderOpen size={13} />
                         </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c.folderName)}>
-                          <Trash2 size={13} />
-                        </button>
+                        {isProtectedCounter(c.folderName) ? (
+                          <span className="counter-meta" title="Системный счётчик — нельзя удалить">
+                            системный
+                          </span>
+                        ) : (
+                          <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c.folderName)}>
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </>
                     ) : (
                       <>

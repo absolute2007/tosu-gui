@@ -1,3 +1,5 @@
+import { FolderOpen } from 'lucide-react'
+import { KeybindInput } from '../components/KeybindInput'
 import { NumberInput } from '../components/NumberInput'
 import { Toggle } from '../components/Toggle'
 import type { TosuAppSettings } from '../../electron/tosu-api'
@@ -10,10 +12,16 @@ interface Props {
   checkTosuUpdates: boolean
   closeToTray: boolean
   showBeatmapPanel: boolean
+  songsPath: string
+  songsPathResolved: string | null
+  mapsOverlayKeybind: string
   onCheckAppUpdatesChange: (enabled: boolean) => void
   onCheckTosuUpdatesChange: (enabled: boolean) => void
   onCloseToTrayChange: (enabled: boolean) => void
   onShowBeatmapPanelChange: (enabled: boolean) => void
+  onMapsOverlayKeybindChange: (bind: string) => void
+  onPickSongsPath: () => Promise<string | null>
+  onClearSongsPath: () => Promise<void>
   onUpdate: <K extends keyof TosuAppSettings>(key: K, value: TosuAppSettings[K]) => void
   onSave: () => void
 }
@@ -26,18 +34,62 @@ export function SettingsPage({
   checkTosuUpdates,
   closeToTray,
   showBeatmapPanel,
+  songsPath,
+  songsPathResolved,
+  mapsOverlayKeybind,
   onCheckAppUpdatesChange,
   onCheckTosuUpdatesChange,
   onCloseToTrayChange,
   onShowBeatmapPanelChange,
+  onMapsOverlayKeybindChange,
+  onPickSongsPath,
+  onClearSongsPath,
   onUpdate,
   onSave,
 }: Props) {
+  const songsLabel = songsPath || songsPathResolved || 'не найдена (выберите вручную)'
+
   return (
     <div className="page">
       <div className="page-header">
         <h1 className="page-title">Настройки</h1>
         <p className="page-subtitle">Параметры tosu и опроса данных</p>
+      </div>
+
+      <div className="glass-card">
+        <div className="card-header">Карты</div>
+        <div className="card-body">
+          <div className="setting-row">
+            <div className="setting-info">
+              <div className="setting-label">Папка Songs</div>
+              <div className="setting-desc" title={songsPathResolved || songsPath || undefined}>
+                Куда скачивать .osz. Сейчас: {songsLabel}
+              </div>
+            </div>
+            <div className="setting-control" style={{ gap: 6 }}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onPickSongsPath()}>
+                <FolderOpen size={14} strokeWidth={1.8} />
+                Выбрать
+              </button>
+              {songsPath ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onClearSongsPath()}>
+                  Авто
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <div className="setting-row">
+            <div className="setting-info">
+              <div className="setting-label">Карты в игре</div>
+              <div className="setting-desc">
+                Хоткей панели карт поверх osu! (нужен in-game overlay). По умолчанию Control+Shift+M.
+              </div>
+            </div>
+            <div className="setting-control">
+              <KeybindInput value={mapsOverlayKeybind} onChange={onMapsOverlayKeybindChange} />
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="glass-card">

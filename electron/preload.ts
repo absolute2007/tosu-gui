@@ -4,6 +4,12 @@ import type { TosuUpdateInfo, UpdateProgress } from './tosu-updater'
 import type { AppUpdateInfo, AppUpdateProgress } from './app-updater'
 import type { GuiSettings } from './gui-settings'
 import type { OnlineBeatmapScore } from './osu-user-score'
+import type {
+  MapDownloadProgress,
+  MapSearchParams,
+  MapSearchResult,
+} from './beatmap-maps'
+import type { OsuAccountInfo } from './osu-session'
 
 export interface TosuStatus {
   running: boolean
@@ -81,6 +87,39 @@ const api = {
     const handler = (_event: unknown, payload: AppUpdateProgress) => callback(payload)
     ipcRenderer.on('app:update-progress', handler)
     return () => ipcRenderer.removeListener('app:update-progress', handler)
+  },
+  searchMaps: (params: MapSearchParams): Promise<MapSearchResult> =>
+    ipcRenderer.invoke('maps:search', params),
+  getSongsPath: (): Promise<{
+    configured: string
+    resolved: string | null
+    detected: string | null
+  }> => ipcRenderer.invoke('maps:get-songs-path'),
+  pickSongsPath: (): Promise<{
+    cancelled: boolean
+    configured: string
+    resolved: string | null
+  }> => ipcRenderer.invoke('maps:pick-songs-path'),
+  openSongsFolder: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('maps:open-songs-folder'),
+  getLocalMapSets: (): Promise<{ songsPath: string | null; setIds: number[] }> =>
+    ipcRenderer.invoke('maps:local-sets'),
+  getOsuAuthStatus: (): Promise<OsuAccountInfo> => ipcRenderer.invoke('maps:auth-status'),
+  loginOsu: (): Promise<OsuAccountInfo> => ipcRenderer.invoke('maps:login'),
+  logoutOsu: (): Promise<OsuAccountInfo> => ipcRenderer.invoke('maps:logout'),
+  downloadMap: (payload: {
+    setId: number
+    artist?: string
+    title?: string
+  }): Promise<{ ok: boolean; filePath?: string; source?: string; cancelled?: boolean }> =>
+    ipcRenderer.invoke('maps:download', payload),
+  cancelMapDownload: (setId: number): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('maps:cancel-download', setId),
+  onMapDownloadProgress: (callback: (progress: MapDownloadProgress) => void) => {
+    const handler = (_event: unknown, payload: MapDownloadProgress) => callback(payload)
+    ipcRenderer.on('maps:download-progress', handler)
+    return () => {
+      ipcRenderer.removeListener('maps:download-progress', handler)
+    }
   },
 }
 
