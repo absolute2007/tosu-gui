@@ -18,15 +18,40 @@
     <p class="hint" id="hint"></p>
     <div class="toolbar">
       <input id="q" class="input" type="search" placeholder="Поиск…" autocomplete="off" spellcheck="false" />
+      <select id="language" class="select" title="Язык" aria-label="Язык">
+        <option value="any" selected>Любой язык</option>
+        <option value="english">English</option>
+        <option value="japanese">Japanese</option>
+        <option value="chinese">Chinese</option>
+        <option value="korean">Korean</option>
+        <option value="russian">Russian</option>
+        <option value="instrumental">Instrumental</option>
+        <option value="french">French</option>
+        <option value="german">German</option>
+        <option value="spanish">Spanish</option>
+        <option value="italian">Italian</option>
+        <option value="swedish">Swedish</option>
+        <option value="polish">Polish</option>
+        <option value="unspecified">Не указан</option>
+        <option value="other">Другой</option>
+      </select>
     </div>
     <div class="filters-label">Статус</div>
-    <div class="statuses" id="statuses">
-      <button type="button" data-status="ranked" class="chip -on">Ranked</button>
-      <button type="button" data-status="any" class="chip">Любой</button>
-      <button type="button" data-status="qualified" class="chip">Qualified</button>
-      <button type="button" data-status="loved" class="chip">Loved</button>
-      <button type="button" data-status="pending" class="chip">Pending</button>
-      <button type="button" data-status="graveyard" class="chip">Graveyard</button>
+    <div class="status-row">
+      <div class="statuses" id="statuses">
+        <button type="button" data-status="ranked" class="chip -on">Ranked</button>
+        <button type="button" data-status="qualified" class="chip">Qualified</button>
+        <button type="button" data-status="loved" class="chip">Loved</button>
+        <button type="button" data-status="any" class="chip">Любой</button>
+      </div>
+      <select id="more-status" class="select select-more" title="Другие категории" aria-label="Другие категории">
+        <option value="">Ещё…</option>
+        <option value="pending">На рассмотрении</option>
+        <option value="wip">В разработке</option>
+        <option value="graveyard">Graveyard</option>
+        <option value="favourites">Избранное</option>
+        <option value="mine">Мои карты</option>
+      </select>
     </div>
     <div class="filters-label">Режим</div>
     <div class="modes" id="modes">

@@ -19,19 +19,41 @@ import {
 const MIN_OSZ_BYTES = 8_000
 
 export type MapModeFilter = 'any' | 'osu' | 'taiko' | 'fruits' | 'mania'
+/** Official website search `s` values (osu.ppy.sh/beatmapsets). */
 export type MapStatusFilter =
   | 'any'
   | 'ranked'
   | 'qualified'
   | 'loved'
+  | 'favourites'
   | 'pending'
   | 'wip'
   | 'graveyard'
+  | 'mine'
+
+/** Official website search `l` language ids. */
+export type MapLanguageFilter =
+  | 'any'
+  | 'unspecified'
+  | 'english'
+  | 'japanese'
+  | 'chinese'
+  | 'instrumental'
+  | 'korean'
+  | 'french'
+  | 'german'
+  | 'swedish'
+  | 'spanish'
+  | 'italian'
+  | 'russian'
+  | 'polish'
+  | 'other'
 
 export interface MapSearchParams {
   query?: string
   mode?: MapModeFilter
   status?: MapStatusFilter
+  language?: MapLanguageFilter
   /** 0-based page for official search `page` param (1-based on wire) */
   page?: number
   limit?: number
@@ -50,6 +72,8 @@ export interface MapSetSummary {
   playCount: number
   coverUrl: string | null
   listCoverUrl: string | null
+  /** Official ~10s clip (b.ppy.sh/preview/…) */
+  previewUrl: string | null
   maxStars: number
   minStars: number
   modes: string[]
@@ -93,9 +117,29 @@ const STATUS_PARAM: Record<Exclude<MapStatusFilter, 'any'>, string> = {
   ranked: 'ranked',
   qualified: 'qualified',
   loved: 'loved',
+  favourites: 'favourites',
   pending: 'pending',
   wip: 'wip',
   graveyard: 'graveyard',
+  mine: 'mine',
+}
+
+/** official search `l` language filter (omit when any) */
+const LANGUAGE_PARAM: Record<Exclude<MapLanguageFilter, 'any'>, number> = {
+  unspecified: 1,
+  english: 2,
+  japanese: 3,
+  chinese: 4,
+  instrumental: 5,
+  korean: 6,
+  french: 7,
+  german: 8,
+  swedish: 9,
+  spanish: 10,
+  italian: 11,
+  russian: 12,
+  polish: 13,
+  other: 14,
 }
 
 function num(v: unknown, fallback = 0): number {
@@ -127,6 +171,14 @@ function normalizeSet(raw: Record<string, unknown>): MapSetSummary | null {
   const covers =
     raw.covers && typeof raw.covers === 'object' ? (raw.covers as Record<string, unknown>) : null
 
+  const rawPreview = str(raw.preview_url ?? raw.PreviewUrl, '')
+  let previewUrl: string | null = null
+  if (rawPreview) {
+    previewUrl = rawPreview.startsWith('//') ? `https:${rawPreview}` : rawPreview
+  } else if (id) {
+    previewUrl = `https://b.ppy.sh/preview/${id}.mp3`
+  }
+
   return {
     id,
     artist: str(raw.artist ?? raw.Artist, 'Unknown'),
@@ -140,6 +192,7 @@ function normalizeSet(raw: Record<string, unknown>): MapSetSummary | null {
       ? str(covers['list@2x'] || covers.list || covers.card || covers.cover, '') || null
       : str(raw.covers_list || raw.Cover, '') || null,
     listCoverUrl: covers ? str(covers['list@2x'] || covers.list, '') || null : null,
+    previewUrl,
     maxStars: stars.length ? Math.max(...stars) : 0,
     minStars: stars.length ? Math.min(...stars) : 0,
     modes,
@@ -179,9 +232,13 @@ export async function searchMapSets(params: MapSearchParams): Promise<MapSearchR
     sp.set('m', String(MODE_INT[params.mode]))
   }
   if (params.status && params.status !== 'any') {
-    sp.set('s', STATUS_PARAM[params.status])
+    sp.set('s', STATUS_PARAM[params.status] ?? 'any')
   } else {
     sp.set('s', 'any')
+  }
+  if (params.language && params.language !== 'any') {
+    const langId = LANGUAGE_PARAM[params.language]
+    if (langId != null) sp.set('l', String(langId))
   }
 
   // Pagination: prefer opaque cursor_string; else page number (1-based on wire).

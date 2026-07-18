@@ -6,7 +6,7 @@
     <title>tosu GUI</title>
     <meta
       name="description"
-      content="Desktop GUI for tosu — osu! memory reader with counters, overlay, and settings."
+      content="Desktop GUI for tosu — osu! memory reader with counters, overlay, maps browser, and settings."
     />
     <link rel="icon" href="assets/icon.png" type="image/png" />
     <link rel="stylesheet" href="styles.css" />
@@ -18,30 +18,28 @@
           <img class="brand-icon" src="assets/icon.svg" width="36" height="36" alt="" />
           <h1 class="brand-name">tosu GUI</h1>
         </div>
-        <a
-          class="header-link"
-          href="https://github.com/absolute2007/tosu-gui"
-          rel="noopener noreferrer"
-        >
-          GitHub
-        </a>
+        <div class="header-actions">
+          <div class="lang-switch" role="group" aria-label="Language">
+            <button type="button" class="lang-btn" data-lang="ru" aria-pressed="true">RU</button>
+            <button type="button" class="lang-btn" data-lang="en" aria-pressed="false">EN</button>
+          </div>
+          <a
+            class="header-link"
+            href="https://github.com/absolute2007/tosu-gui"
+            rel="noopener noreferrer"
+          >
+            GitHub
+          </a>
+        </div>
       </header>
 
-      <p class="lead">
-        Десктопный GUI для
-        <a href="https://github.com/tosuapp/tosu" rel="noopener noreferrer">tosu</a>
-        — memory reader для osu! с in-game оверлеем. Статус, счётчики, оверлей и настройки
-        в обычном окне, без вкладки браузера. <code>tosu.exe</code> уже внутри сборки.
-      </p>
-      <p class="lead-en">
-        Desktop GUI for tosu: status, counters, overlay, and settings for osu! Stable or Lazer.
-      </p>
+      <p class="lead" data-i18n="lead"></p>
 
       <section class="download" aria-labelledby="download-heading">
-        <h2 id="download-heading" class="sr-only">Скачать</h2>
+        <h2 id="download-heading" class="sr-only" data-i18n="download">Скачать</h2>
         <div class="download-row">
           <label class="version-label" for="version">
-            Версия
+            <span data-i18n="version">Версия</span>
             <select id="version" disabled>
               <option value="">…</option>
             </select>
@@ -51,38 +49,47 @@
           </a>
           <a id="download-zip" class="btn btn-ghost" href="#" aria-disabled="true">ZIP</a>
         </div>
-        <p id="download-meta" class="download-meta">Загрузка списка релизов…</p>
+        <p id="download-meta" class="download-meta" data-i18n="loading">Загрузка списка релизов…</p>
         <p class="download-note">Windows 10/11 · x64</p>
       </section>
 
-      <section class="shots" aria-labelledby="shots-heading">
-        <h2 id="shots-heading">Скриншоты</h2>
-        <div class="shot-stack">
-          <figure class="shot shot-main">
-            <img
-              src="assets/screenshots/Main.png"
-              alt="Главное окно: статус tosu и подключение к osu!"
-              width="1464"
-              height="935"
-              loading="lazy"
-            />
-            <figcaption>Статус</figcaption>
-          </figure>
+      <section class="shots" aria-label="Screenshots">
+        <figure class="shot shot-main">
+          <img
+            src="assets/screenshots/Main.png"
+            alt=""
+            width="1464"
+            height="935"
+            loading="eager"
+          />
+        </figure>
+        <div class="shot-pair">
           <figure class="shot shot-overlay">
             <img
               src="assets/screenshots/Overlay.png"
-              alt="Настройки внутриигрового оверлея и PP-счётчиков"
+              alt=""
               width="1184"
               height="1117"
               loading="lazy"
             />
-            <figcaption>Оверлей</figcaption>
+          </figure>
+          <figure class="shot shot-maps">
+            <img
+              src="assets/screenshots/Maps.png"
+              alt=""
+              width="654"
+              height="905"
+              loading="lazy"
+            />
           </figure>
         </div>
       </section>
 
       <footer class="footer">
-        <a href="https://github.com/absolute2007/tosu-gui/releases" rel="noopener noreferrer"
+        <a
+          href="https://github.com/absolute2007/tosu-gui/releases"
+          rel="noopener noreferrer"
+          data-i18n="allReleases"
           >Все релизы</a
         >
         <span class="sep">·</span>

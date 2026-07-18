@@ -7,15 +7,26 @@
     login: document.getElementById('btn-login'),
     hint: document.getElementById('hint'),
     q: document.getElementById('q'),
+    language: document.getElementById('language'),
     statuses: document.getElementById('statuses'),
+    moreStatus: document.getElementById('more-status'),
     modes: document.getElementById('modes'),
     list: document.getElementById('list'),
     more: document.getElementById('btn-more'),
     line: document.getElementById('status-line'),
   }
 
+  const MORE_STATUSES = {
+    pending: 1,
+    wip: 1,
+    graveyard: 1,
+    favourites: 1,
+    mine: 1,
+  }
+
   let mode = 'any'
   let statusFilter = 'ranked'
+  let languageFilter = 'any'
   let page = 0
   let cursor = null
   let hasMore = false
@@ -28,6 +39,71 @@
   let debounceTimer = null
   let apiOk = false
   let overlayKeybind = ''
+  let previewId = null
+  let previewAudio = null
+
+  function previewUrlFor(s) {
+    if (s && s.previewUrl) return s.previewUrl
+    if (s && s.id) return 'https://b.ppy.sh/preview/' + s.id + '.mp3'
+    return ''
+  }
+
+  function stopPreview() {
+    if (previewAudio) {
+      try {
+        previewAudio.pause()
+        previewAudio.removeAttribute('src')
+        previewAudio.load()
+      } catch {
+        /* ignore */
+      }
+    }
+    previewId = null
+  }
+
+  function togglePreview(id) {
+    const set = sets.find(function (s) {
+      return s.id === id
+    })
+    const url = previewUrlFor(set)
+    if (!url) {
+      setLine('Превью недоступно')
+      return
+    }
+    if (previewId === id) {
+      stopPreview()
+      render()
+      return
+    }
+    if (!previewAudio) {
+      previewAudio = new Audio()
+      previewAudio.preload = 'none'
+      previewAudio.addEventListener('ended', function () {
+        previewId = null
+        render()
+      })
+      previewAudio.addEventListener('error', function () {
+        previewId = null
+        setLine('Не удалось воспроизвести превью')
+        render()
+      })
+    }
+    try {
+      previewAudio.pause()
+      previewAudio.src = url
+      previewId = id
+      render()
+      void previewAudio.play().catch(function () {
+        previewId = null
+        setLine('Не удалось воспроизвести превью')
+        render()
+      })
+    } catch {
+      previewId = null
+      setLine('Не удалось воспроизвести превью')
+      render()
+    }
+  }
 
   function setLine(t) {
     el.line.textContent = t || ''
@@ -180,6 +256,17 @@
           btn =
             '<button type="button" class="btn -primary" data-dl="' + s.id + '">Скачать</button>'
         }
+        const playing = previewId === s.id
+        const previewBtn =
+          '<button type="button" class="btn btn-preview' +
+          (playing ? ' -playing' : '') +
+          '" data-preview="' +
+          s.id +
+          '" title="' +
+          (playing ? 'Стоп' : 'Превью') +
+          '">' +
+          (playing ? '❚❚' : '▶') +
+          '</button>'
         return (
           '<div class="row">' +
           (cover
@@ -196,8 +283,10 @@
           '★ · ' +
           escapeHtml(s.status) +
           '</div></div>' +
+          '<div class="row-actions">' +
+          previewBtn +
           btn +
-          '</div>'
+          '</div></div>'
         )
       })
       .join('')
@@ -227,6 +316,7 @@
       sp.set('q', el.q.value.trim())
       sp.set('mode', mode)
       sp.set('status', statusFilter)
+      sp.set('language', languageFilter)
       sp.set('page', String(append ? page + 1 : 0))
       sp.set('limit', '24')
       if (append && cursor) sp.set('cursor', cursor)
@@ -269,6 +359,13 @@
   el.list.addEventListener('click', function (e) {
     const t = e.target
     if (!(t instanceof HTMLElement)) return
+    const previewBtn = t.closest ? t.closest('[data-preview]') : null
+    const previewAttr =
+      (previewBtn && previewBtn.getAttribute('data-preview')) || t.getAttribute('data-preview')
+    if (previewAttr) {
+      togglePreview(Number(previewAttr))
+      return
+    }
     const cancelId = t.getAttribute('data-cancel')
     const dlId = t.getAttribute('data-dl')
     if (cancelId) {
@@ -334,6 +431,13 @@
     }, 400)
   })
 
+  function syncMoreStatusSelect() {
+    if (!el.moreStatus) return
+    const isMore = !!MORE_STATUSES[statusFilter]
+    el.moreStatus.value = isMore ? statusFilter : ''
+    el.moreStatus.classList.toggle('-active', isMore)
+  }
+
   el.statuses.addEventListener('click', function (e) {
     const t = e.target
     if (!(t instanceof HTMLElement)) return
@@ -343,8 +447,29 @@
     el.statuses.querySelectorAll('.chip').forEach(function (b) {
       b.classList.toggle('-on', b.getAttribute('data-status') === statusFilter)
     })
+    syncMoreStatusSelect()
     void search(false)
   })
+
+  if (el.moreStatus) {
+    el.moreStatus.addEventListener('change', function () {
+      const v = el.moreStatus.value
+      if (!v) return
+      statusFilter = v
+      el.statuses.querySelectorAll('.chip').forEach(function (b) {
+        b.classList.toggle('-on', b.getAttribute('data-status') === statusFilter)
+      })
+      syncMoreStatusSelect()
+      void search(false)
+    })
+  }
+
+  if (el.language) {
+    el.language.addEventListener('change', function () {
+      languageFilter = el.language.value || 'any'
+      void search(false)
+    })
+  }
 
   el.modes.addEventListener('click', function (e) {
     const t = e.target

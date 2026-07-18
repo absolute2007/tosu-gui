@@ -29,19 +29,25 @@ export function ensureMapsCounter(tosuDir: string): boolean {
 
   const dest = path.join(tosuDir, 'static', COUNTER_FOLDER)
   try {
-    fs.mkdirSync(dest, { recursive: true })
-    for (const name of fs.readdirSync(src)) {
-      const from = path.join(src, name)
-      const to = path.join(dest, name)
-      if (fs.statSync(from).isFile()) {
-        fs.copyFileSync(from, to)
-      }
-    }
+    copyDirRecursive(src, dest)
     console.log('[maps-counter] installed →', dest)
     return true
   } catch (err) {
     console.warn('[maps-counter] install failed:', err)
     return false
+  }
+}
+
+function copyDirRecursive(fromDir: string, toDir: string) {
+  fs.mkdirSync(toDir, { recursive: true })
+  for (const name of fs.readdirSync(fromDir)) {
+    const from = path.join(fromDir, name)
+    const to = path.join(toDir, name)
+    if (fs.statSync(from).isDirectory()) {
+      copyDirRecursive(from, to)
+    } else {
+      fs.copyFileSync(from, to)
+    }
   }
 }
 
