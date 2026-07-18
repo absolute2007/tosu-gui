@@ -54,18 +54,27 @@
       </section>
 
       <section class="shots" aria-label="Screenshots">
-        <figure class="shot shot-main">
-          <img
-            src="assets/screenshots/Main.png"
-            alt=""
-            width="1464"
-            height="935"
-            loading="eager"
-          />
-        </figure>
-        <div class="shot-pair">
-          <figure class="shot shot-overlay">
+        <article class="shot-row">
+          <figure class="shot-media">
             <img
+              class="shot-main-img"
+              src="assets/screenshots/Main.png"
+              alt=""
+              width="1464"
+              height="935"
+              loading="eager"
+            />
+          </figure>
+          <div class="shot-copy">
+            <h3 class="shot-title" data-i18n="shotMainTitle"></h3>
+            <p class="shot-body" data-i18n="shotMainBody"></p>
+          </div>
+        </article>
+
+        <article class="shot-row -flip">
+          <figure class="shot-media">
+            <img
+              class="shot-overlay-img"
               src="assets/screenshots/Overlay.png"
               alt=""
               width="1184"
@@ -73,8 +82,16 @@
               loading="lazy"
             />
           </figure>
-          <figure class="shot shot-maps">
+          <div class="shot-copy">
+            <h3 class="shot-title" data-i18n="shotOverlayTitle"></h3>
+            <p class="shot-body" data-i18n="shotOverlayBody"></p>
+          </div>
+        </article>
+
+        <article class="shot-row">
+          <figure class="shot-media shot-media-maps">
             <img
+              class="shot-maps-img"
               src="assets/screenshots/Maps.png"
               alt=""
               width="615"
@@ -82,7 +99,11 @@
               loading="lazy"
             />
           </figure>
-        </div>
+          <div class="shot-copy">
+            <h3 class="shot-title" data-i18n="shotMapsTitle"></h3>
+            <p class="shot-body" data-i18n="shotMapsBody"></p>
+          </div>
+        </article>
       </section>
 
       <footer class="footer">
