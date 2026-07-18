@@ -328,19 +328,7 @@ code {
   max-width: 34em;
 }
 
-.shot-row.-flip .shot-body {
-  margin-left: auto;
-}
-
-.shot-row.-flip .shot-title {
-  text-align: right;
-}
-
-.shot-row.-flip .shot-copy {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
+/* Overlay row: copy stays on the left (via order), left-aligned like other captions */
 
 .footer {
   margin-top: 48px;
@@ -393,18 +381,6 @@ code {
   .shot-row.-flip .shot-media,
   .shot-row.-flip .shot-copy {
     order: unset;
-  }
-
-  .shot-row.-flip .shot-copy {
-    align-items: flex-start;
-  }
-
-  .shot-row.-flip .shot-title {
-    text-align: left;
-  }
-
-  .shot-row.-flip .shot-body {
-    margin-left: 0;
   }
 
   .shot-media-maps img {
