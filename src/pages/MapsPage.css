@@ -110,8 +110,45 @@
   cursor: pointer;
 }
 
+.maps-select-lang {
+  width: 148px;
+}
+
+.maps-select-more {
+  width: 156px;
+}
+
+.maps-select-more.-active {
+  border-color: rgba(10, 132, 255, 0.55);
+  color: var(--text-primary);
+}
+
+.maps-filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+/* Segmented controls hug content — no full-width empty track */
+.maps-statuses {
+  flex: 0 0 auto;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 0 !important;
+}
+
 .maps-modes {
+  width: fit-content;
+  max-width: 100%;
   margin-bottom: 12px;
+}
+
+.map-status.-graveyard {
+  color: #737373;
+  background: rgba(115, 115, 115, 0.16);
 }
 
 .maps-list {
@@ -257,6 +294,24 @@
 
 .map-actions {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-preview-btn {
+  width: 32px;
+  height: 28px;
+  padding: 0 !important;
+  min-width: 32px !important;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.map-preview-btn.-playing {
+  color: var(--accent);
+  border-color: rgba(10, 132, 255, 0.4);
+  background: rgba(10, 132, 255, 0.14);
 }
 
 .map-dl-btn {

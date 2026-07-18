@@ -189,6 +189,7 @@ async function handleApi(
       query: url.searchParams.get('q') || '',
       mode: (url.searchParams.get('mode') as MapSearchParams['mode']) || 'any',
       status: (url.searchParams.get('status') as MapSearchParams['status']) || 'ranked',
+      language: (url.searchParams.get('language') as MapSearchParams['language']) || 'any',
       page: Math.max(0, parseInt(url.searchParams.get('page') || '0', 10) || 0),
       cursor: url.searchParams.get('cursor') || null,
       limit: Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') || '24', 10) || 24)),

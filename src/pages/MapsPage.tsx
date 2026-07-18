@@ -7,11 +7,14 @@ import {
   LogIn,
   LogOut,
   Map as MapIcon,
+  Pause,
+  Play,
   Search,
   X,
 } from 'lucide-react'
 import type {
   MapDownloadProgress,
+  MapLanguageFilter,
   MapModeFilter,
   MapSetSummary,
   MapStatusFilter,
@@ -41,14 +44,44 @@ const MODE_OPTIONS: { id: MapModeFilter; label: string }[] = [
   { id: 'mania', label: 'Mania' },
 ]
 
-const STATUS_OPTIONS: { id: MapStatusFilter; label: string }[] = [
-  { id: 'any', label: 'Любой статус' },
+/** Primary categories — always visible as chips (like osu! listing). */
+const MAIN_STATUS_OPTIONS: { id: MapStatusFilter; label: string }[] = [
   { id: 'ranked', label: 'Ranked' },
   { id: 'qualified', label: 'Qualified' },
   { id: 'loved', label: 'Loved' },
-  { id: 'pending', label: 'Pending' },
-  { id: 'graveyard', label: 'Graveyard' },
+  { id: 'any', label: 'Любой' },
 ]
+
+/** Secondary categories — dropdown (Pending/WIP/etc. on the website). */
+const MORE_STATUS_OPTIONS: { id: MapStatusFilter; label: string }[] = [
+  { id: 'pending', label: 'На рассмотрении' },
+  { id: 'wip', label: 'В разработке' },
+  { id: 'graveyard', label: 'Graveyard' },
+  { id: 'favourites', label: 'Избранное' },
+  { id: 'mine', label: 'Мои карты' },
+]
+
+const LANGUAGE_OPTIONS: { id: MapLanguageFilter; label: string }[] = [
+  { id: 'any', label: 'Любой язык' },
+  { id: 'english', label: 'English' },
+  { id: 'japanese', label: 'Japanese' },
+  { id: 'chinese', label: 'Chinese' },
+  { id: 'korean', label: 'Korean' },
+  { id: 'russian', label: 'Russian' },
+  { id: 'instrumental', label: 'Instrumental' },
+  { id: 'french', label: 'French' },
+  { id: 'german', label: 'German' },
+  { id: 'spanish', label: 'Spanish' },
+  { id: 'italian', label: 'Italian' },
+  { id: 'swedish', label: 'Swedish' },
+  { id: 'polish', label: 'Polish' },
+  { id: 'unspecified', label: 'Не указан' },
+  { id: 'other', label: 'Другой' },
+]
+
+function isMoreStatus(id: MapStatusFilter): boolean {
+  return MORE_STATUS_OPTIONS.some((o) => o.id === id)
+}
 
 function formatStars(min: number, max: number): string {
   if (!max) return '—'
@@ -62,6 +95,7 @@ function statusClass(status: string): string {
   if (s === 'loved') return '-loved'
   if (s === 'qualified') return '-qualified'
   if (s === 'pending' || s === 'wip') return '-pending'
+  if (s === 'graveyard') return '-graveyard'
   return '-other'
 }
 
@@ -83,6 +117,8 @@ interface MapRowProps {
   owned: boolean
   download: MapDownloadProgress | undefined
   canDownload: boolean
+  previewPlaying: boolean
+  onTogglePreview: (set: MapSetSummary) => void
   onDownload: (set: MapSetSummary) => void
   onCancel: (setId: number) => void
 }
@@ -92,12 +128,15 @@ const MapRow = memo(function MapRow({
   owned,
   download,
   canDownload,
+  previewPlaying,
+  onTogglePreview,
   onDownload,
   onCancel,
 }: MapRowProps) {
   const busy = isBusyPhase(download?.phase)
   const pct = download?.progress ?? 0
   const cover = set.listCoverUrl || set.coverUrl
+  const canPreview = Boolean(set.previewUrl)
 
   return (
     <div className="map-row">
@@ -134,6 +173,16 @@ const MapRow = memo(function MapRow({
         </div>
       </div>
       <div className="map-actions">
+        <button
+          type="button"
+          className={`btn btn-ghost btn-sm map-preview-btn ${previewPlaying ? '-playing' : ''}`}
+          disabled={!canPreview}
+          onClick={() => onTogglePreview(set)}
+          title={previewPlaying ? 'Стоп' : 'Превью'}
+          aria-label={previewPlaying ? 'Остановить превью' : 'Слушать превью'}
+        >
+          {previewPlaying ? <Pause size={14} strokeWidth={2} /> : <Play size={14} strokeWidth={2} />}
+        </button>
         {owned ? (
           <button type="button" className="btn btn-ghost btn-sm map-dl-btn -owned" disabled>
             <Check size={14} strokeWidth={2} />
@@ -171,6 +220,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [mode, setMode] = useState<MapModeFilter>('any')
   const [status, setStatus] = useState<MapStatusFilter>('ranked')
+  const [language, setLanguage] = useState<MapLanguageFilter>('any')
   const [cursor, setCursor] = useState<string | null>(null)
   /** 0-based index of last successfully loaded page */
   const [pageIndex, setPageIndex] = useState(0)
@@ -187,6 +237,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   const [authReady, setAuthReady] = useState(false)
   const [authBusy, setAuthBusy] = useState(false)
   const [rateLimitedUntil, setRateLimitedUntil] = useState(0)
+  const [previewId, setPreviewId] = useState<number | null>(null)
 
   const searchSeq = useRef(0)
   const inFlightRef = useRef(false)
@@ -195,7 +246,75 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   const lastSearchAtRef = useRef(0)
   const rateLimitedUntilRef = useRef(0)
   const authBootstrapped = useRef(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const loggedIn = Boolean(account?.loggedIn)
+
+  const stopPreview = useCallback(() => {
+    const audio = audioRef.current
+    if (audio) {
+      audio.pause()
+      audio.removeAttribute('src')
+      audio.load()
+    }
+    setPreviewId(null)
+  }, [])
+
+  const togglePreview = useCallback(
+    (set: MapSetSummary) => {
+      if (!set.previewUrl) {
+        onToast('Превью недоступно', 'error')
+        return
+      }
+      if (previewId === set.id) {
+        stopPreview()
+        return
+      }
+
+      let audio = audioRef.current
+      if (!audio) {
+        audio = new Audio()
+        audio.preload = 'none'
+        audio.addEventListener('ended', () => setPreviewId(null))
+        audio.addEventListener('error', () => {
+          setPreviewId(null)
+          onToast('Не удалось воспроизвести превью', 'error')
+        })
+        audioRef.current = audio
+      }
+
+      try {
+        audio.pause()
+        audio.src = set.previewUrl
+        void audio.play().then(
+          () => setPreviewId(set.id),
+          () => {
+            setPreviewId(null)
+            onToast('Не удалось воспроизвести превью', 'error')
+          }
+        )
+      } catch {
+        setPreviewId(null)
+        onToast('Не удалось воспроизвести превью', 'error')
+      }
+    },
+    [previewId, stopPreview, onToast]
+  )
+
+  // Stop preview when leaving the page or unmounting
+  useEffect(() => {
+    if (!visible) stopPreview()
+  }, [visible, stopPreview])
+
+  useEffect(() => {
+    return () => {
+      const audio = audioRef.current
+      if (audio) {
+        audio.pause()
+        audio.removeAttribute('src')
+        audioRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     cursorRef.current = cursor
@@ -291,6 +410,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
       q: string,
       m: MapModeFilter,
       s: MapStatusFilter,
+      lang: MapLanguageFilter,
       append: boolean,
       cursorStr: string | null,
       page: number
@@ -330,6 +450,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
           query: q,
           mode: m,
           status: s,
+          language: lang,
           page,
           limit: PAGE_SIZE,
           cursor: append ? cursorStr : null,
@@ -402,8 +523,8 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
       inFlightRef.current = false
       return
     }
-    void fetchPage(debouncedQuery, mode, status, false, null, 0)
-  }, [debouncedQuery, mode, status, loggedIn, authReady, fetchPage])
+    void fetchPage(debouncedQuery, mode, status, language, false, null, 0)
+  }, [debouncedQuery, mode, status, language, loggedIn, authReady, fetchPage])
 
   /** Manual only — button click, no auto-scroll load. */
   const loadMore = useCallback(() => {
@@ -422,8 +543,19 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
       return
     }
     const nextPage = pageIndexRef.current + 1
-    void fetchPage(debouncedQuery, mode, status, true, cursorRef.current, nextPage)
-  }, [debouncedQuery, mode, status, loading, loadingMore, loggedIn, hasMore, fetchPage, onToast])
+    void fetchPage(debouncedQuery, mode, status, language, true, cursorRef.current, nextPage)
+  }, [
+    debouncedQuery,
+    mode,
+    status,
+    language,
+    loading,
+    loadingMore,
+    loggedIn,
+    hasMore,
+    fetchPage,
+    onToast,
+  ])
 
   useEffect(() => {
     if (!rateLimitedUntil) return
@@ -696,12 +828,48 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
             />
           </div>
           <select
-            className="glass-input maps-select"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as MapStatusFilter)}
+            className="glass-input maps-select maps-select-lang"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as MapLanguageFilter)}
             disabled={!authReady || !loggedIn}
+            title="Язык"
+            aria-label="Язык"
           >
-            {STATUS_OPTIONS.map((o) => (
+            {LANGUAGE_OPTIONS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="maps-filter-row">
+          <div className="tabs-inline maps-statuses">
+            {MAIN_STATUS_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`tab-btn ${status === o.id ? '-active' : ''}`}
+                onClick={() => setStatus(o.id)}
+                disabled={!authReady || !loggedIn}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <select
+            className={`glass-input maps-select maps-select-more ${isMoreStatus(status) ? '-active' : ''}`}
+            value={isMoreStatus(status) ? status : ''}
+            onChange={(e) => {
+              const v = e.target.value
+              if (v) setStatus(v as MapStatusFilter)
+            }}
+            disabled={!authReady || !loggedIn}
+            title="Другие категории"
+            aria-label="Другие категории"
+          >
+            <option value="">{isMoreStatus(status) ? 'Другие…' : 'Ещё…'}</option>
+            {MORE_STATUS_OPTIONS.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
               </option>
@@ -748,7 +916,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
               className="btn btn-ghost btn-sm"
               style={{ marginTop: 10 }}
               disabled={rateLimitActive}
-              onClick={() => void fetchPage(debouncedQuery, mode, status, false, null, 0)}
+              onClick={() => void fetchPage(debouncedQuery, mode, status, language, false, null, 0)}
             >
               Повторить
             </button>
@@ -767,6 +935,8 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                   set={set}
                   owned={localIds.has(set.id)}
                   download={downloads[set.id]}
+                  previewPlaying={previewId === set.id}
+                  onTogglePreview={togglePreview}
                   canDownload={canDownload && !rateLimitActive}
                   onDownload={handleDownload}
                   onCancel={handleCancel}

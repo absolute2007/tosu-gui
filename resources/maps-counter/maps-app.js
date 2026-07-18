@@ -4,7 +4,7 @@
  * Close: console marker read by overlay-patch (no page reload).
  */
 ;(function (global) {
-  var APP_VERSION = 10
+  var APP_VERSION = 12
   // Hot-reload UI after updates without restarting osu
   if (global.__TosuGuiMapsApp && global.__TosuGuiMapsAppVersion === APP_VERSION) return
   if (global.__TosuGuiMapsApp) {
@@ -25,6 +25,14 @@
 
   var mode = 'any'
   var statusFilter = 'ranked'
+  var languageFilter = 'any'
+  var MORE_STATUSES = {
+    pending: 1,
+    wip: 1,
+    graveyard: 1,
+    favourites: 1,
+    mine: 1,
+  }
   var page = 0
   var cursor = null
   var hasMore = false
@@ -43,6 +51,8 @@
   var rootEl = null
   var els = {}
   var searchSeq = 0
+  var previewId = null
+  var previewAudio = null
 
   function esc(t) {
     return String(t)
@@ -89,8 +99,72 @@
   }
 
   function requestClose() {
+    stopPreview()
     // overlay-patch listens for this marker
     console.log('__TOSU_GUI_MAPS_CLOSE__')
+  }
+
+  function previewUrlFor(s) {
+    if (s && s.previewUrl) return s.previewUrl
+    if (s && s.id) return 'https://b.ppy.sh/preview/' + s.id + '.mp3'
+    return ''
+  }
+
+  function stopPreview() {
+    if (previewAudio) {
+      try {
+        previewAudio.pause()
+        previewAudio.removeAttribute('src')
+        previewAudio.load()
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    previewId = null
+  }
+
+  function togglePreview(id) {
+    var set = sets.find(function (s) {
+      return s.id === id
+    })
+    var url = previewUrlFor(set)
+    if (!url) {
+      setLine('Превью недоступно')
+      return
+    }
+    if (previewId === id) {
+      stopPreview()
+      renderList()
+      return
+    }
+    if (!previewAudio) {
+      previewAudio = new Audio()
+      previewAudio.preload = 'none'
+      previewAudio.addEventListener('ended', function () {
+        previewId = null
+        if (visible) renderList()
+      })
+      previewAudio.addEventListener('error', function () {
+        previewId = null
+        setLine('Не удалось воспроизвести превью')
+        if (visible) renderList()
+      })
+    }
+    try {
+      previewAudio.pause()
+      previewAudio.src = url
+      previewId = id
+      renderList()
+      void previewAudio.play().catch(function () {
+        previewId = null
+        setLine('Не удалось воспроизвести превью')
+        renderList()
+      })
+    } catch (e) {
+      previewId = null
+      setLine('Не удалось воспроизвести превью')
+      renderList()
+    }
   }
 
   function updateHint() {
@@ -187,6 +261,17 @@
             s.id +
             '">Скачать</button>'
         }
+        var playing = previewId === s.id
+        var previewBtn =
+          '<button type="button" class="mg-btn mg-preview' +
+          (playing ? ' -playing' : '') +
+          '" data-preview="' +
+          s.id +
+          '" title="' +
+          (playing ? 'Стоп' : 'Превью') +
+          '">' +
+          (playing ? '❚❚' : '▶') +
+          '</button>'
         return (
           '<div class="mg-row ' +
           sc +
@@ -205,8 +290,10 @@
           '">' +
           esc(s.status) +
           '</span></div></div>' +
+          '<div class="mg-actions">' +
+          previewBtn +
           btn +
-          '</div>'
+          '</div></div>'
         )
       })
       .join('')
@@ -286,6 +373,7 @@
       sp.set('q', els.q ? els.q.value.trim() : '')
       sp.set('mode', mode)
       sp.set('status', statusFilter)
+      sp.set('language', languageFilter)
       sp.set('page', String(append ? page + 1 : 0))
       sp.set('limit', '24')
       if (append && cursor) sp.set('cursor', cursor)
@@ -410,14 +498,39 @@
 
     onChipPointer(els.statuses, 'data-status', function (v) {
       statusFilter = v
+      syncMoreStatusSelect()
     })
     onChipPointer(els.modes, 'data-mode', function (v) {
       mode = v
     })
 
+    if (els.moreStatus) {
+      els.moreStatus.addEventListener('change', function () {
+        var v = els.moreStatus.value
+        if (!v) return
+        statusFilter = v
+        applyChipGroup(els.statuses, 'data-status', statusFilter)
+        syncMoreStatusSelect()
+        void search(false)
+      })
+    }
+    if (els.language) {
+      els.language.addEventListener('change', function () {
+        languageFilter = els.language.value || 'any'
+        void search(false)
+      })
+    }
+
     els.list.addEventListener('click', function (e) {
       var t = e.target
       if (!(t instanceof HTMLElement)) return
+      var previewBtn = t.closest ? t.closest('[data-preview]') : null
+      var previewAttr =
+        (previewBtn && previewBtn.getAttribute('data-preview')) || t.getAttribute('data-preview')
+      if (previewAttr) {
+        togglePreview(Number(previewAttr))
+        return
+      }
       var cancelId = t.getAttribute('data-cancel')
       var dlId = t.getAttribute('data-dl')
       if (cancelId) {
@@ -499,16 +612,41 @@
       '<p class="mg-hint" id="mg-hint"></p>' +
       '<div class="mg-toolbar">' +
       '<input class="mg-input" id="mg-q" type="search" placeholder="Поиск…" autocomplete="off" spellcheck="false" />' +
+      '<select class="mg-select" id="mg-language" title="Язык" aria-label="Язык">' +
+      langOpt('any', 'Любой язык', true) +
+      langOpt('english', 'English', false) +
+      langOpt('japanese', 'Japanese', false) +
+      langOpt('chinese', 'Chinese', false) +
+      langOpt('korean', 'Korean', false) +
+      langOpt('russian', 'Russian', false) +
+      langOpt('instrumental', 'Instrumental', false) +
+      langOpt('french', 'French', false) +
+      langOpt('german', 'German', false) +
+      langOpt('spanish', 'Spanish', false) +
+      langOpt('italian', 'Italian', false) +
+      langOpt('swedish', 'Swedish', false) +
+      langOpt('polish', 'Polish', false) +
+      langOpt('unspecified', 'Не указан', false) +
+      langOpt('other', 'Другой', false) +
+      '</select>' +
       '<button type="button" class="mg-btn mg-refresh" id="mg-refresh" title="Обновить список">↻</button>' +
       '</div>' +
       '<div class="mg-label">Статус</div>' +
-      '<div class="mg-chips" id="mg-statuses">' +
+      '<div class="mg-status-row">' +
+      '<div class="mg-chips mg-chips-inline" id="mg-statuses">' +
       chip('status', 'ranked', 'Ranked', true) +
-      chip('status', 'any', 'Любой', false) +
       chip('status', 'qualified', 'Qualified', false) +
       chip('status', 'loved', 'Loved', false) +
-      chip('status', 'pending', 'Pending', false) +
-      chip('status', 'graveyard', 'Graveyard', false) +
+      chip('status', 'any', 'Любой', false) +
+      '</div>' +
+      '<select class="mg-select mg-select-more" id="mg-more-status" title="Другие категории" aria-label="Другие категории">' +
+      '<option value="">Ещё…</option>' +
+      '<option value="pending">На рассмотрении</option>' +
+      '<option value="wip">В разработке</option>' +
+      '<option value="graveyard">Graveyard</option>' +
+      '<option value="favourites">Избранное</option>' +
+      '<option value="mine">Мои карты</option>' +
+      '</select>' +
       '</div>' +
       '<div class="mg-label">Режим</div>' +
       '<div class="mg-chips" id="mg-modes">' +
@@ -534,6 +672,8 @@
       q: rootEl.querySelector('#mg-q'),
       statuses: rootEl.querySelector('#mg-statuses'),
       modes: rootEl.querySelector('#mg-modes'),
+      language: rootEl.querySelector('#mg-language'),
+      moreStatus: rootEl.querySelector('#mg-more-status'),
       list: rootEl.querySelector('#mg-list'),
       more: rootEl.querySelector('#mg-more'),
       line: rootEl.querySelector('#mg-line'),
@@ -564,6 +704,38 @@
     )
   }
 
+  function langOpt(value, label, selected) {
+    return (
+      '<option value="' +
+      value +
+      '"' +
+      (selected ? ' selected' : '') +
+      '>' +
+      label +
+      '</option>'
+    )
+  }
+
+  function syncMoreStatusSelect() {
+    if (!els.moreStatus) return
+    var isMore = !!MORE_STATUSES[statusFilter]
+    els.moreStatus.value = isMore ? statusFilter : ''
+    els.moreStatus.classList.toggle('-active', isMore)
+  }
+
+  function syncFilterUi() {
+    if (els.statuses) {
+      applyChipGroup(els.statuses, 'data-status', statusFilter)
+    }
+    if (els.modes) {
+      applyChipGroup(els.modes, 'data-mode', mode)
+    }
+    if (els.language) {
+      els.language.value = languageFilter || 'any'
+    }
+    syncMoreStatusSelect()
+  }
+
   function applyStyles() {
     var style = document.getElementById('tosu-gui-maps-style')
     if (!style) {
@@ -579,17 +751,8 @@
     applyStyles() // always refresh CSS (fixes stale styles after updates)
     visible = true
     rootEl.style.display = 'flex'
-    // restore chip UI state
-    if (els.statuses) {
-      els.statuses.querySelectorAll('.mg-chip').forEach(function (b) {
-        b.classList.toggle('-on', b.getAttribute('data-status') === statusFilter)
-      })
-    }
-    if (els.modes) {
-      els.modes.querySelectorAll('.mg-chip').forEach(function (b) {
-        b.classList.toggle('-on', b.getAttribute('data-mode') === mode)
-      })
-    }
+    // restore chip / select UI state
+    syncFilterUi()
     await refreshAuth()
     await refreshLocal()
     renderList()
@@ -617,6 +780,7 @@
 
   function hide() {
     visible = false
+    stopPreview()
     if (rootEl) rootEl.style.display = 'none'
   }
 
@@ -628,7 +792,7 @@
     ' *{user-select:none;-webkit-user-select:none}' +
     '#' +
     ROOT_ID +
-    ' .mg-input{user-select:text;-webkit-user-select:text}' +
+    ' .mg-input,.mg-select{user-select:text;-webkit-user-select:text}' +
     '#' +
     ROOT_ID +
     '{position:fixed;inset:0;z-index:2147483646;display:none;align-items:stretch;justify-content:flex-end;padding:12px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;color:rgba(255,255,255,.92);pointer-events:auto}' +
@@ -673,6 +837,21 @@
     ' .mg-input:focus{border-color:#0a84ff;box-shadow:0 0 0 3px rgba(10,132,255,.22)}' +
     '#' +
     ROOT_ID +
+    ' .mg-select{height:40px;padding:0 10px;border-radius:8px;border:.5px solid rgba(255,255,255,.14);background:rgba(0,0,0,.35);color:rgba(255,255,255,.92);outline:none;font-size:13px;box-sizing:border-box;cursor:pointer;max-width:150px;flex-shrink:0}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-select:focus{border-color:#0a84ff}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-select-more{height:32px;max-width:148px;font-size:12px}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-select-more.-active{border-color:rgba(10,132,255,.55);color:#fff}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-status-row{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 16px 10px;min-width:0}' +
+    '#' +
+    ROOT_ID +
     ' .mg-refresh{width:40px;height:40px;padding:0;flex-shrink:0;font-size:20px;line-height:1;display:inline-flex;align-items:center;justify-content:center}' +
     '#' +
     ROOT_ID +
@@ -683,6 +862,9 @@
     '#' +
     ROOT_ID +
     ' .mg-chips{flex-shrink:0;display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 10px}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-chips-inline{flex:1;min-width:0;padding:0;flex-wrap:wrap}' +
     '#' +
     ROOT_ID +
     ' .mg-chip{height:32px;padding:0 12px;border-radius:8px;border:none;background:rgba(255,255,255,.07);color:rgba(255,255,255,.58);cursor:pointer;font-size:13px}' +
@@ -764,10 +946,19 @@
     ' .mg-badge.st-graveyard,.mg-badge.st-other{color:rgba(255,255,255,.5);background:rgba(255,255,255,.08)}' +
     '#' +
     ROOT_ID +
+    ' .mg-actions{flex-shrink:0;display:flex;align-items:center;gap:6px}' +
+    '#' +
+    ROOT_ID +
     ' .mg-btn{flex-shrink:0;height:36px;padding:0 14px;border-radius:8px;border:.5px solid rgba(255,255,255,.12);background:rgba(255,255,255,.09);color:rgba(255,255,255,.92);cursor:pointer;font-size:14px;white-space:nowrap}' +
     '#' +
     ROOT_ID +
     ' .mg-btn:disabled{opacity:.45;cursor:default}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-preview{width:36px;min-width:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:12px}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-preview.-playing{color:#0a84ff;border-color:rgba(10,132,255,.4);background:rgba(10,132,255,.16)}' +
     '#' +
     ROOT_ID +
     ' .mg-primary{background:#0a84ff;border-color:transparent;color:#fff}' +
