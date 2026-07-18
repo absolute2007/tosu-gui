@@ -31,6 +31,15 @@ const I18N = {
     altMain: "Главное окно: статус tosu и подключение к osu!",
     altOverlay: "Настройки внутриигрового оверлея и PP-счётчиков",
     altMaps: "Браузер карт: поиск, фильтры и скачивание",
+    shotMainTitle: "Статус",
+    shotMainBody:
+      "Состояние tosu и osu! в одном окне: работает ли reader, найдена ли игра, версия и порт API. Перезапуск tosu и проверка обновлений — без браузера.",
+    shotOverlayTitle: "Оверлей",
+    shotOverlayBody:
+      "In-game оверлей поверх osu!: включение, горячая клавиша, FPS, сглаживание. PP-счётчики ставятся поверх игры, позиция настраивается прямо в клиенте.",
+    shotMapsTitle: "Карты",
+    shotMapsBody:
+      "Поиск и скачивание beatmap-сетов с osu.ppy.sh. Фильтры по статусу, режиму и языку, превью трека и установка в Songs — в GUI и в in-game панели.",
   },
   en: {
     lead:
@@ -49,6 +58,15 @@ const I18N = {
     altMain: "Main window: tosu status and osu! connection",
     altOverlay: "In-game overlay settings and PP counters",
     altMaps: "Maps browser: search, filters, and download",
+    shotMainTitle: "Status",
+    shotMainBody:
+      "tosu and osu! health in one place: reader running, game detected, API version and port. Restart tosu and check updates without opening a browser.",
+    shotOverlayTitle: "Overlay",
+    shotOverlayBody:
+      "In-game overlay on top of osu!: enable toggle, hotkey, FPS cap, anti-aliasing. PP counters sit over the game and can be moved from inside the client.",
+    shotMapsTitle: "Maps",
+    shotMapsBody:
+      "Search and download beatmap sets from osu.ppy.sh. Status, mode, and language filters, track preview, and install into Songs — in the GUI and the in-game panel.",
   },
 };
 
@@ -90,9 +108,9 @@ function applyLang(next) {
   });
 
   const alts = [
-    [".shot-main img", "altMain"],
-    [".shot-overlay img", "altOverlay"],
-    [".shot-maps img", "altMaps"],
+    [".shot-main-img", "altMain"],
+    [".shot-overlay-img", "altOverlay"],
+    [".shot-maps-img", "altMaps"],
   ];
   for (const [sel, key] of alts) {
     const img = document.querySelector(sel);
