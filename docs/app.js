@@ -228,23 +228,85 @@ function applyReleases(list) {
   updateDownloadUi();
 }
 
-async function fetchJson(url) {
-  const res = await fetch(url, {
-    headers: { Accept: "application/vnd.github+json" },
-  });
+async function fetchJson(url, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  // Only send GitHub media type to the API — not needed for static fallback
+  if (/api\.github\.com/i.test(url)) {
+    headers.Accept = "application/vnd.github+json";
+  } else if (!headers.Accept) {
+    headers.Accept = "application/json";
+  }
+  const res = await fetch(url, { cache: "no-store", ...opts, headers });
   if (!res.ok) throw new Error(`${url} → ${res.status}`);
   return res.json();
 }
 
+function versionKey(tag) {
+  const m = String(tag || "")
+    .replace(/^v/i, "")
+    .split(/[^\d]+/)
+    .filter(Boolean)
+    .map((n) => parseInt(n, 10) || 0);
+  // pad for stable compare
+  while (m.length < 4) m.push(0);
+  return m;
+}
+
+function compareTagsDesc(a, b) {
+  const aa = versionKey(a);
+  const bb = versionKey(b);
+  for (let i = 0; i < aa.length; i++) {
+    if (bb[i] !== aa[i]) return bb[i] - aa[i];
+  }
+  return 0;
+}
+
+/** Merge API + local fallback by tag; keep the richer asset set; sort newest first. */
+function mergeReleaseLists(...lists) {
+  /** @type {Map<string, any>} */
+  const byTag = new Map();
+  for (const list of lists) {
+    for (const r of Array.isArray(list) ? list : []) {
+      if (!r || r.draft || !r.tag_name) continue;
+      const prev = byTag.get(r.tag_name);
+      if (!prev) {
+        byTag.set(r.tag_name, r);
+        continue;
+      }
+      // Prefer entry that has more assets / newer published_at
+      const prevN = Array.isArray(prev.assets) ? prev.assets.length : 0;
+      const nextN = Array.isArray(r.assets) ? r.assets.length : 0;
+      if (nextN > prevN) byTag.set(r.tag_name, r);
+      else if (nextN === prevN) {
+        const pt = Date.parse(prev.published_at || 0) || 0;
+        const nt = Date.parse(r.published_at || 0) || 0;
+        if (nt >= pt) byTag.set(r.tag_name, r);
+      }
+    }
+  }
+  return [...byTag.values()].sort((a, b) => {
+    const byVer = compareTagsDesc(a.tag_name, b.tag_name);
+    if (byVer) return byVer;
+    return (Date.parse(b.published_at || 0) || 0) - (Date.parse(a.published_at || 0) || 0);
+  });
+}
+
 async function loadReleases() {
   try {
-    let data;
-    try {
-      data = await fetchJson(API);
-    } catch {
-      data = await fetchJson("releases.json");
-    }
-    applyReleases(normalizeReleases(data));
+    // Parallel: GitHub API is often rate-limited for browsers; releases.json is the reliable fallback.
+    const apiP = fetchJson(API).catch((err) => {
+      console.warn("[releases] GitHub API:", err);
+      return null;
+    });
+    const localP = fetchJson(`releases.json?v=${Date.now()}`).catch((err) => {
+      console.warn("[releases] local fallback:", err);
+      return null;
+    });
+    const [apiData, localData] = await Promise.all([apiP, localP]);
+    const merged = mergeReleaseLists(apiData, localData);
+    const list = normalizeReleases(merged);
+    if (!list.length) throw new Error("empty release list");
+    applyReleases(list);
   } catch (err) {
     console.error(err);
     versionSelect.innerHTML = `<option value="">${t("error")}</option>`;
