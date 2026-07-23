@@ -24,6 +24,7 @@ import {
   detectDefaultSongsPath,
   downloadMapSet,
   DownloadCancelledError,
+  fetchBeatmapOsuFile,
   pickSongsDirectory,
   resolveSongsPath,
   scanLocalSetIds,
@@ -491,6 +492,10 @@ function getResolvedSongsPath(): string | null {
 
 ipcMain.handle('maps:search', async (_e, params: MapSearchParams) => {
   return searchMapSets(params || {})
+})
+
+ipcMain.handle('maps:osu-file', async (_e, beatmapId: number) => {
+  return fetchBeatmapOsuFile(Number(beatmapId) || 0)
 })
 
 ipcMain.handle('maps:get-songs-path', async () => {

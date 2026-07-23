@@ -216,6 +216,18 @@ export async function osuJsonGet(pathOrUrl: string): Promise<unknown> {
   return requestJson(url, headers)
 }
 
+/** Raw text from osu.ppy.sh (e.g. /osu/{beatmapId} difficulty file). */
+export async function osuTextGet(pathOrUrl: string): Promise<string> {
+  if (!(await hasOsuSessionCookie())) {
+    throw new Error('Войдите в osu!, чтобы искать и скачивать карты')
+  }
+  const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${OSU_ORIGIN}${pathOrUrl}`
+  const headers = await buildOsuHeaders({
+    Accept: 'text/plain,text/*,*/*',
+  })
+  return requestText(url, headers)
+}
+
 export async function clearOsuSession(): Promise<void> {
   await getOsuSession().clearStorageData({
     storages: ['cookies', 'localstorage', 'cachestorage', 'indexdb', 'websql', 'serviceworkers'],
