@@ -1,7 +1,10 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   Download,
+  Eye,
   FolderOpen,
   Loader2,
   LogIn,
@@ -10,6 +13,7 @@ import {
   Pause,
   Play,
   Search,
+  Volume2,
   X,
 } from 'lucide-react'
 import type {
@@ -20,6 +24,14 @@ import type {
   MapStatusFilter,
 } from '../../electron/beatmap-maps'
 import type { OsuAccountInfo } from '../../electron/osu-session'
+import {
+  createPreviewRuntime,
+  drawPreviewFrame,
+  parseOsu,
+  resetPreviewRuntime,
+  type ParsedBeatmap,
+  type PreviewRuntime,
+} from '../lib/osu-preview'
 import './MapsPage.css'
 
 interface Props {
@@ -119,6 +131,7 @@ interface MapRowProps {
   canDownload: boolean
   previewPlaying: boolean
   onTogglePreview: (set: MapSetSummary) => void
+  onGameplayPreview: (set: MapSetSummary) => void
   onDownload: (set: MapSetSummary) => void
   onCancel: (setId: number) => void
 }
@@ -130,6 +143,7 @@ const MapRow = memo(function MapRow({
   canDownload,
   previewPlaying,
   onTogglePreview,
+  onGameplayPreview,
   onDownload,
   onCancel,
 }: MapRowProps) {
@@ -137,6 +151,7 @@ const MapRow = memo(function MapRow({
   const pct = download?.progress ?? 0
   const cover = set.listCoverUrl || set.coverUrl
   const canPreview = Boolean(set.previewUrl)
+  const canGp = Boolean(set.beatmaps?.length)
 
   return (
     <div className="map-row">
@@ -178,10 +193,20 @@ const MapRow = memo(function MapRow({
           className={`btn btn-ghost btn-sm map-preview-btn ${previewPlaying ? '-playing' : ''}`}
           disabled={!canPreview}
           onClick={() => onTogglePreview(set)}
-          title={previewPlaying ? 'Стоп' : 'Превью'}
-          aria-label={previewPlaying ? 'Остановить превью' : 'Слушать превью'}
+          title={previewPlaying ? 'Пауза' : 'Слушать'}
+          aria-label={previewPlaying ? 'Пауза' : 'Слушать превью'}
         >
           {previewPlaying ? <Pause size={14} strokeWidth={2} /> : <Play size={14} strokeWidth={2} />}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm map-preview-btn"
+          disabled={!canGp}
+          onClick={() => onGameplayPreview(set)}
+          title="Предпросмотр карты"
+          aria-label="Предпросмотр карты"
+        >
+          <Eye size={14} strokeWidth={2} />
         </button>
         {owned ? (
           <button type="button" className="btn btn-ghost btn-sm map-dl-btn -owned" disabled>
@@ -215,6 +240,18 @@ const MapRow = memo(function MapRow({
   )
 })
 
+const VOL_KEY = 'tosu-gui-preview-volume'
+
+function loadStoredVolume(): number {
+  try {
+    const v = parseFloat(localStorage.getItem(VOL_KEY) || '0.55')
+    if (!Number.isFinite(v)) return 0.55
+    return Math.min(1, Math.max(0, v))
+  } catch {
+    return 0.55
+  }
+}
+
 export function MapsPage({ visible = true, overlay = false, onToast, onOpenSettings }: Props) {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -238,6 +275,14 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   const [authBusy, setAuthBusy] = useState(false)
   const [rateLimitedUntil, setRateLimitedUntil] = useState(0)
   const [previewId, setPreviewId] = useState<number | null>(null)
+  const [previewPaused, setPreviewPaused] = useState(false)
+  const [previewProgress, setPreviewProgress] = useState(0)
+  const [volume, setVolume] = useState(loadStoredVolume)
+  const [gpOpen, setGpOpen] = useState(false)
+  const [gpSet, setGpSet] = useState<MapSetSummary | null>(null)
+  const [gpBeatmapId, setGpBeatmapId] = useState(0)
+  const [gpStatus, setGpStatus] = useState('')
+  const [gpLoading, setGpLoading] = useState(false)
 
   const searchSeq = useRef(0)
   const inFlightRef = useRef(false)
@@ -247,7 +292,26 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   const rateLimitedUntilRef = useRef(0)
   const authBootstrapped = useRef(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const volumeRef = useRef(volume)
+  const setsRef = useRef(sets)
+  const gpCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const gpRafRef = useRef(0)
+  const gpAudioRef = useRef<HTMLAudioElement | null>(null)
+  const gpDataRef = useRef<ParsedBeatmap | null>(null)
+  const gpStartRef = useRef(0)
+  const gpRuntimeRef = useRef<PreviewRuntime>(createPreviewRuntime(loadStoredVolume()))
   const loggedIn = Boolean(account?.loggedIn)
+
+  useEffect(() => {
+    volumeRef.current = volume
+    if (audioRef.current) audioRef.current.volume = volume
+    if (gpAudioRef.current) gpAudioRef.current.volume = volume
+    gpRuntimeRef.current.volume = volume
+  }, [volume])
+
+  useEffect(() => {
+    setsRef.current = sets
+  }, [sets])
 
   const stopPreview = useCallback(() => {
     const audio = audioRef.current
@@ -257,53 +321,208 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
       audio.load()
     }
     setPreviewId(null)
+    setPreviewPaused(false)
+    setPreviewProgress(0)
   }, [])
 
-  const togglePreview = useCallback(
-    (set: MapSetSummary) => {
-      if (!set.previewUrl) {
+  const playSet = useCallback(
+    (mapSet: MapSetSummary) => {
+      if (!mapSet.previewUrl) {
         onToast('Превью недоступно', 'error')
         return
       }
-      if (previewId === set.id) {
-        stopPreview()
-        return
-      }
-
       let audio = audioRef.current
       if (!audio) {
         audio = new Audio()
         audio.preload = 'none'
-        audio.addEventListener('ended', () => setPreviewId(null))
+        audio.addEventListener('ended', () => {
+          setPreviewId(null)
+          setPreviewPaused(false)
+          setPreviewProgress(0)
+        })
         audio.addEventListener('error', () => {
           setPreviewId(null)
+          setPreviewPaused(false)
           onToast('Не удалось воспроизвести превью', 'error')
+        })
+        audio.addEventListener('timeupdate', () => {
+          const a = audioRef.current
+          if (!a || !a.duration) return
+          setPreviewProgress(a.currentTime / a.duration)
         })
         audioRef.current = audio
       }
-
       try {
         audio.pause()
-        audio.src = set.previewUrl
-        void audio.play().then(
-          () => setPreviewId(set.id),
-          () => {
-            setPreviewId(null)
-            onToast('Не удалось воспроизвести превью', 'error')
-          }
-        )
+        audio.volume = volumeRef.current
+        audio.src = mapSet.previewUrl
+        setPreviewId(mapSet.id)
+        setPreviewPaused(false)
+        setPreviewProgress(0)
+        void audio.play().catch(() => {
+          setPreviewId(null)
+          setPreviewPaused(false)
+          onToast('Не удалось воспроизвести превью', 'error')
+        })
       } catch {
         setPreviewId(null)
         onToast('Не удалось воспроизвести превью', 'error')
       }
     },
-    [previewId, stopPreview, onToast]
+    [onToast]
+  )
+
+  const togglePreview = useCallback(
+    (mapSet: MapSetSummary) => {
+      if (previewId === mapSet.id) {
+        const audio = audioRef.current
+        if (!audio) return
+        if (previewPaused || audio.paused) {
+          setPreviewPaused(false)
+          void audio.play().catch(() => stopPreview())
+        } else {
+          audio.pause()
+          setPreviewPaused(true)
+        }
+        return
+      }
+      playSet(mapSet)
+    },
+    [previewId, previewPaused, playSet, stopPreview]
+  )
+
+  const playAdjacent = useCallback(
+    (delta: number) => {
+      const list = setsRef.current
+      if (!list.length) return
+      let idx = list.findIndex((s) => s.id === previewId)
+      if (idx < 0) idx = 0
+      else idx = (idx + delta + list.length) % list.length
+      playSet(list[idx])
+    },
+    [previewId, playSet]
+  )
+
+  const setVolumePersist = useCallback((v: number) => {
+    const next = Math.min(1, Math.max(0, v))
+    setVolume(next)
+    try {
+      localStorage.setItem(VOL_KEY, String(next))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const stopGameplay = useCallback(() => {
+    if (gpRafRef.current) {
+      cancelAnimationFrame(gpRafRef.current)
+      gpRafRef.current = 0
+    }
+    if (gpAudioRef.current) {
+      try {
+        gpAudioRef.current.pause()
+        gpAudioRef.current.removeAttribute('src')
+        gpAudioRef.current.load()
+      } catch {
+        /* ignore */
+      }
+      gpAudioRef.current = null
+    }
+    gpDataRef.current = null
+  }, [])
+
+  const closeGameplay = useCallback(() => {
+    stopGameplay()
+    setGpOpen(false)
+    setGpSet(null)
+    setGpBeatmapId(0)
+    setGpStatus('')
+    setGpLoading(false)
+  }, [stopGameplay])
+
+  const drawGameplay = useCallback(
+    (now: number) => {
+      const canvas = gpCanvasRef.current
+      const data = gpDataRef.current
+      if (!canvas || !data) return
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      const elapsed = now - gpStartRef.current
+      const t = data.previewTime + elapsed
+      const cont = drawPreviewFrame(
+        ctx,
+        data,
+        canvas.width,
+        canvas.height,
+        t,
+        elapsed,
+        gpRuntimeRef.current
+      )
+      if (!cont) {
+        closeGameplay()
+        return
+      }
+      gpRafRef.current = requestAnimationFrame(drawGameplay)
+    },
+    [closeGameplay]
+  )
+
+  const loadGameplayDiff = useCallback(
+    async (beatmapId: number, mapSet: MapSetSummary) => {
+      setGpLoading(true)
+      setGpStatus('Загрузка .osu…')
+      setGpBeatmapId(beatmapId)
+      stopGameplay()
+      try {
+        const result = await window.tosuGui.fetchBeatmapOsu(beatmapId)
+        const parsed = parseOsu(result.content)
+        gpDataRef.current = parsed
+        resetPreviewRuntime(gpRuntimeRef.current, volumeRef.current)
+        const bm = mapSet.beatmaps?.find((b) => b.id === beatmapId)
+        setGpStatus(`${bm?.version || 'diff'} · ${(bm?.stars || 0).toFixed(2)}★`)
+        setGpLoading(false)
+        const audio = new Audio()
+        audio.volume = volumeRef.current
+        if (mapSet.previewUrl) audio.src = mapSet.previewUrl
+        gpAudioRef.current = audio
+        gpStartRef.current = performance.now()
+        void audio.play().catch(() => {})
+        gpRafRef.current = requestAnimationFrame(drawGameplay)
+      } catch (err) {
+        setGpLoading(false)
+        setGpStatus(err instanceof Error ? err.message : 'Ошибка превью')
+      }
+    },
+    [stopGameplay, drawGameplay]
+  )
+
+  const openGameplayPreview = useCallback(
+    (mapSet: MapSetSummary) => {
+      const bms = mapSet.beatmaps || []
+      if (!bms.length) {
+        onToast('Нет сложностей для превью', 'error')
+        return
+      }
+      stopPreview()
+      stopGameplay()
+      const pick =
+        bms.find((b) => b.mode === 'osu' || b.mode === '0') ||
+        bms[Math.floor(bms.length / 2)] ||
+        bms[0]
+      setGpSet(mapSet)
+      setGpOpen(true)
+      void loadGameplayDiff(pick.id, mapSet)
+    },
+    [onToast, stopPreview, stopGameplay, loadGameplayDiff]
   )
 
   // Stop preview when leaving the page or unmounting
   useEffect(() => {
-    if (!visible) stopPreview()
-  }, [visible, stopPreview])
+    if (!visible) {
+      stopPreview()
+      closeGameplay()
+    }
+  }, [visible, stopPreview, closeGameplay])
 
   useEffect(() => {
     return () => {
@@ -313,8 +532,9 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         audio.removeAttribute('src')
         audioRef.current = null
       }
+      stopGameplay()
     }
-  }, [])
+  }, [stopGameplay])
 
   useEffect(() => {
     cursorRef.current = cursor
@@ -935,8 +1155,9 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                   set={set}
                   owned={localIds.has(set.id)}
                   download={downloads[set.id]}
-                  previewPlaying={previewId === set.id}
+                  previewPlaying={previewId === set.id && !previewPaused}
                   onTogglePreview={togglePreview}
+                  onGameplayPreview={openGameplayPreview}
                   canDownload={canDownload && !rateLimitActive}
                   onDownload={handleDownload}
                   onCancel={handleCancel}
@@ -968,6 +1189,133 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
           </>
         )}
       </div>
+
+      <div className={`maps-miniplayer ${previewId ? '-active' : ''}`}>
+        <div
+          className="maps-miniplayer-bar"
+          onClick={(e) => {
+            const audio = audioRef.current
+            if (!audio?.duration) return
+            const rect = e.currentTarget.getBoundingClientRect()
+            const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+            audio.currentTime = ratio * audio.duration
+            setPreviewProgress(ratio)
+          }}
+        >
+          <div className="maps-miniplayer-progress" style={{ width: `${previewProgress * 100}%` }} />
+        </div>
+        <div className="maps-miniplayer-body">
+          <div className="maps-miniplayer-cover">
+            {(() => {
+              const cur = sets.find((s) => s.id === previewId)
+              const cover = cur?.listCoverUrl || cur?.coverUrl
+              return cover ? <img src={cover} alt="" draggable={false} /> : null
+            })()}
+          </div>
+          <div className="maps-miniplayer-meta">
+            <div className="maps-miniplayer-title">
+              {(() => {
+                const cur = sets.find((s) => s.id === previewId)
+                return cur ? `${cur.artist} — ${cur.title}` : 'Нет трека'
+              })()}
+            </div>
+            <div className="maps-miniplayer-sub">
+              {(() => {
+                const cur = sets.find((s) => s.id === previewId)
+                return cur ? cur.creator : 'Выберите карту ▶'
+              })()}
+            </div>
+          </div>
+          <div className="maps-miniplayer-controls">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm map-preview-btn"
+              onClick={() => playAdjacent(-1)}
+              title="Предыдущая"
+              disabled={!sets.length}
+            >
+              <ChevronLeft size={16} strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm map-preview-btn"
+              onClick={() => {
+                if (previewId) {
+                  const cur = sets.find((s) => s.id === previewId)
+                  if (cur) togglePreview(cur)
+                } else if (sets[0]) {
+                  playSet(sets[0])
+                }
+              }}
+              title={previewId && !previewPaused ? 'Пауза' : 'Играть'}
+              disabled={!sets.length}
+            >
+              {previewId && !previewPaused ? (
+                <Pause size={14} strokeWidth={2} />
+              ) : (
+                <Play size={14} strokeWidth={2} />
+              )}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm map-preview-btn"
+              onClick={() => playAdjacent(1)}
+              title="Следующая"
+              disabled={!sets.length}
+            >
+              <ChevronRight size={16} strokeWidth={2} />
+            </button>
+          </div>
+          <div className="maps-miniplayer-vol">
+            <Volume2 size={14} strokeWidth={1.8} />
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(volume * 100)}
+              onChange={(e) => setVolumePersist((parseInt(e.target.value, 10) || 0) / 100)}
+              aria-label="Громкость"
+            />
+            <span>{Math.round(volume * 100)}%</span>
+          </div>
+        </div>
+      </div>
+
+      {gpOpen && gpSet && (
+        <div className="maps-gp-modal" role="dialog" aria-modal="true">
+          <div className="maps-gp-backdrop" onClick={closeGameplay} />
+          <div className="maps-gp-panel">
+            <div className="maps-gp-head">
+              <div className="maps-gp-head-text">
+                <div className="maps-gp-title">
+                  {gpSet.artist} — {gpSet.title}
+                </div>
+                <div className="maps-gp-sub">
+                  {gpLoading ? <Loader2 size={12} className="spin" /> : null}
+                  {gpStatus}
+                </div>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm map-preview-btn" onClick={closeGameplay}>
+                <X size={16} strokeWidth={2} />
+              </button>
+            </div>
+            <div className="maps-gp-diffs">
+              {(gpSet.beatmaps || []).map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  className={`tab-btn ${gpBeatmapId === b.id ? '-active' : ''}`}
+                  onClick={() => void loadGameplayDiff(b.id, gpSet)}
+                  disabled={gpLoading}
+                >
+                  {b.version} {(b.stars || 0).toFixed(1)}★
+                </button>
+              ))}
+            </div>
+            <canvas ref={gpCanvasRef} className="maps-gp-canvas" width={640} height={480} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

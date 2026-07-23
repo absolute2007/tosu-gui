@@ -13,6 +13,7 @@ import {
   hasOsuSessionCookie,
   OSU_ORIGIN,
   osuJsonGet,
+  osuTextGet,
   USER_AGENT,
 } from './osu-session'
 
@@ -61,6 +62,15 @@ export interface MapSearchParams {
   cursor?: string | null
 }
 
+export interface MapBeatmapSummary {
+  id: number
+  version: string
+  mode: string
+  stars: number
+  /** Total length in seconds when available */
+  totalLength: number
+}
+
 export interface MapSetSummary {
   id: number
   artist: string
@@ -79,6 +89,8 @@ export interface MapSetSummary {
   modes: string[]
   hasVideo: boolean
   lastUpdated: string | null
+  /** Difficulties for in-overlay gameplay preview (no download) */
+  beatmaps: MapBeatmapSummary[]
 }
 
 export interface MapSearchResult {
@@ -151,22 +163,29 @@ function str(v: unknown, fallback = ''): string {
   return typeof v === 'string' ? v : v == null ? fallback : String(v)
 }
 
+function normalizeBeatmap(raw: Record<string, unknown>): MapBeatmapSummary | null {
+  const id = num(raw.id ?? raw.beatmap_id ?? raw.BeatmapID)
+  if (!id) return null
+  return {
+    id,
+    version: str(raw.version ?? raw.Version ?? raw.difficulty_name, 'Normal'),
+    mode: str(raw.mode ?? raw.Mode, 'osu').toLowerCase(),
+    stars: Math.round(num(raw.difficulty_rating ?? raw.DifficultyRating ?? raw.stars) * 100) / 100,
+    totalLength: Math.round(num(raw.total_length ?? raw.TotalLength ?? raw.hit_length)),
+  }
+}
+
 function normalizeSet(raw: Record<string, unknown>): MapSetSummary | null {
   const id = num(raw.id ?? raw.SetID ?? raw.set_id ?? raw.beatmapset_id)
   if (!id) return null
 
   const beatmapsRaw = Array.isArray(raw.beatmaps) ? (raw.beatmaps as Record<string, unknown>[]) : []
-  const stars = beatmapsRaw
-    .map((b) => num(b.difficulty_rating ?? b.DifficultyRating ?? b.stars))
-    .filter((s) => s > 0)
-  const modes = [
-    ...new Set(
-      beatmapsRaw
-        .map((b) => str(b.mode ?? b.Mode, ''))
-        .filter(Boolean)
-        .map((m) => m.toLowerCase())
-    ),
-  ]
+  const beatmaps = beatmapsRaw
+    .map(normalizeBeatmap)
+    .filter((b): b is MapBeatmapSummary => b != null)
+    .sort((a, b) => a.stars - b.stars)
+  const stars = beatmaps.map((b) => b.stars).filter((s) => s > 0)
+  const modes = [...new Set(beatmaps.map((b) => b.mode).filter(Boolean))]
 
   const covers =
     raw.covers && typeof raw.covers === 'object' ? (raw.covers as Record<string, unknown>) : null
@@ -198,6 +217,7 @@ function normalizeSet(raw: Record<string, unknown>): MapSetSummary | null {
     modes,
     hasVideo: Boolean(raw.video ?? raw.HasVideo),
     lastUpdated: str(raw.last_updated ?? raw.LastUpdate, '') || null,
+    beatmaps,
   }
 }
 
@@ -218,6 +238,26 @@ function appendCursorObject(sp: URLSearchParams, cursor: unknown) {
     if (value == null) continue
     sp.set(`cursor[${key}]`, String(value))
   }
+}
+
+/**
+ * Fetch difficulty .osu text for in-app gameplay preview (osu!preview-style).
+ * Uses website endpoint /osu/{beatmapId} — no full set download.
+ */
+export async function fetchBeatmapOsuFile(beatmapId: number): Promise<{
+  beatmapId: number
+  content: string
+}> {
+  const id = Math.floor(Number(beatmapId) || 0)
+  if (!id) throw new Error('beatmapId required')
+  if (!(await hasOsuSessionCookie())) {
+    throw new Error('Войдите в osu!, чтобы смотреть превью')
+  }
+  const content = await osuTextGet(`/osu/${id}`)
+  if (!content || content.length < 40 || !content.includes('[HitObjects]')) {
+    throw new Error('Не удалось загрузить .osu (пусто или недоступно)')
+  }
+  return { beatmapId: id, content }
 }
 
 export async function searchMapSets(params: MapSearchParams): Promise<MapSearchResult> {

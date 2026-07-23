@@ -11,6 +11,7 @@ import {
   cancelMapDownload,
   downloadMapSet,
   DownloadCancelledError,
+  fetchBeatmapOsuFile,
   resolveSongsPath,
   scanLocalSetIds,
   searchMapSets,
@@ -196,6 +197,18 @@ async function handleApi(
     }
     try {
       const result = await searchMapSets(params)
+      sendJson(res, 200, result)
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) })
+    }
+    return
+  }
+
+  // Gameplay preview without full set download (.osu difficulty only)
+  if (pathName === '/api/maps/osu-file' && req.method === 'GET') {
+    const beatmapId = parseInt(url.searchParams.get('beatmapId') || '0', 10) || 0
+    try {
+      const result = await fetchBeatmapOsuFile(beatmapId)
       sendJson(res, 200, result)
     } catch (err) {
       sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) })
