@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, session, shell } from 'electron'
 import type { Tray } from 'electron'
 import fs from 'fs'
 import path from 'path'
@@ -40,6 +40,22 @@ import {
 import { emitMapsHttpProgress, startMapsHttpServer, stopMapsHttpServer } from './maps-http-server'
 import { ensureMapsCounter } from './ensure-maps-counter'
 import { writeMapsKeybindFile } from './maps-keybind-file'
+import { searchOsuckSkins, getOsuckSkinDetail, osuckImageHeaders, OSUCK_ORIGIN } from './skins-osuck'
+import {
+  cancelSkinDownload,
+  downloadOsuckSkin,
+  downloadSkinFromUrl,
+  importSkinFile,
+  SkinDownloadCancelledError,
+} from './skins-download'
+import {
+  detectDefaultSkinsPath,
+  pickSkinFile,
+  pickSkinsDirectory,
+  resolveSkinsPath,
+  scanLocalSkins,
+} from './skins-path'
+import type { SkinDownloadProgress, SkinSearchParams } from './skins-types'
 
 const isWin = process.platform === 'win32'
 const isDevBuild = !app.isPackaged
@@ -78,6 +94,42 @@ let isQuitting = false
 function broadcastMapsProgress(progress: MapDownloadProgress) {
   mainWindow?.webContents.send('maps:download-progress', progress)
   emitMapsHttpProgress(progress)
+}
+
+function broadcastSkinsProgress(progress: SkinDownloadProgress) {
+  mainWindow?.webContents.send('skins:download-progress', progress)
+}
+
+function getResolvedSkinsPath(): string | null {
+  const gui = readGuiSettings()
+  return resolveSkinsPath(gui.skinsPath || null)
+}
+
+/** Inject headers so osuck screenshots load from the renderer (otherwise 403). */
+function setupOsuckImageHeaders() {
+  const filter = { urls: ['https://skins.osuck.net/*'] }
+  try {
+    session.defaultSession.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
+      const extra = osuckImageHeaders('/skins')
+      const isImage = details.url.includes('/images/')
+      callback({
+        requestHeaders: {
+          ...details.requestHeaders,
+          Referer: extra.Referer,
+          'User-Agent': extra['User-Agent'],
+          ...(isImage
+            ? {
+                Accept: extra.Accept,
+                'X-Request-Params': extra['X-Request-Params'],
+                'X-Request-Location': extra['X-Request-Location'],
+              }
+            : {}),
+        },
+      })
+    })
+  } catch (err) {
+    console.warn('[skins] webRequest header hook failed:', err)
+  }
 }
 
 const tosuProcess = new TosuProcess()
@@ -297,6 +349,7 @@ if (gotLock) {
 
 if (gotLock) {
   app.whenReady().then(() => {
+    setupOsuckImageHeaders()
     createWindow()
     createTray()
     setupAppUpdater(() => mainWindow)
@@ -588,6 +641,144 @@ ipcMain.handle(
       return { ok: true, ...result }
     } catch (err) {
       if (err instanceof DownloadCancelledError) {
+        return { ok: false, cancelled: true as const }
+      }
+      throw err
+    }
+  }
+)
+
+// --- Skins (main GUI only; no overlay) ---
+
+ipcMain.handle('skins:search', async (_e, params: SkinSearchParams) => {
+  return searchOsuckSkins(params || {})
+})
+
+ipcMain.handle('skins:detail', async (_e, skinId: number) => {
+  return getOsuckSkinDetail(Number(skinId) || 0)
+})
+
+ipcMain.handle('skins:get-path', async () => {
+  const gui = readGuiSettings()
+  const resolved = resolveSkinsPath(gui.skinsPath || null)
+  return {
+    configured: gui.skinsPath || '',
+    resolved,
+    detected: detectDefaultSkinsPath(),
+  }
+})
+
+ipcMain.handle('skins:pick-path', async () => {
+  const picked = await pickSkinsDirectory(mainWindow)
+  if (!picked) {
+    return {
+      cancelled: true as const,
+      configured: readGuiSettings().skinsPath || '',
+      resolved: getResolvedSkinsPath(),
+    }
+  }
+  writeGuiSettings({ skinsPath: picked })
+  return { cancelled: false as const, configured: picked, resolved: resolveSkinsPath(picked) }
+})
+
+ipcMain.handle('skins:open-folder', async () => {
+  const skins = getResolvedSkinsPath()
+  if (!skins) throw new Error('Папка Skins не найдена')
+  await shell.openPath(skins)
+  return { ok: true }
+})
+
+ipcMain.handle('skins:local-list', async () => {
+  const skins = getResolvedSkinsPath()
+  if (!skins) return { skinsPath: null as string | null, entries: [] as ReturnType<typeof scanLocalSkins> }
+  return { skinsPath: skins, entries: scanLocalSkins(skins) }
+})
+
+ipcMain.handle('skins:cancel-download', async (_e, jobId: string) => {
+  const id = typeof jobId === 'string' ? jobId : ''
+  if (!id) return { ok: false }
+  return { ok: cancelSkinDownload(id) }
+})
+
+ipcMain.handle(
+  'skins:download',
+  async (
+    _e,
+    payload: {
+      skinId?: number
+      packageChecksum?: string
+      variantIndex?: number
+    }
+  ) => {
+    const skinId = Number(payload?.skinId) || 0
+    if (!skinId) throw new Error('Некорректный id скина')
+    const skins = getResolvedSkinsPath()
+    if (!skins) throw new Error('Укажите папку Skins osu! в Настройках')
+
+    try {
+      const result = await downloadOsuckSkin(skinId, skins, broadcastSkinsProgress, {
+        packageChecksum:
+          typeof payload?.packageChecksum === 'string' ? payload.packageChecksum : undefined,
+        variantIndex:
+          typeof payload?.variantIndex === 'number' ? payload.variantIndex : undefined,
+      })
+      if (result.openExternal) {
+        await shell.openExternal(result.openExternal)
+        return { ok: true, openExternal: result.openExternal, source: result.source }
+      }
+      if (result.filePath) {
+        try {
+          await shell.openPath(result.filePath)
+        } catch (openErr) {
+          console.warn('[skins] openPath after download failed:', openErr)
+        }
+      }
+      return { ok: true, ...result }
+    } catch (err) {
+      if (err instanceof SkinDownloadCancelledError) {
+        return { ok: false, cancelled: true as const }
+      }
+      throw err
+    }
+  }
+)
+
+ipcMain.handle('skins:import-file', async () => {
+  const skins = getResolvedSkinsPath()
+  if (!skins) throw new Error('Укажите папку Skins osu! в Настройках')
+  const file = await pickSkinFile(mainWindow)
+  if (!file) return { cancelled: true as const }
+  const result = await importSkinFile(file, skins)
+  try {
+    await shell.openPath(result.filePath)
+  } catch {
+    /* ignore */
+  }
+  return { cancelled: false as const, ...result }
+})
+
+ipcMain.handle(
+  'skins:download-url',
+  async (_e, payload: { url?: string; name?: string }) => {
+    const url = typeof payload?.url === 'string' ? payload.url.trim() : ''
+    if (!url) throw new Error('URL пустой')
+    const skins = getResolvedSkinsPath()
+    if (!skins) throw new Error('Укажите папку Skins osu! в Настройках')
+    try {
+      const result = await downloadSkinFromUrl(
+        url,
+        skins,
+        broadcastSkinsProgress,
+        typeof payload?.name === 'string' ? payload.name : undefined
+      )
+      try {
+        await shell.openPath(result.filePath)
+      } catch {
+        /* ignore */
+      }
+      return { ok: true, ...result }
+    } catch (err) {
+      if (err instanceof SkinDownloadCancelledError) {
         return { ok: false, cancelled: true as const }
       }
       throw err

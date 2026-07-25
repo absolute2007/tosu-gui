@@ -5,6 +5,9 @@ export function useGuiSettings() {
   const [showBeatmapPanel, setShowBeatmapPanel] = useState(true)
   const [songsPath, setSongsPath] = useState('')
   const [songsPathResolved, setSongsPathResolved] = useState<string | null>(null)
+  const [skinsPath, setSkinsPath] = useState('')
+  const [skinsPathResolved, setSkinsPathResolved] = useState<string | null>(null)
+  const [skinsBrowserEnabled, setSkinsBrowserEnabled] = useState(true)
   const [mapsOverlayKeybind, setMapsOverlayKeybind] = useState('Control + Shift + M')
   const [ready, setReady] = useState(false)
 
@@ -14,9 +17,15 @@ export function useGuiSettings() {
       setCloseToTray(settings.closeToTray)
       setShowBeatmapPanel(settings.showBeatmapPanel !== false)
       setSongsPath(settings.songsPath || '')
+      setSkinsPath(settings.skinsPath || '')
+      setSkinsBrowserEnabled(settings.skinsBrowserEnabled !== false)
       setMapsOverlayKeybind(settings.mapsOverlayKeybind || 'Control + Shift + M')
-      const pathInfo = await window.tosuGui.getSongsPath()
-      setSongsPathResolved(pathInfo.resolved)
+      const [songsInfo, skinsInfo] = await Promise.all([
+        window.tosuGui.getSongsPath(),
+        window.tosuGui.getSkinsPath(),
+      ])
+      setSongsPathResolved(songsInfo.resolved)
+      setSkinsPathResolved(skinsInfo.resolved)
     } catch {
       /* ignore */
     } finally {
@@ -58,17 +67,43 @@ export function useGuiSettings() {
     setSongsPathResolved(pathInfo.resolved)
   }, [])
 
+  const setSkinsBrowserEnabledSetting = useCallback(async (enabled: boolean) => {
+    setSkinsBrowserEnabled(enabled)
+    await window.tosuGui.saveGuiSettings({ skinsBrowserEnabled: enabled })
+  }, [])
+
+  const pickSkinsPath = useCallback(async () => {
+    const result = await window.tosuGui.pickSkinsPath()
+    if (result.cancelled) return null
+    setSkinsPath(result.configured)
+    setSkinsPathResolved(result.resolved)
+    return result.resolved
+  }, [])
+
+  const clearSkinsPath = useCallback(async () => {
+    setSkinsPath('')
+    await window.tosuGui.saveGuiSettings({ skinsPath: '' })
+    const pathInfo = await window.tosuGui.getSkinsPath()
+    setSkinsPathResolved(pathInfo.resolved)
+  }, [])
+
   return {
     ready,
     closeToTray,
     showBeatmapPanel,
     songsPath,
     songsPathResolved,
+    skinsPath,
+    skinsPathResolved,
+    skinsBrowserEnabled,
     mapsOverlayKeybind,
     setCloseToTraySetting,
     setShowBeatmapPanelSetting,
     setMapsOverlayKeybindSetting,
     pickSongsPath,
     clearSongsPath,
+    pickSkinsPath,
+    clearSkinsPath,
+    setSkinsBrowserEnabledSetting,
   }
 }
