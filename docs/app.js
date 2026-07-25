@@ -16,7 +16,7 @@ let lang = "ru";
 const I18N = {
   ru: {
     lead:
-      'Десктопный GUI для <a href="https://github.com/tosuapp/tosu" rel="noopener noreferrer">tosu</a> — memory reader для osu! с in-game оверлеем. Статус, счётчики, браузер карт, оверлей и настройки в обычном окне. <code>tosu.exe</code> уже внутри сборки.',
+      'Десктопный GUI для <a href="https://github.com/tosuapp/tosu" rel="noopener noreferrer">tosu</a> — memory reader для osu! с in-game оверлеем. Статус, счётчики, карты, скины, оверлей и настройки в обычном окне. <code>tosu.exe</code> уже внутри сборки.',
     download: "Скачать",
     version: "Версия",
     loading: "Загрузка списка релизов…",
@@ -31,6 +31,7 @@ const I18N = {
     altMain: "Главное окно: статус tosu и подключение к osu!",
     altOverlay: "Настройки внутриигрового оверлея и PP-счётчиков",
     altMaps: "Браузер карт: поиск, фильтры и скачивание",
+    altSkins: "Каталог скинов: поиск, фильтры и установка",
     shotMainTitle: "Статус",
     shotMainBody:
       "Состояние tosu и osu! в одном окне: работает ли reader, найдена ли игра, версия и порт API. Перезапуск tosu и проверка обновлений — без браузера.",
@@ -40,10 +41,13 @@ const I18N = {
     shotMapsTitle: "Карты",
     shotMapsBody:
       "Поиск и скачивание beatmap-сетов с osu.ppy.sh. Фильтры по статусу, режиму и языку, превью трека и установка в Songs — в GUI и в in-game панели.",
+    shotSkinsTitle: "Скины",
+    shotSkinsBody:
+      "Каталог skins.osuck.net: поиск, фильтры по режиму, превью скриншотов и установка .osk в папку Skins. Уже стоящие скины помечаются отдельно.",
   },
   en: {
     lead:
-      'Desktop GUI for <a href="https://github.com/tosuapp/tosu" rel="noopener noreferrer">tosu</a> — an osu! memory reader with an in-game overlay. Status, counters, maps browser, overlay, and settings in a normal window. <code>tosu.exe</code> is bundled.',
+      'Desktop GUI for <a href="https://github.com/tosuapp/tosu" rel="noopener noreferrer">tosu</a> — an osu! memory reader with an in-game overlay. Status, counters, maps, skins, overlay, and settings in a normal window. <code>tosu.exe</code> is bundled.',
     download: "Download",
     version: "Version",
     loading: "Loading releases…",
@@ -58,6 +62,7 @@ const I18N = {
     altMain: "Main window: tosu status and osu! connection",
     altOverlay: "In-game overlay settings and PP counters",
     altMaps: "Maps browser: search, filters, and download",
+    altSkins: "Skins catalog: search, filters, and install",
     shotMainTitle: "Status",
     shotMainBody:
       "tosu and osu! health in one place: reader running, game detected, API version and port. Restart tosu and check updates without opening a browser.",
@@ -67,6 +72,9 @@ const I18N = {
     shotMapsTitle: "Maps",
     shotMapsBody:
       "Search and download beatmap sets from osu.ppy.sh. Status, mode, and language filters, track preview, and install into Songs — in the GUI and the in-game panel.",
+    shotSkinsTitle: "Skins",
+    shotSkinsBody:
+      "Browse skins.osuck.net: search, mode filters, screenshot previews, and install .osk into the Skins folder. Already installed skins are marked in the list.",
   },
 };
 
@@ -111,6 +119,7 @@ function applyLang(next) {
     [".shot-main-img", "altMain"],
     [".shot-overlay-img", "altOverlay"],
     [".shot-maps-img", "altMaps"],
+    [".shot-skins-img", "altSkins"],
   ];
   for (const [sel, key] of alts) {
     const img = document.querySelector(sel);
