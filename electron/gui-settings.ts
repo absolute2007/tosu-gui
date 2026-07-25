@@ -15,6 +15,10 @@ export interface GuiSettings {
   showBeatmapPanel: boolean
   /** Path to osu!stable Songs folder for map downloads. Empty = auto-detect. */
   songsPath: string
+  /** Path to osu!stable Skins folder. Empty = auto-detect. */
+  skinsPath: string
+  /** Show Skins page in sidebar (feature flag / rollback). */
+  skinsBrowserEnabled: boolean
   /**
    * Hotkey for Maps UI inside inject overlay (fullscreen-safe).
    * Written to tosu/maps-overlay-keybind.txt for tosu-ingame-overlay.
@@ -31,6 +35,8 @@ const DEFAULTS: GuiSettings = {
   closeToTray: false,
   showBeatmapPanel: true,
   songsPath: '',
+  skinsPath: '',
+  skinsBrowserEnabled: true,
   mapsOverlayKeybind: 'Control + Shift + M',
 }
 

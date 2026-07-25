@@ -102,6 +102,35 @@
 .maps-search-input {
   width: 100%;
   padding-left: 32px !important;
+  padding-right: 36px !important;
+}
+
+.maps-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 6px;
+  z-index: 2;
+}
+
+.maps-search-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.maps-search-clear:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .maps-select {

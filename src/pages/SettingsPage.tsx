@@ -14,6 +14,9 @@ interface Props {
   showBeatmapPanel: boolean
   songsPath: string
   songsPathResolved: string | null
+  skinsPath: string
+  skinsPathResolved: string | null
+  skinsBrowserEnabled: boolean
   mapsOverlayKeybind: string
   onCheckAppUpdatesChange: (enabled: boolean) => void
   onCheckTosuUpdatesChange: (enabled: boolean) => void
@@ -22,6 +25,9 @@ interface Props {
   onMapsOverlayKeybindChange: (bind: string) => void
   onPickSongsPath: () => Promise<string | null>
   onClearSongsPath: () => Promise<void>
+  onPickSkinsPath: () => Promise<string | null>
+  onClearSkinsPath: () => Promise<void>
+  onSkinsBrowserEnabledChange: (enabled: boolean) => void
   onUpdate: <K extends keyof TosuAppSettings>(key: K, value: TosuAppSettings[K]) => void
   onSave: () => void
 }
@@ -36,6 +42,9 @@ export function SettingsPage({
   showBeatmapPanel,
   songsPath,
   songsPathResolved,
+  skinsPath,
+  skinsPathResolved,
+  skinsBrowserEnabled,
   mapsOverlayKeybind,
   onCheckAppUpdatesChange,
   onCheckTosuUpdatesChange,
@@ -44,10 +53,14 @@ export function SettingsPage({
   onMapsOverlayKeybindChange,
   onPickSongsPath,
   onClearSongsPath,
+  onPickSkinsPath,
+  onClearSkinsPath,
+  onSkinsBrowserEnabledChange,
   onUpdate,
   onSave,
 }: Props) {
   const songsLabel = songsPath || songsPathResolved || 'не найдена (выберите вручную)'
+  const skinsLabel = skinsPath || skinsPathResolved || 'не найдена (выберите вручную)'
 
   return (
     <div className="page">
@@ -87,6 +100,42 @@ export function SettingsPage({
             </div>
             <div className="setting-control">
               <KeybindInput value={mapsOverlayKeybind} onChange={onMapsOverlayKeybindChange} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="glass-card">
+        <div className="card-header">Скины</div>
+        <div className="card-body">
+          <div className="setting-row">
+            <div className="setting-info">
+              <div className="setting-label">Раздел «Скины»</div>
+              <div className="setting-desc">
+                Показывать страницу каталога в боковом меню (можно отключить, если osuck недоступен)
+              </div>
+            </div>
+            <div className="setting-control">
+              <Toggle checked={skinsBrowserEnabled} onChange={onSkinsBrowserEnabledChange} />
+            </div>
+          </div>
+          <div className="setting-row">
+            <div className="setting-info">
+              <div className="setting-label">Папка Skins</div>
+              <div className="setting-desc" title={skinsPathResolved || skinsPath || undefined}>
+                Куда ставить .osk. Сейчас: {skinsLabel}
+              </div>
+            </div>
+            <div className="setting-control" style={{ gap: 6 }}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onPickSkinsPath()}>
+                <FolderOpen size={14} strokeWidth={1.8} />
+                Выбрать
+              </button>
+              {skinsPath ? (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onClearSkinsPath()}>
+                  Авто
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

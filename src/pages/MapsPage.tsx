@@ -1046,6 +1046,18 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
               spellCheck={false}
               disabled={!authReady || !loggedIn}
             />
+            {query ? (
+              <button
+                type="button"
+                className="maps-search-clear"
+                title="Очистить"
+                aria-label="Очистить поиск"
+                disabled={!authReady || !loggedIn}
+                onClick={() => setQuery('')}
+              >
+                <X size={14} strokeWidth={1.8} />
+              </button>
+            ) : null}
           </div>
           <select
             className="glass-input maps-select maps-select-lang"

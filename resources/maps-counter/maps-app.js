@@ -948,12 +948,32 @@
       void search(false)
     })
 
+    function syncQClear() {
+      if (!els.qClear) return
+      var has = !!(els.q && els.q.value && els.q.value.length)
+      els.qClear.hidden = !has
+    }
+
     els.q.addEventListener('input', function () {
+      syncQClear()
       clearTimeout(debounceTimer)
       debounceTimer = setTimeout(function () {
         void search(false)
       }, 400)
     })
+
+    if (els.qClear) {
+      els.qClear.addEventListener('pointerup', function (e) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!els.q) return
+        els.q.value = ''
+        syncQClear()
+        clearTimeout(debounceTimer)
+        void search(false)
+      })
+    }
+    syncQClear()
 
     onChipPointer(els.statuses, 'data-status', function (v) {
       setStatus(v)
@@ -1232,7 +1252,10 @@
       '</header>' +
       '<p class="mg-hint" id="mg-hint"></p>' +
       '<div class="mg-toolbar">' +
+      '<div class="mg-search-wrap">' +
       '<input class="mg-input" id="mg-q" type="search" placeholder="Поиск…" autocomplete="off" spellcheck="false" />' +
+      '<button type="button" class="mg-q-clear" id="mg-q-clear" title="Очистить" aria-label="Очистить поиск" hidden>×</button>' +
+      '</div>' +
       '<div class="mg-dd" id="mg-lang-wrap">' +
       '<button type="button" class="mg-dd-btn" id="mg-lang-btn" title="Язык">Любой язык</button>' +
       '<div class="mg-dd-menu" id="mg-lang-menu" hidden>' +
@@ -1311,6 +1334,7 @@
       close: rootEl.querySelector('#mg-close'),
       hint: rootEl.querySelector('#mg-hint'),
       q: rootEl.querySelector('#mg-q'),
+      qClear: rootEl.querySelector('#mg-q-clear'),
       statuses: rootEl.querySelector('#mg-statuses'),
       modes: rootEl.querySelector('#mg-modes'),
       langBtn: rootEl.querySelector('#mg-lang-btn'),
@@ -1463,10 +1487,25 @@
     ' .mg-toolbar{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 16px 10px}' +
     '#' +
     ROOT_ID +
-    ' .mg-input{flex:1;min-width:0;height:40px;padding:0 12px;border-radius:8px;border:.5px solid rgba(255,255,255,.14);background:rgba(0,0,0,.35);color:rgba(255,255,255,.94);outline:none;font-size:15px;box-sizing:border-box}' +
+    ' .mg-search-wrap{position:relative;flex:1;min-width:0;display:flex;align-items:center}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-input{flex:1;min-width:0;width:100%;height:40px;padding:0 36px 0 12px;border-radius:8px;border:.5px solid rgba(255,255,255,.14);background:rgba(0,0,0,.35);color:rgba(255,255,255,.94);outline:none;font-size:15px;box-sizing:border-box}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;display:none}' +
     '#' +
     ROOT_ID +
     ' .mg-input:focus{border-color:#0a84ff;box-shadow:0 0 0 3px rgba(10,132,255,.22)}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-q-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:none;border-radius:6px;background:transparent;color:rgba(255,255,255,.55);font-size:18px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;z-index:2}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-q-clear:hover{color:rgba(255,255,255,.95);background:rgba(255,255,255,.08)}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-q-clear[hidden]{display:none!important}' +
     '#' +
     ROOT_ID +
     ' .mg-dd{position:relative;flex-shrink:0}' +

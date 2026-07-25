@@ -10,6 +10,13 @@ import type {
   MapSearchResult,
 } from './beatmap-maps'
 import type { OsuAccountInfo } from './osu-session'
+import type {
+  SkinDetail,
+  SkinDownloadProgress,
+  SkinSearchParams,
+  SkinSearchResult,
+  LocalSkinEntry,
+} from './skins-types'
 
 export interface TosuStatus {
   running: boolean
@@ -121,6 +128,50 @@ const api = {
     ipcRenderer.on('maps:download-progress', handler)
     return () => {
       ipcRenderer.removeListener('maps:download-progress', handler)
+    }
+  },
+  searchSkins: (params: SkinSearchParams): Promise<SkinSearchResult> =>
+    ipcRenderer.invoke('skins:search', params),
+  getSkinDetail: (skinId: number): Promise<SkinDetail> =>
+    ipcRenderer.invoke('skins:detail', skinId),
+  getSkinsPath: (): Promise<{
+    configured: string
+    resolved: string | null
+    detected: string | null
+  }> => ipcRenderer.invoke('skins:get-path'),
+  pickSkinsPath: (): Promise<{
+    cancelled: boolean
+    configured: string
+    resolved: string | null
+  }> => ipcRenderer.invoke('skins:pick-path'),
+  openSkinsFolder: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('skins:open-folder'),
+  getLocalSkins: (): Promise<{ skinsPath: string | null; entries: LocalSkinEntry[] }> =>
+    ipcRenderer.invoke('skins:local-list'),
+  downloadSkin: (payload: {
+    skinId: number
+    packageChecksum?: string
+    variantIndex?: number
+  }): Promise<{
+    ok: boolean
+    filePath?: string
+    source?: string
+    cancelled?: boolean
+    openExternal?: string
+  }> => ipcRenderer.invoke('skins:download', payload),
+  cancelSkinDownload: (jobId: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('skins:cancel-download', jobId),
+  importSkinFile: (): Promise<{ cancelled: boolean; filePath?: string }> =>
+    ipcRenderer.invoke('skins:import-file'),
+  downloadSkinUrl: (payload: {
+    url: string
+    name?: string
+  }): Promise<{ ok: boolean; filePath?: string; cancelled?: boolean }> =>
+    ipcRenderer.invoke('skins:download-url', payload),
+  onSkinDownloadProgress: (callback: (progress: SkinDownloadProgress) => void) => {
+    const handler = (_event: unknown, payload: SkinDownloadProgress) => callback(payload)
+    ipcRenderer.on('skins:download-progress', handler)
+    return () => {
+      ipcRenderer.removeListener('skins:download-progress', handler)
     }
   },
 }

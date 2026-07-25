@@ -6,6 +6,7 @@ import { Toast } from './components/Toast'
 import { StatusPage } from './pages/StatusPage'
 import { CountersPage } from './pages/CountersPage'
 import { MapsPage } from './pages/MapsPage'
+import { SkinsPage } from './pages/SkinsPage'
 import { OverlayPage } from './pages/OverlayPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { useTosuSocket } from './hooks/useTosuSocket'
@@ -18,7 +19,7 @@ import { UpdateBanner } from './components/UpdateBanner'
 import type { TosuStatus } from '../electron/preload'
 import './styles/app.css'
 
-export type Page = 'status' | 'counters' | 'maps' | 'overlay' | 'settings'
+export type Page = 'status' | 'counters' | 'maps' | 'skins' | 'overlay' | 'settings'
 
 interface ToastState {
   message: string
@@ -47,6 +48,12 @@ export default function App() {
   const tosuUpdate = useTosuUpdate(showToast, refreshStatus)
   const appUpdate = useAppUpdate(showToast)
   const guiSettings = useGuiSettings()
+
+  useEffect(() => {
+    if (!guiSettings.skinsBrowserEnabled && page === 'skins') {
+      setPage('status')
+    }
+  }, [guiSettings.skinsBrowserEnabled, page])
 
   // Panel data (cover URL, leaderboard PB) is only parsed when the panel is enabled
   const game = useTosuSocket(tosuStatus?.baseUrl ?? '', {
@@ -164,6 +171,7 @@ export default function App() {
           active={page}
           onChange={setPage}
           osuConnected={game.connected}
+          showSkins={guiSettings.skinsBrowserEnabled}
         />
         <main className="app-content">
           {appUpdate.visible && appUpdate.updateInfo?.updateAvailable && (
@@ -230,6 +238,15 @@ export default function App() {
               onOpenSettings={() => setPage('settings')}
             />
           </div>
+          {guiSettings.skinsBrowserEnabled ? (
+            <div className="page-slot" hidden={page !== 'skins'}>
+              <SkinsPage
+                visible={page === 'skins'}
+                onToast={showToast}
+                onOpenSettings={() => setPage('settings')}
+              />
+            </div>
+          ) : null}
           {page === 'overlay' && tosuSettings.settings && (
             <OverlayPage
               baseUrl={tosuStatus?.baseUrl ?? ''}
@@ -257,6 +274,9 @@ export default function App() {
               showBeatmapPanel={guiSettings.showBeatmapPanel}
               songsPath={guiSettings.songsPath}
               songsPathResolved={guiSettings.songsPathResolved}
+              skinsPath={guiSettings.skinsPath}
+              skinsPathResolved={guiSettings.skinsPathResolved}
+              skinsBrowserEnabled={guiSettings.skinsBrowserEnabled}
               mapsOverlayKeybind={guiSettings.mapsOverlayKeybind}
               onCheckAppUpdatesChange={appUpdate.setCheckAppUpdates}
               onCheckTosuUpdatesChange={tosuUpdate.setCheckTosuUpdates}
@@ -265,6 +285,9 @@ export default function App() {
               onMapsOverlayKeybindChange={guiSettings.setMapsOverlayKeybindSetting}
               onPickSongsPath={guiSettings.pickSongsPath}
               onClearSongsPath={guiSettings.clearSongsPath}
+              onPickSkinsPath={guiSettings.pickSkinsPath}
+              onClearSkinsPath={guiSettings.clearSkinsPath}
+              onSkinsBrowserEnabledChange={guiSettings.setSkinsBrowserEnabledSetting}
               onUpdate={tosuSettings.update}
               onSave={tosuSettings.save}
             />
