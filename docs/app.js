@@ -37,19 +37,16 @@ const I18N = {
       "Состояние tosu и osu! в одном окне: работает ли reader, найдена ли игра, версия и порт API. Перезапуск tosu и проверка обновлений — без браузера.",
     shotOverlayTitle: "Оверлей",
     shotOverlayBody:
-      "In-game оверлей поверх osu!: включение, горячая клавиша, FPS, сглаживание. PP-счётчики ставятся поверх игры, позиция настраивается прямо в клиенте.",
+      "Внутриигровой оверлей поверх osu!: быстрый вызов по Ctrl+Shift+M, поиск и скачивание карт прямо во время игры в любом режиме экрана. PP-счётчики настраиваются прямо в клиенте.",
     shotMapsTitle: "Карты",
     shotMapsBody:
-      "Поиск и скачивание beatmap-сетов с osu.ppy.sh. Фильтры по статусу, режиму и языку, превью трека и установка в Songs — в GUI и в in-game панели.",
-    shotSkinsTitle: "Скины",
-    shotSkinsBody:
-      "Каталог skins.osuck.net: поиск, фильтры по режиму, превью скриншотов и установка .osk в папку Skins. Быстрый поиск и индикаторы уже установленных скинов.",
-    shotOverlayTitle: "Оверлей",
-    shotOverlayBody:
-      "Внутриигровой оверлей поверх osu!: быстрый вызов по Ctrl+Shift+M, поиск и скачивание карт прямо во время игры в любом режиме экрана.",
+      "Поиск и скачивание beatmap-сетов с osu.ppy.sh. Фильтры по статусу, режиму и языку, превью трека и установка в Songs — в GUI и во внутриигровой панели.",
     shotPreviewTitle: "Превью карт",
     shotPreviewBody:
       "Интерактивное превью нот, слайдеров и реплея со скином vv_idke_trail и хитсаундами. Точная синхронизация с аудиодорожкой.",
+    shotSkinsTitle: "Скины",
+    shotSkinsBody:
+      "Каталог skins.osuck.net: поиск, фильтры по режиму, превью скриншотов и установка .osk в папку Skins. Быстрый поиск и индикаторы уже установленных скинов.",
   },
   en: {
     lead:
@@ -66,18 +63,25 @@ const I18N = {
     error: "Error",
     latest: "latest",
     altMain: "Main window: tosu status and osu! connection",
-    altOverlay: "In-game overlay settings and PP counters",
+    altOverlay: "In-game overlay inside osu!",
     altMaps: "Maps browser: search, filters, and download",
+    altPreview: "Interactive map and replay preview",
     altSkins: "Skins catalog: search, filters, and install",
-    shotSkinsTitle: "Skins",
-    shotSkinsBody:
-      "Browse skins.osuck.net: search, mode filters, screenshot previews, and install .osk directly into your Skins folder.",
+    shotMainTitle: "Status",
+    shotMainBody:
+      "tosu and osu! health in one place: reader running, game detected, API version and port. Restart tosu and check updates without opening a browser.",
     shotOverlayTitle: "Overlay",
     shotOverlayBody:
-      "In-game overlay inside osu!: press Ctrl+Shift+M to search and download beatmaps directly during gameplay in any screen mode.",
+      "In-game overlay inside osu!: press Ctrl+Shift+M to search and download beatmaps directly during gameplay in any screen mode. PP counters can be moved in-game.",
+    shotMapsTitle: "Maps",
+    shotMapsBody:
+      "Search and download beatmap sets from osu.ppy.sh. Status, mode, and language filters, track preview, and install into Songs — in the GUI and the in-game panel.",
     shotPreviewTitle: "Map Preview",
     shotPreviewBody:
       "Interactive replay preview with hit objects, sliders, vv_idke_trail skin, and hitsounds synchronized to the audio track.",
+    shotSkinsTitle: "Skins",
+    shotSkinsBody:
+      "Browse skins.osuck.net: search, mode filters, screenshot previews, and install .osk directly into your Skins folder.",
   },
 };
 

@@ -306,6 +306,24 @@ code {
   margin-inline: auto;
 }
 
+.shot-media-duo {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.shot-media-duo .shot-overlay-img {
+  flex: 1.5;
+  min-width: 0;
+  object-fit: cover;
+}
+
+.shot-media-duo .shot-panel-img {
+  flex: 0.72;
+  min-width: 0;
+  object-fit: cover;
+}
+
 .shot-copy {
   min-width: 0;
   padding: 4px 0;
@@ -385,6 +403,11 @@ code {
 
   .shot-media-maps img {
     max-width: 100%;
+  }
+
+  .shot-media-duo {
+    flex-direction: column;
+    gap: 10px;
   }
 
   .header-actions {
