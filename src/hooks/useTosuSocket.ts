@@ -167,25 +167,31 @@ function isOsuProcessAttached(data: Record<string, unknown>): boolean {
   // Explicit error payloads from tosu when the process is gone
   if (typeof data.error === 'string' && /osu/i.test(data.error)) return false
 
-  const profile = asRecord(data.profile)
+  const client = asRecord(data.client)
   const settings = asRecord(data.settings)
-  const client = asRecord(settings.client)
+  const settingsFolders = asRecord(settings.folders)
   const folders = asRecord(data.folders)
-  const userStatus = asRecord(profile.userStatus)
+  const userProfile = asRecord(data.userProfile)
+  const profile = asRecord(data.profile)
+  const userStatus = asRecord(profile.userStatus) || asRecord(userProfile.userStatus)
+  const menu = asRecord(data.menu)
+  const menuBm = asRecord(menu.bm)
   const instance = asRecord(data.instance)
 
   if (instance.found === true || instance.status === 'connected') return true
   if (typeof data.client === 'string' && data.client.length > 0 && data.client !== 'unknown') {
     return true
   }
-
-  // Live client version only present while the process is readable
-  if (typeof client.version === 'string' && client.version.length > 0) return true
+  if (typeof client.name === 'string' || typeof client.version === 'string') return true
+  if (typeof settingsFolders.game === 'string' && settingsFolders.game.length > 0) return true
   if (typeof folders.game === 'string' && folders.game.length > 0) return true
-
+  if (typeof userProfile.id === 'number' && userProfile.id > 0) return true
   if (typeof profile.id === 'number' && profile.id > 0) return true
+  if (typeof userProfile.name === 'string' && userProfile.name.trim().length > 0) return true
   if (typeof profile.name === 'string' && profile.name.trim().length > 0) return true
   if (typeof userStatus.name === 'string' && userStatus.name.length > 0) return true
+  if (typeof menu.state === 'number' || typeof menu.stateNumber === 'number') return true
+  if (typeof menuBm.id === 'number' || typeof menuBm.set === 'number' || Boolean(menuBm.md5)) return true
 
   // Presence of a real game state object from v2
   const state = asRecord(data.state)
@@ -300,38 +306,75 @@ function parseState(data: Record<string, unknown>, baseUrl: string, includePanel
   const menu = asRecord(data.menu)
   const play = asRecord(data.play)
   const beatmap = asRecord(data.beatmap)
-  const profile = asRecord(data.profile)
+  const profile = asRecord(data.profile) || asRecord(data.userProfile)
   const results = asRecord(data.resultsScreen)
   const stats = asRecord(beatmap.stats)
   const playPp = asRecord(play.pp)
   // Legacy / gosu-style top-level pp
   const topPp = asRecord(data.pp)
   const menuBm = asRecord(menu.bm)
+  const bmMeta = asRecord(menuBm.metadata)
+  const bmStats = asRecord(menuBm.stats)
+  const bmBpm = asRecord(bmStats.BPM)
+  const settings = asRecord(data.settings)
+  const settingsFolders = asRecord(settings.folders)
+  const folders = asRecord(data.folders)
 
   const title =
     asString(beatmap.title) ||
+    asString(bmMeta.title) ||
     asString(menuBm.title) ||
     asString(menu.bmTitle) ||
     '—'
   const artist =
     asString(beatmap.artist) ||
+    asString(bmMeta.artist) ||
     asString(menuBm.artist) ||
     asString(menu.bmArtist) ||
     '—'
-  const mapper = asString(beatmap.mapper) || '—'
-  const version = asString(beatmap.version)
-  const checksum = asString(beatmap.checksum)
-  const beatmapId = asNumber(beatmap.id)
-  const beatmapSetId = asNumber(beatmap.set)
-  const hasBeatmap = hasMeaningfulBeatmap(beatmap, title, artist)
+  const mapper =
+    asString(beatmap.mapper) ||
+    asString(bmMeta.mapper) ||
+    '—'
+  const version =
+    asString(beatmap.version) ||
+    asString(bmMeta.difficulty) ||
+    asString(menuBm.version)
+  const checksum =
+    asString(beatmap.checksum) ||
+    asString(menuBm.md5)
+  const beatmapId =
+    asNumber(beatmap.id) ||
+    asNumber(menuBm.id)
+  const beatmapSetId =
+    asNumber(beatmap.set) ||
+    asNumber(menuBm.set)
+  const hasBeatmap = hasMeaningfulBeatmap(
+    { checksum, version, id: beatmapId, set: beatmapSetId, mapper },
+    title,
+    artist
+  )
 
   const modeNum =
     asNumber(asRecord(play.mode).number, -1) >= 0
       ? asNumber(asRecord(play.mode).number)
       : asNumber(asRecord(profile.mode).number)
 
-  const bpmCommon = asNumber(asRecord(stats.bpm).common) || asNumber(asRecord(beatmap.bpm).common)
-  const stars = statValue(asRecord(stats.stars).total) || statValue(stats.stars)
+  const bpmCommon =
+    asNumber(asRecord(stats.bpm).common) ||
+    asNumber(asRecord(beatmap.bpm).common) ||
+    asNumber(bmBpm.common) ||
+    asNumber(bmBpm.realtime)
+
+  const stars =
+    statValue(asRecord(stats.stars).total) ||
+    statValue(stats.stars) ||
+    asNumber(bmStats.fullSR) ||
+    asNumber(bmStats.SR)
+
+  const arVal = statValue(stats.ar) || asNumber(bmStats.AR) || asNumber(bmStats.memoryAR)
+  const csVal = statValue(stats.cs) || asNumber(bmStats.CS) || asNumber(bmStats.memoryCS)
+  const odVal = statValue(stats.od) || asNumber(bmStats.OD) || asNumber(bmStats.memoryOD)
 
   const health = asRecord(play.healthBar)
   const hpRaw =
@@ -352,7 +395,6 @@ function parseState(data: Record<string, unknown>, baseUrl: string, includePanel
     : EMPTY_SCORE
 
   const statusObj = asRecord(beatmap.status)
-  const folders = asRecord(data.folders)
   const playAcc = asNumber(play.accuracy)
 
   return {
@@ -375,16 +417,16 @@ function parseState(data: Record<string, unknown>, baseUrl: string, includePanel
     ppFc: round2(asNumber(playPp.fc) || asNumber(topPp.fc)),
     accuracy: round2(playAcc > 0 && playAcc <= 1 ? playAcc * 100 : playAcc),
     combo: asNumber(asRecord(play.combo).current),
-    maxCombo: asNumber(stats.maxCombo) || asNumber(beatmap.maxCombo),
+    maxCombo: asNumber(stats.maxCombo) || asNumber(beatmap.maxCombo) || asNumber(bmStats.maxCombo),
     hp: Math.round(hpRaw <= 1 ? hpRaw * 100 : hpRaw),
     mods: resolveMods(play, beatmap),
     mode: MODES[modeNum] ?? 'osu',
     bpm: Math.round(bpmCommon),
-    ar: round2(statValue(stats.ar)),
-    cs: round2(statValue(stats.cs)),
-    od: round2(statValue(stats.od)),
+    ar: round2(arVal),
+    cs: round2(csVal),
+    od: round2(odVal),
     stars: round2(stars),
-    osuPath: asString(folders.game),
+    osuPath: asString(settingsFolders.game) || asString(folders.game),
     playerScore,
   }
 }
@@ -433,11 +475,20 @@ async function probeOsuPayload(baseUrl: string): Promise<Record<string, unknown>
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), OSU_PROBE_TIMEOUT_MS)
   try {
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/json/v2`, {
+    const root = baseUrl.replace(/\/$/, '')
+    let res = await fetch(`${root}/json/v2`, {
       signal: ctrl.signal,
       cache: 'no-store',
-    })
-    if (!res.ok) return null
+    }).catch(() => null)
+
+    if (!res || !res.ok) {
+      res = await fetch(`${root}/json`, {
+        signal: ctrl.signal,
+        cache: 'no-store',
+      }).catch(() => null)
+    }
+
+    if (!res || !res.ok) return null
     const data = (await res.json()) as Record<string, unknown>
     if (typeof data.error === 'string') return null
     if (!isOsuProcessAttached(data)) return null

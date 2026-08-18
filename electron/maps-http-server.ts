@@ -29,6 +29,8 @@ const MIME: Record<string, string> = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
 }
 
 function getMapsUiDir(): string | null {

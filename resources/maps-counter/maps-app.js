@@ -148,6 +148,99 @@
     return s.minStars.toFixed(1) + '–' + s.maxStars.toFixed(1)
   }
 
+  var DIFF_DOMAIN = [0.1, 1.25, 2, 2.5, 3.3, 4.2, 4.9, 5.8, 6.7, 7.7, 9]
+  var DIFF_RANGE = [
+    '#4290FB',
+    '#4FC0FF',
+    '#4FFFD5',
+    '#7CFF4F',
+    '#F6F05C',
+    '#FF8068',
+    '#FF4E6F',
+    '#C645B8',
+    '#6563DE',
+    '#18158E',
+    '#000000',
+  ]
+
+  var MODE_PATHS = {
+    osu: 'M500 740q106 0 197-53 88-52 140-140 53-91 53-197t-53-197q-52-88-140-140-91-53-197-53t-197 53q-88 52-140 140-53 91-53 197t53 197q52 88 140 140 91 53 197 53z m0 80q-97 0-182-36t-150-102q-64-62-101-148t-37-184 37-182 101-150q62-64 149-101t183-37 182 36 150 102q64 62 101 149t37 183-36 182-102 150q-62 64-148 101t-184 37v0z m0-232q-64 0-119-32t-87-87-32-119 32-119 87-87 119-32 119 32 87 87 32 119-32 119-87 87-119 32z',
+    fruits:
+      'M500 740q106 0 197-53 88-52 140-140 53-91 53-197t-53-197q-52-88-140-140-91-53-197-53t-197 53q-88 52-140 140-53 91-53 197t53 197q52 88 140 140 91 53 197 53z m0 80q-97 0-182-36t-150-102q-64-62-101-148t-37-184 37-182 101-150q62-64 149-101t183-37 182 36 150 102q64 62 101 149t37 183-36 182-102 150q-62 64-148 101t-184 37v0z m192-470q0 31-22 53t-53 22-53-22-22-53 22-53 53-22 53 22 22 53z m-174 152q0 31-22 53t-53 22-53-22-22-53 22-53 53-22 53 22 22 53z m0-304q0 31-22 53t-53 22-53-22-22-53 22-53 54-22 53 22 21 53z',
+    mania:
+      'M500 48q-21 0-35 15t-15 35v504q0 21 15 36t35 14 36-14 14-36v-504q0-21-14-35t-36-15z m-110 192v220q0 21-14 36t-36 14-35-14-15-36v-220q0-21 15-35t35-15 36 15 14 35z m320 0v220q0 21-14 36t-36 14-35-14-15-36v-220q0-21 15-35t35-15 36 15 14 35z m-210 500q-106 0-197-53-88-52-140-140-53-91-53-197t53-197q52-88 140-140 91-53 197-53t197 53q88 52 140 140 53 91 53 197t-53 197q-52 88-140 140-91 53-197 53z m0 80q97 0 182-36t150-102q64-62 101-148t37-184-36-182-102-150q-62-64-148-101t-184-37-182 36-150 102q-64 62-101 149t-37 183 37 182 101 150q62 64 149 101t183 37v0z',
+    taiko:
+      'M500 650q-82 0-152-41-67-40-107-107-41-70-41-152t41-152q40-67 107-107 70-41 152-41t152 41q67 40 107 107 41 70 41 152t-41 152q-40 67-107 107-70 41-152 41z m-200-300q0 69 43 123t107 71v-388q-65 17-107 71t-43 123z m250-194v388q65-17 108-71t42-123-42-123-108-71z m-50 584q106 0 197-53 88-52 140-140 53-91 53-197t-53-197q-52-88-140-140-91-53-197-53t-197 53q-88 52-140 140-53 91-53 197t53 197q52 88 140 140 91 53 197 53z m0 80q-97 0-182-36t-150-102q-64-62-101-148t-37-184 37-182 101-150q62-64 149-101t183-37 182 36 150 102q64 62 101 149t37 183-36 182-102 150q-62 64-148 101t-184 37v0z',
+  }
+
+  function hexToRgb(hex) {
+    var h = String(hex).replace('#', '')
+    return [
+      parseInt(h.slice(0, 2), 16) || 0,
+      parseInt(h.slice(2, 4), 16) || 0,
+      parseInt(h.slice(4, 6), 16) || 0,
+    ]
+  }
+
+  function toLin(c) {
+    return Math.pow(c / 255, 2.2)
+  }
+
+  function toSrgb(c) {
+    return Math.round(Math.pow(Math.min(1, Math.max(0, c)), 1 / 2.2) * 255)
+  }
+
+  function rgbHex(r, g, b) {
+    var h = function (n) { return n.toString(16).padStart(2, '0') }
+    return '#' + h(r) + h(g) + h(b)
+  }
+
+  function getDiffColour(rating) {
+    if (!(rating > 0) || rating < 0.1) return '#AAAAAA'
+    if (rating >= 9) return '#000000'
+    var i = 0
+    while (i < DIFF_DOMAIN.length - 2 && rating > DIFF_DOMAIN[i + 1]) i++
+    var a = DIFF_DOMAIN[i]
+    var b = DIFF_DOMAIN[i + 1]
+    var t = (rating - a) / (b - a || 1)
+    var c1 = hexToRgb(DIFF_RANGE[i])
+    var c2 = hexToRgb(DIFF_RANGE[i + 1])
+    return rgbHex(
+      toSrgb(toLin(c1[0]) + (toLin(c2[0]) - toLin(c1[0])) * t),
+      toSrgb(toLin(c1[1]) + (toLin(c2[1]) - toLin(c1[1])) * t),
+      toSrgb(toLin(c1[2]) + (toLin(c2[2]) - toLin(c1[2])) * t)
+    )
+  }
+
+  function normalizeOsuMode(m) {
+    var s = String(m == null ? 'osu' : m).toLowerCase()
+    if (s === '1' || s === 'taiko') return 'taiko'
+    if (s === '2' || s === 'fruits' || s === 'ctb' || s === 'catch') return 'fruits'
+    if (s === '3' || s === 'mania') return 'mania'
+    return 'osu'
+  }
+
+  function modePath(m) {
+    return MODE_PATHS[normalizeOsuMode(m)] || MODE_PATHS.osu
+  }
+
+  function pluralizeDiffs(n) {
+    var abs = Math.abs(n) % 100
+    var rem = abs % 10
+    if (abs > 10 && abs < 20) return n + ' сложностей'
+    if (rem > 1 && rem < 5) return n + ' сложности'
+    if (rem === 1) return n + ' сложность'
+    return n + ' сложностей'
+  }
+
+  function diffIconHtml(mode, stars, size, title) {
+    var color = getDiffColour(stars || 0)
+    var m = normalizeOsuMode(mode)
+    var d = modePath(m)
+    var tt = title ? ' title="' + title + '"' : ' title="' + (stars || 0).toFixed(2) + '★"'
+    return '<span class="mg-diffico"' + tt + ' style="color:' + color + '"><svg viewBox="0 0 1000 1000" width="' + (size || 14) + '" height="' + (size || 14) + '"><g transform="translate(0,1000) scale(1,-1)"><path fill="currentColor" fill-rule="evenodd" d="' + d + '"/></g></svg></span>'
+  }
+
   async function api(path, opts) {
     var res = await fetch(API + path, {
       ...opts,
@@ -227,26 +320,46 @@
     var set = sets.find(function (s) {
       return s.id === id
     })
-    var url = previewUrlFor(set)
-    if (!url) {
-      setLine('Превью недоступно')
-      return
-    }
+    var primaryUrl = (set && set.previewUrl) || ('https://b.ppy.sh/preview/' + id + '.mp3')
+    var fallbackUrl = 'https://catboy.best/preview/audio/' + id
     var audio = ensureAudio()
     try {
       audio.pause()
       audio.volume = previewVolume
-      audio.src = url
+      audio.onerror = function () {
+        if (audio.src !== fallbackUrl) {
+          audio.src = fallbackUrl
+          void audio.play().catch(function () {
+            previewId = null
+            previewPaused = false
+            setLine('Не удалось воспроизвести превью')
+            renderList()
+            syncPlayerUi()
+          })
+        } else {
+          previewId = null
+          previewPaused = false
+          setLine('Не удалось воспроизвести превью')
+          renderList()
+          syncPlayerUi()
+        }
+      }
+      audio.src = primaryUrl
       previewId = id
       previewPaused = false
       renderList()
       syncPlayerUi()
       void audio.play().catch(function () {
-        previewId = null
-        previewPaused = false
-        setLine('Не удалось воспроизвести превью')
-        renderList()
-        syncPlayerUi()
+        if (audio.src !== fallbackUrl) {
+          audio.src = fallbackUrl
+          void audio.play().catch(function () {
+            previewId = null
+            previewPaused = false
+            setLine('Не удалось воспроизвести превью')
+            renderList()
+            syncPlayerUi()
+          })
+        }
       })
     } catch (e) {
       previewId = null
@@ -315,11 +428,13 @@
   }
 
   function syncPlayerUi() {
-    if (!els.player) return
+    if (!els || !els.player) return
     var set = currentSet()
     var active = !!previewId && !!set
-    els.player.classList.toggle('-active', active)
-    els.player.classList.toggle('-idle', !active)
+    if (els.player.classList) {
+      els.player.classList.toggle('-active', active)
+      els.player.classList.toggle('-idle', !active)
+    }
     if (els.playerCover) {
       var cover = set && (set.listCoverUrl || set.coverUrl)
       if (cover) {
@@ -454,6 +569,19 @@
             '" title="Предпросмотр карты" ' +
             (hasBm ? '' : 'disabled') +
             '>◎</button>'
+          var matchingBm = (s.beatmaps || []).filter(function (b) {
+            return mode === 'any' || normalizeOsuMode(b.mode) === mode
+          })
+          var bmsToDisplay = matchingBm.length > 0 ? matchingBm : (s.beatmaps || [])
+          var totalCount = s.beatmaps && s.beatmaps.length ? s.beatmaps.length : (s.modes && s.modes.length ? s.modes.length : 1)
+          var countLabel = pluralizeDiffs(matchingBm.length > 0 && mode !== 'any' ? matchingBm.length : totalCount)
+          var diffIconsHtml = bmsToDisplay.slice(0, 16).map(function (b) {
+            return diffIconHtml(b.mode, b.stars || 0, 13, esc(b.version + ' (' + (b.stars || 0).toFixed(2) + '★)'))
+          }).join('')
+          if (bmsToDisplay.length > 16) {
+            diffIconsHtml += '<span class="mg-diff-more">+' + (bmsToDisplay.length - 16) + '</span>'
+          }
+
           return (
             '<div class="mg-row ' +
             sc +
@@ -465,13 +593,15 @@
             esc(s.artist + ' — ' + s.title) +
             '</div><div class="mg-sub">' +
             esc(s.creator) +
-            ' · ' +
-            stars(s) +
-            '★ · <span class="mg-badge ' +
+            ' · <span class="mg-diff-count">' +
+            countLabel +
+            '</span> · <span class="mg-badge ' +
             sc +
             '">' +
             esc(s.status) +
-            '</span></div></div>' +
+            '</span></div>' +
+            (diffIconsHtml ? '<div class="mg-diff-icons-row" title="' + countLabel + '">' + diffIconsHtml + '</div>' : '') +
+            '</div>' +
             '<div class="mg-actions">' +
             previewBtn +
             gpBtn +
@@ -603,9 +733,11 @@
   }
 
   function applyChipGroup(container, attr, value) {
-    if (!container) return
+    if (!container || typeof container.querySelectorAll !== 'function') return
     container.querySelectorAll('.mg-chip').forEach(function (b) {
-      b.classList.toggle('-on', b.getAttribute(attr) === value)
+      if (b && b.classList) {
+        b.classList.toggle('-on', b.getAttribute(attr) === value)
+      }
     })
   }
 
@@ -652,22 +784,22 @@
   function syncFilterUi() {
     if (els.statuses) applyChipGroup(els.statuses, 'data-status', statusFilter)
     if (els.modes) applyChipGroup(els.modes, 'data-mode', mode)
-    if (els.langBtn) {
+    if (els.langBtn && els.langBtn.classList) {
       els.langBtn.textContent = langLabel()
       els.langBtn.classList.toggle('-active', languageFilter !== 'any')
     }
-    if (els.moreBtn) {
+    if (els.moreBtn && els.moreBtn.classList) {
       els.moreBtn.textContent = moreStatusLabel()
       els.moreBtn.classList.toggle('-active', !!MORE_STATUSES[statusFilter])
     }
-    if (els.langMenu) {
+    if (els.langMenu && typeof els.langMenu.querySelectorAll === 'function') {
       els.langMenu.querySelectorAll('[data-lang]').forEach(function (b) {
-        b.classList.toggle('-on', b.getAttribute('data-lang') === languageFilter)
+        if (b && b.classList) b.classList.toggle('-on', b.getAttribute('data-lang') === languageFilter)
       })
     }
-    if (els.moreMenu) {
+    if (els.moreMenu && typeof els.moreMenu.querySelectorAll === 'function') {
       els.moreMenu.querySelectorAll('[data-more-status]').forEach(function (b) {
-        b.classList.toggle('-on', b.getAttribute('data-more-status') === statusFilter)
+        if (b && b.classList) b.classList.toggle('-on', b.getAttribute('data-more-status') === statusFilter)
       })
     }
   }
@@ -757,7 +889,19 @@
     var eng = engine()
     if (!canvas || !gp.open || !eng || !gp.parsed) return
     var ctx = canvas.getContext('2d')
-    var elapsed = now - gp.startPerf
+    if (gp.audio && !gp.audio.paused && !gp.audio.ended && Number.isFinite(gp.audio.currentTime)) {
+      var curSec = gp.audio.currentTime
+      if (curSec !== gp.lastAudioSec) {
+        gp.lastAudioSec = curSec
+        gp.audioStartPerf = now - curSec * 1000
+      }
+      elapsed = Math.max(0, now - (gp.audioStartPerf || now))
+    } else if (gp.audio && (gp.audio.readyState < 2 || gp.audio.paused)) {
+      elapsed = 0
+    } else {
+      elapsed = Math.max(0, now - gp.startPerf)
+    }
+
     var t = gp.parsed.previewTime + elapsed
     var rt = ensureGpRuntime()
     var cont = eng.drawPreviewFrame(
@@ -769,7 +913,7 @@
       elapsed,
       rt
     )
-    if (!cont) {
+    if (!cont || (gp.audio && gp.audio.ended)) {
       closeGameplayPreview()
       return
     }
@@ -811,10 +955,8 @@
             '" data-gp-diff="' +
             b.id +
             '">' +
-            esc(b.version) +
-            ' ' +
-            (b.stars || 0).toFixed(1) +
-            '★</button>'
+            '<span class="mg-diffico" style="color:' + getDiffColour(b.stars || 0) + '"><svg viewBox="0 0 1000 1000" width="18" height="18"><g transform="translate(0,1000) scale(1,-1)"><path fill="currentColor" fill-rule="evenodd" d="' + modePath(b.mode) + '"/></g></svg></span>' +
+            escapeHtml(b.version) + '</button>'
           )
         })
         .join('')
@@ -863,14 +1005,34 @@
         })
       }
 
-      var url = previewUrlFor(set)
+      var primaryUrl = (set && set.previewUrl) || ('https://b.ppy.sh/preview/' + set.id + '.mp3')
+      var fallbackUrl = 'https://catboy.best/preview/audio/' + set.id
       gp.audio = new Audio()
       gp.audio.volume = previewVolume
       gp.audio.preload = 'auto'
-      if (url) gp.audio.src = url
-      gp.startPerf = performance.now()
+      gp.audio.onerror = function () {
+        if (gp.audio && gp.audio.src !== fallbackUrl) {
+          gp.audio.src = fallbackUrl
+          void gp.audio.play().catch(function () {})
+        }
+      }
+      gp.audio.src = primaryUrl
+      var now = performance.now()
+      gp.startPerf = now
+      gp.audioStartPerf = now
+      gp.lastAudioSec = 0
+      gp.audio.addEventListener('playing', function () {
+        var pNow = performance.now()
+        var cur = gp.audio.currentTime || 0
+        gp.startPerf = pNow - cur * 1000
+        gp.audioStartPerf = pNow - cur * 1000
+        gp.lastAudioSec = cur
+      })
       void gp.audio.play().catch(function () {
-        /* visual still works */
+        if (gp.audio && gp.audio.src !== fallbackUrl) {
+          gp.audio.src = fallbackUrl
+          void gp.audio.play().catch(function () {})
+        }
       })
       // Unlock Web Audio for hitsounds (user gesture chain)
       try {
@@ -1326,7 +1488,10 @@
       '</div></div>' +
       '</div>'
 
-    document.documentElement.appendChild(rootEl)
+    var parent = document.body || document.documentElement
+    if (parent && !parent.contains(rootEl)) {
+      parent.appendChild(rootEl)
+    }
 
     els = {
       authLabel: rootEl.querySelector('#mg-auth'),
@@ -1380,7 +1545,7 @@
     })
 
     bindUi()
-    rootEl.style.display = 'none'
+    rootEl.style.setProperty('display', 'none', 'important')
     syncPlayerUi()
   }
 
@@ -1389,42 +1554,54 @@
     if (!style) {
       style = document.createElement('style')
       style.id = 'tosu-gui-maps-style'
-      document.documentElement.appendChild(style)
+      var parent = document.head || document.documentElement || document.body
+      if (parent) parent.appendChild(style)
     }
     style.textContent = CSS_TEXT
   }
 
   async function show() {
-    mount()
-    applyStyles()
-    visible = true
-    if (rootEl) {
-      rootEl.style.display = 'flex'
-      rootEl.style.pointerEvents = 'auto'
-      rootEl.removeAttribute('aria-hidden')
-    }
-    // restore filter UI — do NOT reset filter values
-    syncFilterUi()
-    syncPlayerUi()
-    await refreshAuth()
-    await refreshLocal()
-    renderList()
-    if (loggedIn && !didInitialSearch) {
-      void search(false)
-    } else if (loggedIn && sets.length) {
-      setLine(sets.length + ' карт')
-    }
-    setTimeout(function () {
-      try {
-        if (els.q) els.q.focus({ preventScroll: true })
-      } catch (e) {
-        try {
-          els.q.focus()
-        } catch (e2) {
-          /* ignore */
-        }
+    try {
+      mount()
+      applyStyles()
+      var parent = document.body || document.documentElement
+      if (rootEl && parent && !parent.contains(rootEl)) {
+        parent.appendChild(rootEl)
       }
-    }, 30)
+      visible = true
+      if (rootEl) {
+        rootEl.style.setProperty('display', 'flex', 'important')
+        rootEl.style.setProperty('pointer-events', 'auto', 'important')
+        rootEl.removeAttribute('aria-hidden')
+      }
+      syncFilterUi()
+      syncPlayerUi()
+      renderList()
+
+      void refreshAuth().then(function () {
+        if (loggedIn && !didInitialSearch) {
+          void search(false)
+        } else if (loggedIn && sets.length) {
+          setLine(sets.length + ' карт')
+        }
+      }).catch(function () {})
+
+      void refreshLocal().catch(function () {})
+
+      setTimeout(function () {
+        try {
+          if (els.q) els.q.focus({ preventScroll: true })
+        } catch (e) {
+          try {
+            els.q.focus()
+          } catch (e2) {
+            /* ignore */
+          }
+        }
+      }, 30)
+    } catch (err) {
+      console.warn('[maps] show error:', err)
+    }
   }
 
   function hide() {
@@ -1434,24 +1611,29 @@
     closeGameplayPreview()
     closeMenus()
     if (rootEl) {
-      rootEl.style.display = 'none'
-      rootEl.style.pointerEvents = 'none'
+      rootEl.style.setProperty('display', 'none', 'important')
+      rootEl.style.setProperty('pointer-events', 'none', 'important')
       rootEl.setAttribute('aria-hidden', 'true')
     }
   }
 
   var CSS_TEXT =
+    '@font-face{font-family:"SF Pro Text";src:url("http://127.0.0.1:24777/fonts/sf-pro-text_regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}' +
+    '@font-face{font-family:"SF Pro Text";src:url("http://127.0.0.1:24777/fonts/sf-pro-text_semibold.woff2") format("woff2");font-weight:600;font-style:normal;font-display:swap}' +
+    '@font-face{font-family:"SF Pro Display";src:url("http://127.0.0.1:24777/fonts/sf-pro-display_regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}' +
+    '@font-face{font-family:"SF Pro Display";src:url("http://127.0.0.1:24777/fonts/sf-pro-display_medium.woff2") format("woff2");font-weight:500;font-style:normal;font-display:swap}' +
+    '@font-face{font-family:"SF Pro Display";src:url("http://127.0.0.1:24777/fonts/sf-pro-display_semibold.woff2") format("woff2");font-weight:600;font-style:normal;font-display:swap}' +
     '#' +
     ROOT_ID +
     ',#' +
     ROOT_ID +
-    ' *{user-select:none;-webkit-user-select:none}' +
+    ' *{user-select:none;-webkit-user-select:none;font-family:"SF Pro Text",-apple-system,BlinkMacSystemFont,"Helvetica Neue","Segoe UI",sans-serif!important;-webkit-font-smoothing:antialiased!important;-moz-osx-font-smoothing:grayscale!important;text-rendering:optimizeLegibility!important}' +
     '#' +
     ROOT_ID +
     ' .mg-input,.mg-vol-range{user-select:text;-webkit-user-select:text}' +
     '#' +
     ROOT_ID +
-    '{position:fixed;inset:0;z-index:2147483646;display:none;align-items:stretch;justify-content:flex-end;padding:12px;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;color:rgba(255,255,255,.92);pointer-events:auto}' +
+    '{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;display:none;align-items:stretch;justify-content:flex-end;padding:12px;box-sizing:border-box;font-size:13px;line-height:1.35;color:rgba(255,255,255,.92);pointer-events:auto}' +
     '#' +
     ROOT_ID +
     ' .mg-shade{position:absolute;inset:0;background:rgba(0,0,0,.22)}' +
@@ -1463,7 +1645,7 @@
     ' .mg-top{flex-shrink:0;display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:10px;padding:16px 16px 8px 18px;min-height:52px;box-sizing:border-box}' +
     '#' +
     ROOT_ID +
-    ' .mg-top-title{font-size:18px;font-weight:600;letter-spacing:-.02em;line-height:38px;height:38px;flex-shrink:0}' +
+    ' .mg-top-title{font-family:"SF Pro Display","SF Pro Text",-apple-system,BlinkMacSystemFont,sans-serif!important;font-size:18px;font-weight:600;letter-spacing:-.02em;line-height:38px;height:38px;flex-shrink:0}' +
     '#' +
     ROOT_ID +
     ' .mg-top-spacer{flex:1;min-width:8px}' +
@@ -1621,6 +1803,21 @@
     '#' +
     ROOT_ID +
     ' .mg-badge.st-graveyard,.mg-badge.st-other{color:rgba(255,255,255,.5);background:rgba(255,255,255,.08)}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-diff-icons-row{display:flex;align-items:center;gap:3px;margin-top:4px;flex-wrap:wrap}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-diffico{display:inline-flex;align-items:center;justify-content:center;line-height:1;transition:transform .12s ease;cursor:default}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-diffico:hover{transform:scale(1.22)}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-diff-count{color:rgba(255,255,255,.75);font-weight:500}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-diff-more{font-size:10px;color:rgba(255,255,255,.45);margin-left:2px}' +
     '#' +
     ROOT_ID +
     ' .mg-actions{flex-shrink:0;display:flex;align-items:center;gap:5px}' +

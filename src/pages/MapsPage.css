@@ -314,6 +314,37 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.map-diffs-count {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.map-diff-icons-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.map-diff-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: transform 0.12s ease;
+  cursor: pointer;
+}
+
+.map-diff-item-icon:hover {
+  transform: scale(1.28);
 }
 
 .map-dot {

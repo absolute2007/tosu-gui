@@ -318,8 +318,23 @@ function mapSummary(raw: Record<string, unknown>): SkinSummary | null {
   }
 }
 
+const SEARCH_CACHE_TTL_MS = 5 * 60_000
+const searchCache = new Map<string, { at: number; result: SkinSearchResult }>()
+
+function searchCacheKey(params: SkinSearchParams): string {
+  return [
+    buildOsuckLocation(params),
+    params.cursorId || '',
+    params.cursorValue || '',
+  ].join('\0')
+}
+
 export async function searchOsuckSkins(params: SkinSearchParams): Promise<SkinSearchResult> {
   const location = buildOsuckLocation(params)
+  const cached = searchCache.get(searchCacheKey(params))
+  if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) {
+    return cached.result
+  }
   // Fresh jar per request so download cookies / pagination never leak into catalog
   const jar: CookieJar = new Map()
   if (params.cursorId) jar.set('lacus', params.cursorId)
@@ -344,7 +359,7 @@ export async function searchOsuckSkins(params: SkinSearchParams): Promise<SkinSe
   const last = skins[skins.length - 1]
   // Search page treats <20 as end; mode lists are denser
   const pageSize = isSearch ? 12 : 16
-  return {
+  const result: SkinSearchResult = {
     skins,
     hasMore: skins.length >= pageSize,
     total: extractTotal(data),
@@ -352,6 +367,13 @@ export async function searchOsuckSkins(params: SkinSearchParams): Promise<SkinSe
     cursorValue: last?.releasedAt || null,
     source: 'osuck',
   }
+  const cacheKey = searchCacheKey(params)
+  searchCache.set(cacheKey, { at: Date.now(), result })
+  if (searchCache.size > 40) {
+    const oldest = searchCache.keys().next().value
+    if (oldest) searchCache.delete(oldest)
+  }
+  return result
 }
 
 function mapPackages(files: Record<string, unknown>[]): SkinPackageLink[] {

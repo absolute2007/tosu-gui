@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AlertCircle,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -50,6 +51,29 @@ const SORT_OPTIONS: { id: SkinSort; label: string }[] = [
 
 const QUERY_DEBOUNCE_MS = 320
 
+function filterKey(query: string, mode: SkinModeFilter, sort: SkinSort): string {
+  return `${query}\0${mode}\0${sort}`
+}
+
+/** Survives remounts (flag toggle / StrictMode) so the catalog is not fetched again. */
+interface SkinsPageCache {
+  query: string
+  debouncedQuery: string
+  mode: SkinModeFilter
+  sort: SkinSort
+  skins: SkinSummary[]
+  hasMore: boolean
+  cursorId: string | null
+  cursorValue: string | null
+  error: string | null
+  loadedKey: string | null
+  scrollTop: number
+  skinsPath: string | null
+  localNames: string[]
+}
+
+let pageCache: SkinsPageCache | null = null
+
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 10_000) return `${Math.round(n / 1000)}k`
@@ -74,19 +98,21 @@ function normalizeName(name: string): string {
 }
 
 export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
-  const [query, setQuery] = useState('')
-  const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [mode, setMode] = useState<SkinModeFilter>('any')
-  const [sort, setSort] = useState<SkinSort>('recent')
-  const [skins, setSkins] = useState<SkinSummary[]>([])
-  const [loading, setLoading] = useState(false)
+  const [query, setQuery] = useState(pageCache?.query ?? '')
+  const [debouncedQuery, setDebouncedQuery] = useState(pageCache?.debouncedQuery ?? '')
+  const [mode, setMode] = useState<SkinModeFilter>(pageCache?.mode ?? 'any')
+  const [sort, setSort] = useState<SkinSort>(pageCache?.sort ?? 'recent')
+  const [skins, setSkins] = useState<SkinSummary[]>(pageCache?.skins ?? [])
+  const [loading, setLoading] = useState(() => !pageCache?.loadedKey)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [cursorId, setCursorId] = useState<string | null>(null)
-  const [cursorValue, setCursorValue] = useState<string | null>(null)
-  const [skinsPath, setSkinsPath] = useState<string | null>(null)
-  const [localNames, setLocalNames] = useState<Set<string>>(new Set())
+  const [error, setError] = useState<string | null>(pageCache?.error ?? null)
+  const [hasMore, setHasMore] = useState(pageCache?.hasMore ?? false)
+  const [cursorId, setCursorId] = useState<string | null>(pageCache?.cursorId ?? null)
+  const [cursorValue, setCursorValue] = useState<string | null>(pageCache?.cursorValue ?? null)
+  const [skinsPath, setSkinsPath] = useState<string | null>(pageCache?.skinsPath ?? null)
+  const [localNames, setLocalNames] = useState<Set<string>>(
+    () => new Set(pageCache?.localNames ?? [])
+  )
   const [progress, setProgress] = useState<Record<string, SkinDownloadProgress>>({})
   const [urlOpen, setUrlOpen] = useState(false)
   const [urlValue, setUrlValue] = useState('')
@@ -100,6 +126,9 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
   const reqId = useRef(0)
   const queryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const filtersRef = useRef({ query: '', mode: 'any' as SkinModeFilter, sort: 'recent' as SkinSort })
+  const loadedKeyRef = useRef<string | null>(pageCache?.loadedKey ?? null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollTopRef = useRef(pageCache?.scrollTop ?? 0)
   filtersRef.current = { query: debouncedQuery, mode, sort }
 
   // Debounce only text input — mode/sort apply immediately
@@ -143,6 +172,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
 
       if (append) setLoadingMore(true)
       else {
+        loadedKeyRef.current = null
         setLoading(true)
         setError(null)
       }
@@ -161,6 +191,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
         setCursorId(result.cursorId)
         setCursorValue(result.cursorValue)
         setError(null)
+        loadedKeyRef.current = filterKey(q, m, s)
       } catch (err) {
         if (my !== reqId.current) return
         const msg = err instanceof Error ? err.message : String(err)
@@ -182,13 +213,57 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
     void refreshPath()
   }, [visible, refreshPath])
 
-  // Fresh search whenever filters change — pass explicit params
+  // Search when filters change — not when merely returning to the tab
   useEffect(() => {
-    if (!visible) return
+    const key = filterKey(debouncedQuery, mode, sort)
+    if (loadedKeyRef.current === key) return
+    // First fetch waits until the tab is opened; later filter changes run even if hidden
+    if (!visible && loadedKeyRef.current === null) return
     setCursorId(null)
     setCursorValue(null)
     void runSearch({ q: debouncedQuery, mode, sort })
-  }, [debouncedQuery, mode, sort, visible, runSearch])
+  }, [visible, debouncedQuery, mode, sort, runSearch])
+
+  useEffect(() => {
+    pageCache = {
+      query,
+      debouncedQuery,
+      mode,
+      sort,
+      skins,
+      hasMore,
+      cursorId,
+      cursorValue,
+      error,
+      loadedKey: loadedKeyRef.current,
+      scrollTop: scrollTopRef.current,
+      skinsPath,
+      localNames: [...localNames],
+    }
+  }, [
+    query,
+    debouncedQuery,
+    mode,
+    sort,
+    skins,
+    hasMore,
+    cursorId,
+    cursorValue,
+    error,
+    skinsPath,
+    localNames,
+  ])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!visible) {
+      if (el) scrollTopRef.current = el.scrollTop
+      if (pageCache) pageCache.scrollTop = scrollTopRef.current
+      return
+    }
+    if (!el) return
+    el.scrollTop = scrollTopRef.current
+  }, [visible])
 
   useEffect(() => {
     return window.tosuGui.onSkinDownloadProgress((p) => {
@@ -492,24 +567,31 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
         ) : null}
       </div>
 
-      <div className="skins-page-scroll">
+      <div
+        className="skins-page-scroll"
+        ref={scrollRef}
+        onScroll={(e) => {
+          scrollTopRef.current = e.currentTarget.scrollTop
+        }}
+      >
         {loading && skins.length === 0 ? (
           <div className="skins-empty">
             <Loader2 size={22} className="spin" />
-            <span>Загрузка…</span>
+            <span>Загрузка скинов…</span>
           </div>
         ) : error && skins.length === 0 ? (
           <div className="skins-empty">
-            <Palette size={22} strokeWidth={1.5} />
+            <AlertCircle size={26} strokeWidth={1.5} style={{ color: 'var(--danger)', opacity: 0.8 }} />
             <span>{error}</span>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void runSearch()}>
-              Повторить
+            <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 4 }} onClick={() => void runSearch()}>
+              Повторить поиск
             </button>
           </div>
         ) : skins.length === 0 ? (
           <div className="skins-empty">
-            <Palette size={22} strokeWidth={1.5} />
-            <span>Ничего не найдено</span>
+            <Palette size={26} strokeWidth={1.5} style={{ opacity: 0.45 }} />
+            <span>Скины не найдены</span>
+            <span className="empty-state-subtitle">Попробуйте изменить поисковый запрос или фильтры</span>
           </div>
         ) : (
           <>

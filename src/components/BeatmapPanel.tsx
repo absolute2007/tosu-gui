@@ -109,18 +109,34 @@ function EmptyArt({ kind }: { kind: EmptyKind }) {
 }
 
 function BeatmapPanelInner({ game }: Props) {
-  const coverKey = game.beatmapChecksum || String(game.beatmapId) || game.coverUrl
+  const coverKey = `${game.beatmapSetId}|${game.beatmapId}|${game.beatmapChecksum}|${game.coverUrl}`
   /** Identity of the selected difficulty — must change when switching versions in a set */
   const difficultyKey = `${game.beatmapId}|${game.beatmapChecksum}|${game.mode}`
 
-  const [coverFailed, setCoverFailed] = useState(false)
+  const [coverIndex, setCoverIndex] = useState(0)
   const [lookupScore, setLookupScore] = useState<BeatmapPlayerScore | null>(null)
   const [scoreLoading, setScoreLoading] = useState(false)
-  const onCoverError = useCallback(() => setCoverFailed(true), [])
+
+  const coverSources = useMemo(() => {
+    const list: string[] = []
+    if (game.coverUrl) list.push(game.coverUrl)
+    if (game.beatmapSetId && game.beatmapSetId > 0) {
+      list.push(`https://assets.ppy.sh/beatmaps/${game.beatmapSetId}/covers/card@2x.jpg`)
+      list.push(`https://assets.ppy.sh/beatmaps/${game.beatmapSetId}/covers/cover.jpg`)
+      list.push(`https://catboy.best/preview/thumbnail/set/${game.beatmapSetId}`)
+    }
+    return list
+  }, [game.coverUrl, game.beatmapSetId])
 
   useEffect(() => {
-    setCoverFailed(false)
-  }, [coverKey])
+    setCoverIndex(0)
+  }, [coverKey, coverSources])
+
+  const currentCoverSrc = coverSources[coverIndex] || null
+
+  const onCoverError = useCallback(() => {
+    setCoverIndex((idx) => idx + 1)
+  }, [])
 
   // Always resolve PB for the selected difficulty (checksum + beatmap id).
   // Never skip because of live memory — that caused wrong #rank and cross-diff bleed.
@@ -199,7 +215,7 @@ function BeatmapPanelInner({ game }: Props) {
   )
 
   const showMap = game.connected && game.hasBeatmap
-  const showCover = Boolean(showMap && game.coverUrl && !coverFailed)
+  const showCover = Boolean(showMap && currentCoverSrc && coverIndex < coverSources.length)
   const kind = emptyKind(game)
   const statusClass = !resolvedScore.played
     ? scoreLoading
@@ -228,10 +244,10 @@ function BeatmapPanelInner({ game }: Props) {
       ) : (
         <div className="beatmap-panel-body">
           <div className="beatmap-cover">
-            {showCover ? (
+            {showCover && currentCoverSrc ? (
               <img
-                key={coverKey}
-                src={game.coverUrl}
+                key={`${coverKey}_${coverIndex}`}
+                src={currentCoverSrc}
                 alt=""
                 className="beatmap-cover-img"
                 draggable={false}

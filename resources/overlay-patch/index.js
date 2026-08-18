@@ -32,11 +32,30 @@ class Keybind {
   }
 
   update(key, state) {
-    const index = this.keys.findIndex((keybindKey) => mapKeycode(key.code) === keybindKey);
+    if (!key || !key.code) return false;
+    const mapped = mapKeycode(key.code);
+    const code = key.code || "";
+    const index = this.keys.findIndex((keybindKey) => {
+      if (mapped === keybindKey || code === keybindKey) return true;
+      const k = String(keybindKey).toLowerCase();
+      const m = String(mapped).toLowerCase();
+      const c = String(code).toLowerCase();
+      return (
+        m === k ||
+        c === k ||
+        c === `key${k}` ||
+        m === `key${k}` ||
+        `key${m}` === k ||
+        (k === "control" && (c === "controlleft" || c === "controlright" || m === "control")) ||
+        (k === "shift" && (c === "shiftleft" || c === "shiftright" || m === "shift")) ||
+        (k === "alt" && (c === "altleft" || c === "altright" || m === "alt"))
+      );
+    });
     if (index === -1) return false;
     if (state === "Pressed") {
       this.state &= ~(1 << index);
-      return !(this.state << (32 - this.keys.length));
+      const mask = ~(0xffffffff << this.keys.length);
+      return (this.state & mask) === 0;
     }
     this.state |= 1 << index;
     return false;
@@ -89,39 +108,63 @@ function loadScriptTag(src, attr) {
   `;
 }
 
+function readStaticFile(filename) {
+  const candidateDirs = [
+    path.join(path.dirname(process.execPath), "..", "static", "Maps Browser by tosu-gui"),
+    path.join(process.cwd(), "static", "Maps Browser by tosu-gui"),
+    path.join(__dirname, "../../static/Maps Browser by tosu-gui"),
+    path.join(path.dirname(process.execPath), "static", "Maps Browser by tosu-gui"),
+  ];
+  for (const dir of candidateDirs) {
+    const full = path.join(dir, filename);
+    if (fs.existsSync(full)) {
+      try {
+        return fs.readFileSync(full, "utf8");
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return "";
+}
+
 async function ensureMapsApp(webContents) {
-  const ok = await webContents.executeJavaScript(
+  let isReady = false;
+  try {
+    isReady = await webContents.executeJavaScript(
+      `!!(window.__TosuGuiMapsApp && window.__TosuGuiMapsAppVersion === ${MAPS_APP_VERSION} && typeof window.__TosuGuiMapsApp.show === 'function' && window.TosuOsuPreview)`,
+      true
+    );
+  } catch {
+    isReady = false;
+  }
+  if (isReady) return;
+
+  const engineCode = readStaticFile("osu-preview-engine.js");
+  const appCode = readStaticFile("maps-app.js");
+
+  if (engineCode && appCode) {
+    try {
+      await webContents.executeJavaScript(engineCode, true);
+      await webContents.executeJavaScript(appCode, true);
+      return;
+    } catch (err) {
+      console.warn("[maps] direct injection failed:", err);
+    }
+  }
+
+  // Fallback to HTTP script tags
+  await webContents.executeJavaScript(
     `
     (async function () {
       var need = ${MAPS_APP_VERSION};
-      if (
-        window.__TosuGuiMapsApp &&
-        window.__TosuGuiMapsAppVersion === need &&
-        typeof window.__TosuGuiMapsApp.show === 'function' &&
-        window.TosuOsuPreview &&
-        typeof window.TosuOsuPreview.parseOsu === 'function'
-      ) {
-        return true;
-      }
-      // Drop only when version mismatches (real update). Do not wipe on every open.
-      window.__TosuGuiMapsApp = null;
-      window.__TosuGuiMapsAppVersion = 0;
-      window.TosuOsuPreview = null;
-      var old = document.getElementById('tosu-gui-maps-root');
-      if (old) old.remove();
-      var st = document.getElementById('tosu-gui-maps-style');
-      if (st) st.remove();
-      document.querySelectorAll('script[data-tosu-gui-maps],script[data-tosu-gui-engine]').forEach(function (n) {
-        n.remove();
-      });
       ${loadScriptTag(MAPS_ENGINE_URL, "data-tosu-gui-engine")}
       ${loadScriptTag(MAPS_APP_URL, "data-tosu-gui-maps")}
       return !!(window.__TosuGuiMapsApp && window.__TosuGuiMapsApp.show && window.TosuOsuPreview);
     })()
   `,
     true
-  );
-  if (!ok) throw new Error("Maps app not available");
+  ).catch((e) => console.warn("[maps] HTTP script tag load error:", e));
 }
 
 async function mapsShow(webContents) {
@@ -439,10 +482,7 @@ class OverlayProcess {
       try {
         await mapsShow(this.window.webContents);
       } catch (err) {
-        console.error("[maps] show failed (tosu GUI on :24777?):", err);
-        this.mapsEnabled = false;
-        await this.forceCloseMaps("show-failed");
-        return;
+        console.error("[maps] show error:", err);
       }
 
       // Re-assert capture after show (windowed focus can steal it)

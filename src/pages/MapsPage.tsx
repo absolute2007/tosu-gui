@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
+  AlertCircle,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -32,6 +33,8 @@ import {
   type ParsedBeatmap,
   type PreviewRuntime,
 } from '../lib/osu-preview'
+import { DiffIcon } from '../components/DiffIcon'
+import { normalizeOsuMode } from '../lib/osu-diff'
 import './MapsPage.css'
 
 interface Props {
@@ -95,11 +98,15 @@ function isMoreStatus(id: MapStatusFilter): boolean {
   return MORE_STATUS_OPTIONS.some((o) => o.id === id)
 }
 
-function formatStars(min: number, max: number): string {
-  if (!max) return '—'
-  if (Math.abs(max - min) < 0.05) return max.toFixed(2)
-  return `${min.toFixed(1)}–${max.toFixed(1)}`
+function pluralizeDiffs(n: number): string {
+  const abs = Math.abs(n) % 100
+  const rem = abs % 10
+  if (abs > 10 && abs < 20) return `${n} сложностей`
+  if (rem > 1 && rem < 5) return `${n} сложности`
+  if (rem === 1) return `${n} сложность`
+  return `${n} сложностей`
 }
+
 
 function statusClass(status: string): string {
   const s = status.toLowerCase()
@@ -126,6 +133,7 @@ function isRateLimitMsg(msg: string): boolean {
 
 interface MapRowProps {
   set: MapSetSummary
+  activeMode: MapModeFilter
   owned: boolean
   download: MapDownloadProgress | undefined
   canDownload: boolean
@@ -138,6 +146,7 @@ interface MapRowProps {
 
 const MapRow = memo(function MapRow({
   set,
+  activeMode,
   owned,
   download,
   canDownload,
@@ -152,6 +161,16 @@ const MapRow = memo(function MapRow({
   const cover = set.listCoverUrl || set.coverUrl
   const canPreview = Boolean(set.previewUrl)
   const canGp = Boolean(set.beatmaps?.length)
+
+  const matchingBeatmaps =
+    activeMode !== 'any'
+      ? (set.beatmaps || []).filter((b) => normalizeOsuMode(b.mode) === activeMode)
+      : set.beatmaps || []
+  const displayBeatmaps = matchingBeatmaps.length > 0 ? matchingBeatmaps : set.beatmaps || []
+  const totalDiffCount = set.beatmaps?.length || (set.modes?.length ? 1 : 0)
+  const countLabel = pluralizeDiffs(
+    activeMode !== 'any' && matchingBeatmaps.length > 0 ? matchingBeatmaps.length : totalDiffCount
+  )
 
   return (
     <div className="map-row">
@@ -172,7 +191,7 @@ const MapRow = memo(function MapRow({
         <div className="map-sub">
           <span>mapped by {set.creator}</span>
           <span className="map-dot">·</span>
-          <span>{formatStars(set.minStars, set.maxStars)}★</span>
+          <span className="map-diffs-count">{countLabel}</span>
           {set.bpm > 0 && (
             <>
               <span className="map-dot">·</span>
@@ -186,6 +205,20 @@ const MapRow = memo(function MapRow({
             </>
           )}
         </div>
+        {displayBeatmaps.length > 0 && (
+          <div className="map-diff-icons-row" title={countLabel}>
+            {displayBeatmaps.map((b) => (
+              <DiffIcon
+                key={b.id}
+                mode={b.mode}
+                stars={b.stars}
+                size={14}
+                title={`${b.version} (${(b.stars || 0).toFixed(2)}★)`}
+                className="map-diff-item-icon"
+              />
+            ))}
+          </div>
+        )}
       </div>
       <div className="map-actions">
         <button
@@ -327,23 +360,16 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
 
   const playSet = useCallback(
     (mapSet: MapSetSummary) => {
-      if (!mapSet.previewUrl) {
-        onToast('Превью недоступно', 'error')
-        return
-      }
+      const primaryUrl = mapSet.previewUrl || `https://b.ppy.sh/preview/${mapSet.id}.mp3`
+      const fallbackUrl = `https://catboy.best/preview/audio/${mapSet.id}`
       let audio = audioRef.current
       if (!audio) {
         audio = new Audio()
-        audio.preload = 'none'
+        audio.preload = 'auto'
         audio.addEventListener('ended', () => {
           setPreviewId(null)
           setPreviewPaused(false)
           setPreviewProgress(0)
-        })
-        audio.addEventListener('error', () => {
-          setPreviewId(null)
-          setPreviewPaused(false)
-          onToast('Не удалось воспроизвести превью', 'error')
         })
         audio.addEventListener('timeupdate', () => {
           const a = audioRef.current
@@ -354,15 +380,35 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
       }
       try {
         audio.pause()
-        audio.volume = volumeRef.current
-        audio.src = mapSet.previewUrl
+        const vol = volumeRef.current > 0 ? volumeRef.current : 0.65
+        audio.volume = vol
+        audio.onerror = () => {
+          if (audio && audio.src !== fallbackUrl) {
+            audio.src = fallbackUrl
+            void audio.play().catch(() => {
+              setPreviewId(null)
+              setPreviewPaused(false)
+              onToast('Не удалось воспроизвести превью', 'error')
+            })
+          } else {
+            setPreviewId(null)
+            setPreviewPaused(false)
+            onToast('Не удалось воспроизвести превью', 'error')
+          }
+        }
+        audio.src = primaryUrl
         setPreviewId(mapSet.id)
         setPreviewPaused(false)
         setPreviewProgress(0)
         void audio.play().catch(() => {
-          setPreviewId(null)
-          setPreviewPaused(false)
-          onToast('Не удалось воспроизвести превью', 'error')
+          if (audio && audio.src !== fallbackUrl) {
+            audio.src = fallbackUrl
+            void audio.play().catch(() => {
+              setPreviewId(null)
+              setPreviewPaused(false)
+              onToast('Не удалось воспроизвести превью', 'error')
+            })
+          }
         })
       } catch {
         setPreviewId(null)
@@ -440,6 +486,11 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
     setGpLoading(false)
   }, [stopGameplay])
 
+  const gpAudioSyncRef = useRef<{ audioStartPerf: number; lastAudioSec: number }>({
+    audioStartPerf: 0,
+    lastAudioSec: 0,
+  })
+
   const drawGameplay = useCallback(
     (now: number) => {
       const canvas = gpCanvasRef.current
@@ -447,7 +498,24 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
       if (!canvas || !data) return
       const ctx = canvas.getContext('2d')
       if (!ctx) return
-      const elapsed = now - gpStartRef.current
+
+      const audio = gpAudioRef.current
+      let elapsed = 0
+
+      if (audio && !audio.paused && !audio.ended && Number.isFinite(audio.currentTime)) {
+        const curSec = audio.currentTime
+        if (curSec !== gpAudioSyncRef.current.lastAudioSec) {
+          gpAudioSyncRef.current.lastAudioSec = curSec
+          gpAudioSyncRef.current.audioStartPerf = now - curSec * 1000
+        }
+        elapsed = Math.max(0, now - gpAudioSyncRef.current.audioStartPerf)
+      } else if (audio && (audio.readyState < 2 || audio.paused)) {
+        // Hold on starting frame while buffering
+        elapsed = 0
+      } else {
+        elapsed = Math.max(0, now - gpStartRef.current)
+      }
+
       const t = data.previewTime + elapsed
       const cont = drawPreviewFrame(
         ctx,
@@ -458,7 +526,8 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         elapsed,
         gpRuntimeRef.current
       )
-      if (!cont) {
+
+      if (!cont || (audio && audio.ended)) {
         closeGameplay()
         return
       }
@@ -470,7 +539,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   const loadGameplayDiff = useCallback(
     async (beatmapId: number, mapSet: MapSetSummary) => {
       setGpLoading(true)
-      setGpStatus('Загрузка .osu…')
+      setGpStatus('Загрузка карты…')
       setGpBeatmapId(beatmapId)
       stopGameplay()
       try {
@@ -478,19 +547,36 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         const parsed = parseOsu(result.content)
         gpDataRef.current = parsed
         resetPreviewRuntime(gpRuntimeRef.current, volumeRef.current)
-        const bm = mapSet.beatmaps?.find((b) => b.id === beatmapId)
-        setGpStatus(`${bm?.version || 'diff'} · ${(bm?.stars || 0).toFixed(2)}★`)
+        setGpStatus('')
         setGpLoading(false)
         const audio = new Audio()
-        audio.volume = volumeRef.current
-        if (mapSet.previewUrl) audio.src = mapSet.previewUrl
+        const vol = volumeRef.current > 0 ? volumeRef.current : 0.65
+        audio.volume = vol
+        audio.preload = 'auto'
+        const primaryUrl = mapSet.previewUrl || `https://b.ppy.sh/preview/${mapSet.id}.mp3`
+        const fallbackUrl = `https://catboy.best/preview/audio/${mapSet.id}`
+        audio.src = primaryUrl
+        audio.addEventListener('error', () => {
+          if (audio.src !== fallbackUrl) {
+            audio.src = fallbackUrl
+            void audio.play().catch(() => {})
+          }
+        })
         gpAudioRef.current = audio
-        gpStartRef.current = performance.now()
+        const now = performance.now()
+        gpStartRef.current = now
+        gpAudioSyncRef.current = { audioStartPerf: now, lastAudioSec: 0 }
+        audio.addEventListener('playing', () => {
+          const pNow = performance.now()
+          const cur = audio.currentTime || 0
+          gpStartRef.current = pNow - cur * 1000
+          gpAudioSyncRef.current = { audioStartPerf: pNow - cur * 1000, lastAudioSec: cur }
+        })
         void audio.play().catch(() => {})
         gpRafRef.current = requestAnimationFrame(drawGameplay)
       } catch (err) {
         setGpLoading(false)
-        setGpStatus(err instanceof Error ? err.message : 'Ошибка превью')
+        setGpStatus(err instanceof Error ? err.message : 'Ошибка загрузки карты')
       }
     },
     [stopGameplay, drawGameplay]
@@ -1127,36 +1213,39 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
       <div className="maps-page-scroll">
         {!authReady ? (
           <div className="empty-state">
-            <Loader2 size={18} className="spin" />
-            <p>Проверка входа…</p>
+            <Loader2 size={22} className="spin" />
+            <p>Проверка входа в osu!…</p>
           </div>
         ) : !loggedIn ? (
           <div className="empty-state">
-            <LogIn size={22} strokeWidth={1.5} style={{ opacity: 0.45 }} />
-            <p>Войдите, чтобы искать карты</p>
+            <LogIn size={26} strokeWidth={1.5} style={{ opacity: 0.55 }} />
+            <p>Войдите, чтобы искать и скачивать карты</p>
+            <span className="empty-state-subtitle">Поиск и загрузка работают через ваш официальный аккаунт</span>
           </div>
         ) : loading && sets.length === 0 ? (
           <div className="empty-state">
-            <Loader2 size={18} className="spin" />
-            <p>Поиск…</p>
+            <Loader2 size={22} className="spin" />
+            <p>Поиск карт…</p>
           </div>
         ) : error && sets.length === 0 ? (
           <div className="empty-state">
+            <AlertCircle size={26} strokeWidth={1.5} style={{ color: 'var(--danger)', opacity: 0.8 }} />
             <p>{error}</p>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              style={{ marginTop: 10 }}
+              style={{ marginTop: 6 }}
               disabled={rateLimitActive}
               onClick={() => void fetchPage(debouncedQuery, mode, status, language, false, null, 0)}
             >
-              Повторить
+              Повторить поиск
             </button>
           </div>
         ) : sets.length === 0 ? (
           <div className="empty-state">
-            <MapIcon size={22} strokeWidth={1.5} style={{ opacity: 0.45 }} />
-            <p>Ничего не найдено</p>
+            <MapIcon size={26} strokeWidth={1.5} style={{ opacity: 0.45 }} />
+            <p>Карты не найдены</p>
+            <span className="empty-state-subtitle">Попробуйте изменить запрос или фильтры</span>
           </div>
         ) : (
           <>
@@ -1165,6 +1254,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                 <MapRow
                   key={set.id}
                   set={set}
+                  activeMode={mode}
                   owned={localIds.has(set.id)}
                   download={downloads[set.id]}
                   previewPlaying={previewId === set.id && !previewPaused}
@@ -1234,7 +1324,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
             <div className="maps-miniplayer-sub">
               {(() => {
                 const cur = sets.find((s) => s.id === previewId)
-                return cur ? cur.creator : 'Выберите карту ▶'
+                return cur ? cur.creator : 'Выберите карту для прослушивания'
               })()}
             </div>
           </div>
@@ -1303,8 +1393,29 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                   {gpSet.artist} — {gpSet.title}
                 </div>
                 <div className="maps-gp-sub">
-                  {gpLoading ? <Loader2 size={12} className="spin" /> : null}
-                  {gpStatus}
+                  {gpLoading ? (
+                    <>
+                      <Loader2 size={13} className="spin" />
+                      <span>{gpStatus || 'Загрузка…'}</span>
+                    </>
+                  ) : (() => {
+                    const bm = gpSet.beatmaps?.find((b) => b.id === gpBeatmapId)
+                    if (!bm) return <span>{gpStatus}</span>
+                    return (
+                      <>
+                        <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{bm.version}</span>
+                        <span>·</span>
+                        <DiffIcon mode={bm.mode} stars={bm.stars || 0} size={15} />
+                        <span>{(bm.stars || 0).toFixed(2)}★</span>
+                        {gpStatus ? (
+                          <>
+                            <span>·</span>
+                            <span>{gpStatus}</span>
+                          </>
+                        ) : null}
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
               <button type="button" className="btn btn-ghost btn-sm map-preview-btn" onClick={closeGameplay}>
@@ -1320,7 +1431,8 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                   onClick={() => void loadGameplayDiff(b.id, gpSet)}
                   disabled={gpLoading}
                 >
-                  {b.version} {(b.stars || 0).toFixed(1)}★
+                  <DiffIcon mode={b.mode} stars={b.stars || 0} size={18} />
+                  {b.version}
                 </button>
               ))}
             </div>

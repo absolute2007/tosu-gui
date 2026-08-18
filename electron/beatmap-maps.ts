@@ -163,13 +163,30 @@ function str(v: unknown, fallback = ''): string {
   return typeof v === 'string' ? v : v == null ? fallback : String(v)
 }
 
+function parseMode(raw: Record<string, unknown>): string {
+  const m = raw.mode ?? raw.Mode ?? raw.mode_int ?? raw.ruleset_id ?? raw.RulesetID
+  if (m === 0 || m === '0' || m === 'osu' || m === 'standard') return 'osu'
+  if (m === 1 || m === '1' || m === 'taiko') return 'taiko'
+  if (m === 2 || m === '2' || m === 'fruits' || m === 'ctb' || m === 'catch') return 'fruits'
+  if (m === 3 || m === '3' || m === 'mania') return 'mania'
+  if (typeof m === 'string' && m.trim()) {
+    const s = m.trim().toLowerCase()
+    if (s === '0' || s === 'osu' || s === 'standard') return 'osu'
+    if (s === '1' || s === 'taiko') return 'taiko'
+    if (s === '2' || s === 'fruits' || s === 'ctb' || s === 'catch') return 'fruits'
+    if (s === '3' || s === 'mania') return 'mania'
+    return s
+  }
+  return 'osu'
+}
+
 function normalizeBeatmap(raw: Record<string, unknown>): MapBeatmapSummary | null {
   const id = num(raw.id ?? raw.beatmap_id ?? raw.BeatmapID)
   if (!id) return null
   return {
     id,
     version: str(raw.version ?? raw.Version ?? raw.difficulty_name, 'Normal'),
-    mode: str(raw.mode ?? raw.Mode, 'osu').toLowerCase(),
+    mode: parseMode(raw),
     stars: Math.round(num(raw.difficulty_rating ?? raw.DifficultyRating ?? raw.stars) * 100) / 100,
     totalLength: Math.round(num(raw.total_length ?? raw.TotalLength ?? raw.hit_length)),
   }
@@ -185,7 +202,9 @@ function normalizeSet(raw: Record<string, unknown>): MapSetSummary | null {
     .filter((b): b is MapBeatmapSummary => b != null)
     .sort((a, b) => a.stars - b.stars)
   const stars = beatmaps.map((b) => b.stars).filter((s) => s > 0)
-  const modes = [...new Set(beatmaps.map((b) => b.mode).filter(Boolean))]
+  const setMode = parseMode(raw)
+  const rawModes = [...new Set(beatmaps.map((b) => b.mode).filter(Boolean))]
+  const modes = rawModes.length > 0 ? rawModes : [setMode]
 
   const covers =
     raw.covers && typeof raw.covers === 'object' ? (raw.covers as Record<string, unknown>) : null

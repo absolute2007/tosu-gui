@@ -1,3 +1,3 @@
 @echo off
 cd /d "%~dp0"
-node scripts\start.js
+node scripts\start.js %*

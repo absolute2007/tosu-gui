@@ -217,10 +217,97 @@
     }
   }
 
-  function stars(s) {
-    if (!s.maxStars) return '—'
-    if (Math.abs(s.maxStars - s.minStars) < 0.05) return s.maxStars.toFixed(2)
-    return s.minStars.toFixed(1) + '–' + s.maxStars.toFixed(1)
+  var DIFF_DOMAIN = [0.1, 1.25, 2, 2.5, 3.3, 4.2, 4.9, 5.8, 6.7, 7.7, 9]
+  var DIFF_RANGE = [
+    '#4290FB',
+    '#4FC0FF',
+    '#4FFFD5',
+    '#7CFF4F',
+    '#F6F05C',
+    '#FF8068',
+    '#FF4E6F',
+    '#C645B8',
+    '#6563DE',
+    '#18158E',
+    '#000000',
+  ]
+
+  var MODE_PATHS = {
+    osu: 'M500 740q106 0 197-53 88-52 140-140 53-91 53-197t-53-197q-52-88-140-140-91-53-197-53t-197 53q-88 52-140 140-53 91-53 197t53 197q52 88 140 140 91 53 197 53z m0 80q-97 0-182-36t-150-102q-64-62-101-148t-37-184 37-182 101-150q62-64 149-101t183-37 182 36 150 102q64 62 101 149t37 183-36 182-102 150q-62 64-148 101t-184 37v0z m0-232q-64 0-119-32t-87-87-32-119 32-119 87-87 119-32 119 32 87 87 32 119-32 119-87 87-119 32z',
+    fruits:
+      'M500 740q106 0 197-53 88-52 140-140 53-91 53-197t-53-197q-52-88-140-140-91-53-197-53t-197 53q-88 52-140 140-53 91-53 197t53 197q52 88 140 140 91 53 197 53z m0 80q-97 0-182-36t-150-102q-64-62-101-148t-37-184 37-182 101-150q62-64 149-101t183-37 182 36 150 102q64 62 101 149t37 183-36 182-102 150q-62 64-148 101t-184 37v0z m192-470q0 31-22 53t-53 22-53-22-22-53 22-53 53-22 53 22 22 53z m-174 152q0 31-22 53t-53 22-53-22-22-53 22-53 53-22 53 22 22 53z m0-304q0 31-22 53t-53 22-53-22-22-53 22-53 54-22 53 22 21 53z',
+    mania:
+      'M500 48q-21 0-35 15t-15 35v504q0 21 15 36t35 14 36-14 14-36v-504q0-21-14-35t-36-15z m-110 192v220q0 21-14 36t-36 14-35-14-15-36v-220q0-21 15-35t35-15 36 15 14 35z m320 0v220q0 21-14 36t-36 14-35-14-15-36v-220q0-21 15-35t35-15 36 15 14 35z m-210 500q-106 0-197-53-88-52-140-140-53-91-53-197t53-197q52-88 140-140 91-53 197-53t197 53q88 52 140 140 53 91 53 197t-53 197q-52 88-140 140-91 53-197 53z m0 80q97 0 182-36t150-102q64-62 101-148t37-184-36-182-102-150q-62-64-148-101t-184-37-182 36-150 102q-64 62-101 149t-37 183 37 182 101 150q62 64 149 101t183 37v0z',
+    taiko:
+      'M500 650q-82 0-152-41-67-40-107-107-41-70-41-152t41-152q40-67 107-107 70-41 152-41t152 41q67 40 107 107 41 70 41 152t-41 152q-40 67-107 107-70 41-152 41z m-200-300q0 69 43 123t107 71v-388q-65 17-107 71t-43 123z m250-194v388q65-17 108-71t42-123-42-123-108-71z m-50 584q106 0 197-53 88-52 140-140 53-91 53-197t-53-197q-52-88-140-140-91-53-197-53t-197 53q-88 52-140 140-53 91-53 197t53 197q52 88 140 140 91 53 197 53z m0 80q-97 0-182-36t-150-102q-64-62-101-148t-37-184 37-182 101-150q62-64 149-101t183-37 182 36 150 102q64 62 101 149t37 183-36 182-102 150q-62 64-148 101t-184 37v0z',
+  }
+
+  function hexToRgb(hex) {
+    var h = String(hex).replace('#', '')
+    return [
+      parseInt(h.slice(0, 2), 16) || 0,
+      parseInt(h.slice(2, 4), 16) || 0,
+      parseInt(h.slice(4, 6), 16) || 0,
+    ]
+  }
+
+  function toLin(c) {
+    return Math.pow(c / 255, 2.2)
+  }
+
+  function toSrgb(c) {
+    return Math.round(Math.pow(Math.min(1, Math.max(0, c)), 1 / 2.2) * 255)
+  }
+
+  function rgbHex(r, g, b) {
+    var h = function (n) { return n.toString(16).padStart(2, '0') }
+    return '#' + h(r) + h(g) + h(b)
+  }
+
+  function getDiffColour(rating) {
+    if (!(rating > 0) || rating < 0.1) return '#AAAAAA'
+    if (rating >= 9) return '#000000'
+    var i = 0
+    while (i < DIFF_DOMAIN.length - 2 && rating > DIFF_DOMAIN[i + 1]) i++
+    var a = DIFF_DOMAIN[i]
+    var b = DIFF_DOMAIN[i + 1]
+    var t = (rating - a) / (b - a || 1)
+    var c1 = hexToRgb(DIFF_RANGE[i])
+    var c2 = hexToRgb(DIFF_RANGE[i + 1])
+    return rgbHex(
+      toSrgb(toLin(c1[0]) + (toLin(c2[0]) - toLin(c1[0])) * t),
+      toSrgb(toLin(c1[1]) + (toLin(c2[1]) - toLin(c1[1])) * t),
+      toSrgb(toLin(c1[2]) + (toLin(c2[2]) - toLin(c1[2])) * t)
+    )
+  }
+
+  function normalizeOsuMode(m) {
+    var s = String(m == null ? 'osu' : m).toLowerCase()
+    if (s === '1' || s === 'taiko') return 'taiko'
+    if (s === '2' || s === 'fruits' || s === 'ctb' || s === 'catch') return 'fruits'
+    if (s === '3' || s === 'mania') return 'mania'
+    return 'osu'
+  }
+
+  function modePath(m) {
+    return MODE_PATHS[normalizeOsuMode(m)] || MODE_PATHS.osu
+  }
+
+  function pluralizeDiffs(n) {
+    var abs = Math.abs(n) % 100
+    var rem = abs % 10
+    if (abs > 10 && abs < 20) return n + ' сложностей'
+    if (rem > 1 && rem < 5) return n + ' сложности'
+    if (rem === 1) return n + ' сложность'
+    return n + ' сложностей'
+  }
+
+  function diffIconHtml(mode, stars, size, title) {
+    var color = getDiffColour(stars || 0)
+    var m = normalizeOsuMode(mode)
+    var d = modePath(m)
+    var tt = title ? ' title="' + title + '"' : ' title="' + (stars || 0).toFixed(2) + '★"'
+    return '<span class="diffico"' + tt + ' style="color:' + color + '"><svg viewBox="0 0 1000 1000" width="' + (size || 14) + '" height="' + (size || 14) + '"><g transform="translate(0,1000) scale(1,-1)"><path fill="currentColor" fill-rule="evenodd" d="' + d + '"/></g></svg></span>'
   }
 
   function render() {
@@ -267,6 +354,20 @@
           '">' +
           (playing ? '❚❚' : '▶') +
           '</button>'
+
+        const matchingBm = (s.beatmaps || []).filter(function (b) {
+          return mode === 'any' || normalizeOsuMode(b.mode) === mode
+        })
+        const bmsToDisplay = matchingBm.length > 0 ? matchingBm : (s.beatmaps || [])
+        const totalCount = s.beatmaps && s.beatmaps.length ? s.beatmaps.length : (s.modes && s.modes.length ? s.modes.length : 1)
+        const countLabel = pluralizeDiffs(matchingBm.length > 0 && mode !== 'any' ? matchingBm.length : totalCount)
+        let diffIconsHtml = bmsToDisplay.slice(0, 16).map(function (b) {
+          return diffIconHtml(b.mode, b.stars || 0, 13, escapeHtml(b.version + ' (' + (b.stars || 0).toFixed(2) + '★)'))
+        }).join('')
+        if (bmsToDisplay.length > 16) {
+          diffIconsHtml += '<span class="diff-more">+' + (bmsToDisplay.length - 16) + '</span>'
+        }
+
         return (
           '<div class="row">' +
           (cover
@@ -278,11 +379,13 @@
           escapeHtml(s.artist + ' — ' + s.title) +
           '</div><div class="sub">' +
           escapeHtml(s.creator) +
-          ' · ' +
-          stars(s) +
-          '★ · ' +
+          ' · <span class="diff-count">' +
+          countLabel +
+          '</span> · ' +
           escapeHtml(s.status) +
-          '</div></div>' +
+          '</div>' +
+          (diffIconsHtml ? '<div class="diff-icons-row" title="' + countLabel + '">' + diffIconsHtml + '</div>' : '') +
+          '</div>' +
           '<div class="row-actions">' +
           previewBtn +
           btn +
