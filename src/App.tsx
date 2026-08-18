@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { TitleBar } from './components/TitleBar'
 import { Sidebar } from './components/Sidebar'
 import { BeatmapPanel } from './components/BeatmapPanel'
@@ -261,7 +262,12 @@ export default function App() {
             />
           )}
           {page === 'overlay' && !tosuSettings.settings && (
-            <div className="page"><div className="empty-state">Загрузка...</div></div>
+            <div className="page">
+              <div className="empty-state">
+                <Loader2 size={20} className="spin" />
+                <span>Загрузка оверлея…</span>
+              </div>
+            </div>
           )}
           {page === 'settings' && tosuSettings.settings && (
             <SettingsPage
@@ -293,7 +299,12 @@ export default function App() {
             />
           )}
           {page === 'settings' && !tosuSettings.settings && (
-            <div className="page"><div className="empty-state">Загрузка...</div></div>
+            <div className="page">
+              <div className="empty-state">
+                <Loader2 size={20} className="spin" />
+                <span>Загрузка настроек…</span>
+              </div>
+            </div>
           )}
         </main>
         {guiSettings.showBeatmapPanel && <BeatmapPanel game={game} />}

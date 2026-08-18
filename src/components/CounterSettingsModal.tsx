@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { NumberInput } from './NumberInput'
 import { Toggle } from './Toggle'
 import type { CounterSetting } from '../../electron/tosu-api'
@@ -46,9 +47,14 @@ export function CounterSettingsModal({ name, onClose, onSaved, onError }: Props)
         <div className="modal-title">Настройки: {name}</div>
         <div className="modal-body">
           {loading ? (
-            <div className="empty-state">Загрузка...</div>
+            <div className="empty-state">
+              <Loader2 size={18} className="spin" />
+              <span>Загрузка параметров…</span>
+            </div>
           ) : settings.length === 0 ? (
-            <div className="empty-state">Нет настраиваемых параметров</div>
+            <div className="empty-state">
+              <p>Нет настраиваемых параметров</p>
+            </div>
           ) : (
             settings.map((s) => (
               <div key={s.uniqueID} className="setting-row">

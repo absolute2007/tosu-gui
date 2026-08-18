@@ -1,4 +1,4 @@
-const { execSync, spawnSync } = require('child_process')
+const { execSync, spawn } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const { spawnApp, isWin } = require('./spawn-hidden')
@@ -6,9 +6,55 @@ const { spawnApp, isWin } = require('./spawn-hidden')
 const root = path.join(__dirname, '..')
 const APP_NAME = 'tosu GUI'
 
+function needsBuild() {
+  const mainJs = path.join(root, 'dist-electron', 'main.js')
+  const indexHtml = path.join(root, 'dist', 'index.html')
+  if (!fs.existsSync(mainJs) || !fs.existsSync(indexHtml)) {
+    return true
+  }
+
+  const buildTime = Math.min(
+    fs.statSync(mainJs).mtimeMs,
+    fs.statSync(indexHtml).mtimeMs
+  )
+
+  const checkDirs = ['src', 'electron', 'public']
+  function checkDir(dirPath) {
+    if (!fs.existsSync(dirPath)) return false
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name)
+      if (entry.isDirectory()) {
+        if (checkDir(fullPath)) return true
+      } else if (entry.isFile()) {
+        if (fs.statSync(fullPath).mtimeMs > buildTime) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  for (const dir of checkDirs) {
+    if (checkDir(path.join(root, dir))) return true
+  }
+
+  const topFiles = ['index.html', 'vite.config.ts', 'package.json']
+  for (const file of topFiles) {
+    const fullPath = path.join(root, file)
+    if (fs.existsSync(fullPath) && fs.statSync(fullPath).mtimeMs > buildTime) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function runBuild() {
   try {
-    execSync('npx vite build', {
+    const viteBin = path.join(root, 'node_modules', '.bin', isWin ? 'vite.cmd' : 'vite')
+    const cmd = fs.existsSync(viteBin) ? `"${viteBin}" build` : 'npx vite build'
+    execSync(cmd, {
       cwd: root,
       stdio: 'inherit',
       env: process.env,
@@ -18,14 +64,13 @@ function runBuild() {
     console.error('[start] vite build failed — aborting launch')
     process.exit(1)
   }
-
 }
 
-/** Kill project + installed GUI so single-instance never reuses an old window. */
+/** Kill previous instances quickly without slow WMI / PowerShell queries. */
 function killPreviousInstances() {
   if (!isWin) return
 
-  const images = ['tosu-gui.exe', 'electron.exe']
+  const images = ['tosu-gui.exe', 'electron.exe', 'tosu.exe', 'tosu-ingame-overlay.exe']
   for (const image of images) {
     try {
       execSync(`taskkill /F /IM ${image} /T`, { stdio: 'ignore', windowsHide: true })
@@ -33,44 +78,9 @@ function killPreviousInstances() {
       /* none */
     }
   }
-
-  // Extra pass: anything whose command line points at this repo or product name
-  const script = `
-$root = ${JSON.stringify(root)}
-Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-  Where-Object {
-    $_.CommandLine -and (
-      $_.CommandLine -like ("*" + $root + "*") -or
-      $_.CommandLine -like '*tosu-gui*' -or
-      $_.CommandLine -like '*tosu GUI*' -or
-      $_.Name -eq 'tosu-gui.exe'
-    )
-  } |
-  Where-Object { $_.Name -match 'electron|tosu-gui' } |
-  ForEach-Object {
-    try {
-      Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
-      Write-Host ("[start] killed " + $_.Name + " pid " + $_.ProcessId)
-    } catch {}
-  }
-`
-  const result = spawnSync(
-    'powershell.exe',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
-    { encoding: 'utf8', windowsHide: true }
-  )
-  if (result.stdout) process.stdout.write(result.stdout)
-  if (result.stderr) process.stderr.write(result.stderr)
-
-  // Brief pause so the single-instance lock is released
-  spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Start-Sleep -Milliseconds 400'], {
-    windowsHide: true,
-  })
 }
 
 function ensureBrandedElectron() {
-  // Always use stock electron for dev launches — branded .cache copy is often stale
-  // and confused with the installed product name.
   return require('electron')
 }
 
@@ -82,29 +92,31 @@ function launchApp() {
     process.exit(1)
   }
 
-  console.log('[start] electron:', electronPath)
-  console.log('[start] app dir :', root)
-  console.log('[start] main.js :', mainJs, 'mtime', fs.statSync(mainJs).mtime.toISOString())
+  console.log('[start] launching electron...')
 
-  const child = spawnApp(electronPath, [root], {
+  spawnApp(electronPath, [root], {
     cwd: root,
     env: {
       ...process.env,
       ELECTRON_APP_NAME: APP_NAME,
-      // Force this project path as the app
       ELECTRON_RUN_AS_NODE: undefined,
     },
   })
-
-  child.on('error', (err) => {
-    console.error('[start] failed to launch electron:', err)
-  })
 }
 
-console.log('[start] stopping previous instances…')
+const args = process.argv.slice(2)
+const forceBuild = args.includes('--build') || args.includes('-b') || args.includes('--force')
+
+console.log('[start] closing previous instances…')
 killPreviousInstances()
-console.log('[start] building…')
-runBuild()
+
+if (forceBuild || needsBuild()) {
+  console.log('[start] building…')
+  runBuild()
+} else {
+  console.log('[start] build up-to-date, launching immediately…')
+}
+
 launchApp()
-console.log('[start] launched — if you still see an old UI, close ALL tosu windows and run start-gui.bat again')
+console.log('[start] launched!')
 process.exit(0)

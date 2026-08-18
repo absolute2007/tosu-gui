@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Download, ExternalLink, FolderOpen, Loader2, Settings, Trash2 } from 'lucide-react'
+import { Download, ExternalLink, FolderOpen, Layers, Loader2, Settings, Trash2 } from 'lucide-react'
 import type { TosuCounter } from '../../electron/tosu-api'
 import { CounterPreview } from '../components/CounterPreview'
 import { CounterSettingsModal } from '../components/CounterSettingsModal'
@@ -105,11 +105,19 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
       )}
 
       {listLoading ? (
-        <div className="empty-state">Загрузка...</div>
+        <div className="empty-state">
+          <Loader2 size={20} className="spin" />
+          <span>Загрузка счётчиков…</span>
+        </div>
       ) : counters.length === 0 ? (
         <div className="empty-state">
-          {tab === 'local' ? 'Нет установленных счётчиков' : 'Ничего не найдено'}
-          <p>{tab === 'local' ? 'Перейдите в каталог, чтобы скачать' : 'Попробуйте другой запрос'}</p>
+          <Layers size={24} strokeWidth={1.5} style={{ opacity: 0.45 }} />
+          <p>{tab === 'local' ? 'Нет установленных счётчиков' : 'Счётчики не найдены'}</p>
+          <span className="empty-state-subtitle">
+            {tab === 'local'
+              ? 'Перейдите во вкладку «Каталог», чтобы установить'
+              : 'Попробуйте изменить поисковый запрос'}
+          </span>
         </div>
       ) : (
         <div className="glass-card">

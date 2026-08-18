@@ -26,7 +26,7 @@ export function Sidebar({ active, onChange, osuConnected, showSkins = true }: Pr
     <nav className="sidebar">
       <div className="sidebar-brand">
         <div className="brand-icon">
-          <AppIcon size={22} />
+          <AppIcon size={28} />
         </div>
         <div>
           <div className="brand-name">tosu</div>
