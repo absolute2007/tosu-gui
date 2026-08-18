@@ -302,26 +302,42 @@ code {
 }
 
 .shot-media-maps img {
-  max-width: 420px;
-  margin-inline: auto;
+  max-width: 100%;
 }
 
 .shot-media-duo {
+  position: relative;
   display: flex;
-  align-items: stretch;
-  gap: 12px;
+  align-items: center;
+  padding: 10px 16px 16px 0;
 }
 
 .shot-media-duo .shot-overlay-img {
-  flex: 1.5;
-  min-width: 0;
-  object-fit: cover;
+  display: block;
+  width: 82%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
 .shot-media-duo .shot-panel-img {
-  flex: 0.72;
-  min-width: 0;
-  object-fit: cover;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 38%;
+  max-width: 220px;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: #141414;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.5);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.shot-media-duo:hover .shot-panel-img {
+  transform: translateY(-4px) scale(1.03);
+  box-shadow: 0 26px 56px rgba(0, 0, 0, 0.82);
 }
 
 .shot-copy {
@@ -406,8 +422,15 @@ code {
   }
 
   .shot-media-duo {
-    flex-direction: column;
-    gap: 10px;
+    padding: 0 0 12px 0;
+  }
+
+  .shot-media-duo .shot-overlay-img {
+    width: 78%;
+  }
+
+  .shot-media-duo .shot-panel-img {
+    width: 44%;
   }
 
   .header-actions {
