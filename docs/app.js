@@ -43,7 +43,13 @@ const I18N = {
       "Поиск и скачивание beatmap-сетов с osu.ppy.sh. Фильтры по статусу, режиму и языку, превью трека и установка в Songs — в GUI и в in-game панели.",
     shotSkinsTitle: "Скины",
     shotSkinsBody:
-      "Каталог skins.osuck.net: поиск, фильтры по режиму, превью скриншотов и установка .osk в папку Skins. Уже стоящие скины помечаются отдельно.",
+      "Каталог skins.osuck.net: поиск, фильтры по режиму, превью скриншотов и установка .osk в папку Skins. Быстрый поиск и индикаторы уже установленных скинов.",
+    shotOverlayTitle: "Оверлей",
+    shotOverlayBody:
+      "Внутриигровой оверлей поверх osu!: быстрый вызов по Ctrl+Shift+M, поиск и скачивание карт прямо во время игры в любом режиме экрана.",
+    shotPreviewTitle: "Превью карт",
+    shotPreviewBody:
+      "Интерактивное превью нот, слайдеров и реплея со скином vv_idke_trail и хитсаундами. Точная синхронизация с аудиодорожкой.",
   },
   en: {
     lead:
@@ -63,18 +69,15 @@ const I18N = {
     altOverlay: "In-game overlay settings and PP counters",
     altMaps: "Maps browser: search, filters, and download",
     altSkins: "Skins catalog: search, filters, and install",
-    shotMainTitle: "Status",
-    shotMainBody:
-      "tosu and osu! health in one place: reader running, game detected, API version and port. Restart tosu and check updates without opening a browser.",
-    shotOverlayTitle: "Overlay",
-    shotOverlayBody:
-      "In-game overlay on top of osu!: enable toggle, hotkey, FPS cap, anti-aliasing. PP counters sit over the game and can be moved from inside the client.",
-    shotMapsTitle: "Maps",
-    shotMapsBody:
-      "Search and download beatmap sets from osu.ppy.sh. Status, mode, and language filters, track preview, and install into Songs — in the GUI and the in-game panel.",
     shotSkinsTitle: "Skins",
     shotSkinsBody:
-      "Browse skins.osuck.net: search, mode filters, screenshot previews, and install .osk into the Skins folder. Already installed skins are marked in the list.",
+      "Browse skins.osuck.net: search, mode filters, screenshot previews, and install .osk directly into your Skins folder.",
+    shotOverlayTitle: "Overlay",
+    shotOverlayBody:
+      "In-game overlay inside osu!: press Ctrl+Shift+M to search and download beatmaps directly during gameplay in any screen mode.",
+    shotPreviewTitle: "Map Preview",
+    shotPreviewBody:
+      "Interactive replay preview with hit objects, sliders, vv_idke_trail skin, and hitsounds synchronized to the audio track.",
   },
 };
 
