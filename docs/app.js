@@ -7,11 +7,62 @@ const setupLink = document.getElementById("download-setup");
 const zipLink = document.getElementById("download-zip");
 const meta = document.getElementById("download-meta");
 
+// Lightbox elements
+const lightbox = document.getElementById("lightbox");
+const lightboxImg = document.getElementById("lightbox-img");
+const lightboxTitle = document.getElementById("lightbox-title");
+const lightboxDesc = document.getElementById("lightbox-desc");
+const lightboxCounter = document.getElementById("lightbox-counter");
+const lightboxPrev = document.getElementById("lightbox-prev");
+const lightboxNext = document.getElementById("lightbox-next");
+
 /** @type {{ tag: string, name: string, publishedAt: string, setup?: object, zip?: object }[]} */
 let releases = [];
 
 /** @type {"ru" | "en"} */
 let lang = "ru";
+
+let currentGalleryIndex = 0;
+let lastFocusedElement = null;
+
+const GALLERY = [
+  {
+    id: "main",
+    src: "assets/screenshots/Main.png",
+    titleKey: "shotMainTitle",
+    descKey: "shotMainBody",
+  },
+  {
+    id: "overlay",
+    src: "assets/screenshots/Overlay.png",
+    titleKey: "shotOverlayTitle",
+    descKey: "shotOverlayBody",
+  },
+  {
+    id: "panel",
+    src: "assets/screenshots/OverlayPanel.png",
+    titleKey: "shotPanelTitle",
+    descKey: "shotPanelBody",
+  },
+  {
+    id: "maps",
+    src: "assets/screenshots/Maps.png",
+    titleKey: "shotMapsTitle",
+    descKey: "shotMapsBody",
+  },
+  {
+    id: "preview",
+    src: "assets/screenshots/Preview.png",
+    titleKey: "shotPreviewTitle",
+    descKey: "shotPreviewBody",
+  },
+  {
+    id: "skins",
+    src: "assets/screenshots/Skins.png",
+    titleKey: "shotSkinsTitle",
+    descKey: "shotSkinsBody",
+  },
+];
 
 const I18N = {
   ru: {
@@ -31,6 +82,7 @@ const I18N = {
     altMain: "Главное окно: статус tosu и подключение к osu!",
     altOverlay: "Настройки внутриигрового оверлея и PP-счётчиков",
     altMaps: "Браузер карт: поиск, фильтры и скачивание",
+    altPreview: "Интерактивное превью нот, слайдеров и реплея",
     altSkins: "Каталог скинов: поиск, фильтры и установка",
     shotMainTitle: "Статус",
     shotMainBody:
@@ -38,6 +90,9 @@ const I18N = {
     shotOverlayTitle: "Оверлей",
     shotOverlayBody:
       "Внутриигровой оверлей поверх osu!: быстрый вызов по Ctrl+Shift+M, поиск и скачивание карт прямо во время игры в любом режиме экрана. PP-счётчики настраиваются прямо в клиенте.",
+    shotPanelTitle: "Внутриигровая панель",
+    shotPanelBody:
+      "Компактная панель прямо в игре: быстрый доступ к каталогу карт, загрузка в один клик и управление активным треком.",
     shotMapsTitle: "Карты",
     shotMapsBody:
       "Поиск и скачивание beatmap-сетов с osu.ppy.sh. Фильтры по статусу, режиму и языку, превью трека и установка в Songs — в GUI и во внутриигровой панели.",
@@ -73,6 +128,9 @@ const I18N = {
     shotOverlayTitle: "Overlay",
     shotOverlayBody:
       "In-game overlay inside osu!: press Ctrl+Shift+M to search and download beatmaps directly during gameplay in any screen mode. PP counters can be moved in-game.",
+    shotPanelTitle: "In-game Panel",
+    shotPanelBody:
+      "Compact overlay sidebar: quick beatmap catalog search, instant download, and current track controls directly inside osu!.",
     shotMapsTitle: "Maps",
     shotMapsBody:
       "Search and download beatmap sets from osu.ppy.sh. Status, mode, and language filters, track preview, and install into Songs — in the GUI and the in-game panel.",
@@ -126,6 +184,7 @@ function applyLang(next) {
     [".shot-main-img", "altMain"],
     [".shot-overlay-img", "altOverlay"],
     [".shot-maps-img", "altMaps"],
+    [".shot-preview-img", "altPreview"],
     [".shot-skins-img", "altSkins"],
   ];
   for (const [sel, key] of alts) {
@@ -133,10 +192,11 @@ function applyLang(next) {
     if (img) img.alt = t(key);
   }
 
-  if (releases.length) updateDownloadUi();
-  else if (meta && !meta.classList.contains("-error")) {
-    // keep loading/error messages handled elsewhere
+  if (lightbox && lightbox.classList.contains("is-open")) {
+    updateLightboxContent();
   }
+
+  if (releases.length) updateDownloadUi();
 }
 
 function formatBytes(n) {
@@ -246,7 +306,6 @@ function applyReleases(list) {
 
 async function fetchJson(url, opts = {}) {
   const headers = { ...(opts.headers || {}) };
-  // Only send GitHub media type to the API — not needed for static fallback
   if (/api\.github\.com/i.test(url)) {
     headers.Accept = "application/vnd.github+json";
   } else if (!headers.Accept) {
@@ -263,7 +322,6 @@ function versionKey(tag) {
     .split(/[^\d]+/)
     .filter(Boolean)
     .map((n) => parseInt(n, 10) || 0);
-  // pad for stable compare
   while (m.length < 4) m.push(0);
   return m;
 }
@@ -277,7 +335,6 @@ function compareTagsDesc(a, b) {
   return 0;
 }
 
-/** Merge API + local fallback by tag; keep the richer asset set; sort newest first. */
 function mergeReleaseLists(...lists) {
   /** @type {Map<string, any>} */
   const byTag = new Map();
@@ -289,7 +346,6 @@ function mergeReleaseLists(...lists) {
         byTag.set(r.tag_name, r);
         continue;
       }
-      // Prefer entry that has more assets / newer published_at
       const prevN = Array.isArray(prev.assets) ? prev.assets.length : 0;
       const nextN = Array.isArray(r.assets) ? r.assets.length : 0;
       if (nextN > prevN) byTag.set(r.tag_name, r);
@@ -309,7 +365,6 @@ function mergeReleaseLists(...lists) {
 
 async function loadReleases() {
   try {
-    // Parallel: GitHub API is often rate-limited for browsers; releases.json is the reliable fallback.
     const apiP = fetchJson(API).catch((err) => {
       console.warn("[releases] GitHub API:", err);
       return null;
@@ -335,12 +390,264 @@ async function loadReleases() {
   }
 }
 
+/* ==========================================================================
+   LIGHTBOX / IMAGE VIEWER
+   ========================================================================== */
+
+function updateLightboxContent() {
+  const item = GALLERY[currentGalleryIndex];
+  if (!item) return;
+
+  lightboxImg.classList.add("is-loading");
+  lightboxImg.src = item.src;
+  lightboxImg.alt = t(item.titleKey);
+  lightboxImg.onload = () => {
+    lightboxImg.classList.remove("is-loading");
+  };
+
+  lightboxTitle.textContent = t(item.titleKey);
+  lightboxDesc.textContent = t(item.descKey);
+  lightboxCounter.textContent = `${currentGalleryIndex + 1} / ${GALLERY.length}`;
+}
+
+function openLightbox(indexOrId) {
+  let index = 0;
+  if (typeof indexOrId === "number") {
+    index = indexOrId;
+  } else {
+    index = GALLERY.findIndex((item) => item.id === indexOrId);
+    if (index === -1) index = 0;
+  }
+
+  currentGalleryIndex = index;
+  lastFocusedElement = document.activeElement;
+
+  updateLightboxContent();
+
+  lightbox.classList.add("is-open");
+  lightbox.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+
+  if (lightboxPrev) lightboxPrev.focus();
+}
+
+function closeLightbox() {
+  if (!lightbox.classList.contains("is-open")) return;
+  lightbox.classList.remove("is-open");
+  lightbox.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+
+  if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
+    lastFocusedElement.focus();
+  }
+}
+
+function nextLightbox() {
+  currentGalleryIndex = (currentGalleryIndex + 1) % GALLERY.length;
+  updateLightboxContent();
+}
+
+function prevLightbox() {
+  currentGalleryIndex = (currentGalleryIndex - 1 + GALLERY.length) % GALLERY.length;
+  updateLightboxContent();
+}
+
+function initLightbox() {
+  document.querySelectorAll("[data-gallery-id]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      const id = el.getAttribute("data-gallery-id");
+      openLightbox(id);
+    });
+  });
+
+  document.querySelectorAll("[data-close-lightbox]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeLightbox();
+    });
+  });
+
+  if (lightboxPrev) lightboxPrev.addEventListener("click", prevLightbox);
+  if (lightboxNext) lightboxNext.addEventListener("click", nextLightbox);
+
+  document.addEventListener("keydown", (e) => {
+    if (!lightbox.classList.contains("is-open")) return;
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeLightbox();
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      nextLightbox();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      prevLightbox();
+    }
+  });
+}
+
+/* ==========================================================================
+   DYNAMIC WINDING CONNECTOR LINE
+   ========================================================================== */
+
+function drawConnectorPath() {
+  const shotsSection = document.querySelector(".shots");
+  const svg = document.querySelector(".shots-connector-svg");
+  const linePath = document.querySelector(".connector-path");
+  const dotsGroup = document.querySelector(".connector-dots");
+
+  if (!shotsSection || !svg || !linePath) return;
+
+  const rows = Array.from(shotsSection.querySelectorAll(".shot-row"));
+  if (rows.length < 2) return;
+
+  const sectionRect = shotsSection.getBoundingClientRect();
+  if (sectionRect.width === 0 || sectionRect.height === 0) return;
+
+  const isWide = window.innerWidth > 768;
+  const anchors = [];
+
+  rows.forEach((row, i) => {
+    const media = row.querySelector(".shot-media");
+    if (!media) return;
+    const mRect = media.getBoundingClientRect();
+
+    const relLeft = mRect.left - sectionRect.left;
+    const relRight = mRect.right - sectionRect.left;
+    const relTop = mRect.top - sectionRect.top;
+    const relBottom = mRect.bottom - sectionRect.top;
+    const relCx = (relLeft + relRight) / 2;
+    const relCy = (relTop + relBottom) / 2;
+
+    const isFlip = row.classList.contains("-flip");
+
+    if (isWide) {
+      // Desktop: alternating anchors linking the cards
+      if (!isFlip) {
+        // Left column media: start anchor near bottom-right
+        anchors.push({
+          x: relRight - 16,
+          y: relBottom - 24,
+          side: "left",
+          cx: relCx,
+          cy: relCy,
+          top: relTop,
+          bottom: relBottom,
+        });
+      } else {
+        // Right column media: anchor near top-left or bottom-left
+        anchors.push({
+          x: relLeft + 16,
+          y: relTop + 24,
+          side: "right",
+          cx: relCx,
+          cy: relCy,
+          top: relTop,
+          bottom: relBottom,
+        });
+      }
+    } else {
+      // Mobile: vertically stacked, subtle wave
+      const waveOffset = (i % 2 === 0 ? 1 : -1) * (mRect.width * 0.28);
+      anchors.push({
+        x: Math.max(20, Math.min(sectionRect.width - 20, relCx + waveOffset)),
+        y: relCy,
+        side: "center",
+        cx: relCx,
+        cy: relCy,
+        top: relTop,
+        bottom: relBottom,
+      });
+    }
+  });
+
+  if (anchors.length < 2) return;
+
+  let d = `M ${anchors[0].x.toFixed(1)} ${anchors[0].y.toFixed(1)}`;
+  let dotsSvg = "";
+
+  // Render anchor node circles
+  anchors.forEach((pt) => {
+    dotsSvg += `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="5" class="connector-node-outer" />`;
+    dotsSvg += `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="2" class="connector-node-inner" />`;
+  });
+
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const p1 = anchors[i];
+    const p2 = anchors[i + 1];
+
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+
+    if (isWide) {
+      // S-curve winding around the text between rows
+      const cp1x = p1.x + dx * 0.45;
+      const cp1y = p1.y + dy * 0.15;
+      const cp2x = p2.x - dx * 0.45;
+      const cp2y = p2.y - dy * 0.15;
+
+      d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    } else {
+      // Mobile curve
+      const cp1x = p1.x;
+      const cp1y = p1.y + dy * 0.5;
+      const cp2x = p2.x;
+      const cp2y = p2.y - dy * 0.5;
+
+      d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+  }
+
+  linePath.setAttribute("d", d);
+  if (dotsGroup) dotsGroup.innerHTML = dotsSvg;
+}
+
+function initConnector() {
+  const shotsSection = document.querySelector(".shots");
+  if (!shotsSection) return;
+
+  drawConnectorPath();
+
+  // Redraw when images finish loading
+  document.querySelectorAll(".shots img").forEach((img) => {
+    if (img.complete) {
+      drawConnectorPath();
+    } else {
+      img.addEventListener("load", drawConnectorPath, { once: true });
+    }
+  });
+
+  // Redraw on resize
+  let resizeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(drawConnectorPath, 50);
+  });
+
+  if (typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver(() => {
+      drawConnectorPath();
+    });
+    observer.observe(shotsSection);
+  }
+}
+
+/* ==========================================================================
+   INITIALIZATION
+   ========================================================================== */
+
 document.querySelectorAll(".lang-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     applyLang(btn.getAttribute("data-lang") || "en");
+    drawConnectorPath();
   });
 });
 
 versionSelect.addEventListener("change", updateDownloadUi);
+
 applyLang(detectLang());
 loadReleases();
+initLightbox();
+initConnector();
+
