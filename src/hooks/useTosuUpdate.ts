@@ -99,17 +99,20 @@ export function useTosuUpdate(
           'error'
         )
       } else {
-        onToast(`tosu обновлён до v${result.version}`, 'success')
+        onToast(`tosu успешно обновлён до v${result.version}`, 'success')
       }
       await onInstalled?.()
+      void checkForUpdate(true, { notify: false })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка обновления'
+      const raw = err instanceof Error ? err.message : 'Ошибка обновления'
+      const msg = raw.replace(/^Error:\s*/i, '').trim()
       onToast(msg, 'error')
+      void checkForUpdate(true, { notify: false })
     } finally {
       setInstalling(false)
       setProgress(null)
     }
-  }, [installing, onInstalled, onToast])
+  }, [checkForUpdate, installing, onInstalled, onToast])
 
   const setCheckTosuUpdates = useCallback(async (enabled: boolean) => {
     setCheckEnabled(enabled)

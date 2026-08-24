@@ -10,8 +10,14 @@ import { TosuSocketBridge } from './tosu-socket'
 import { setupTray } from './tray'
 import { ensureGameOverlay } from './overlay-cleanup'
 import { patchIngameOverlay } from './overlay-patch'
-import { getInstalledVersion, TosuUpdater } from './tosu-updater'
-import { lookupUserBeatmapScore } from './osu-user-score'
+import {
+  backupCurrentInstall,
+  cleanupBackup,
+  formatUserFacingError,
+  getInstalledVersion,
+  restoreBackup,
+  TosuUpdater,
+} from './tosu-updater'
 import {
   checkAppUpdate,
   downloadAndInstallAppUpdate,
@@ -864,63 +870,81 @@ ipcMain.handle('tosu:install-update', async () => {
   }
 
   const tosuDir = tosuProcess.getTosuDir()
+  const previousVersion = getInstalledVersion(tosuDir) || 'unknown'
   const sendProgress = (progress: import('./tosu-updater').UpdateProgress) => {
     mainWindow?.webContents.send('tosu:update-progress', progress)
   }
 
   tosuSocket.disconnect()
 
-  let installedVersion: string | null = null
+  let stagedVersion: string | null = null
 
   try {
     sendProgress({ phase: 'installing', progress: 2, message: 'Остановка tosu…' })
     await tosuProcess.stopForUpdate()
 
-    installedVersion = await tosuUpdater.installUpdate(tosuDir, sendProgress)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Ошибка обновления'
-    sendProgress({ phase: 'error', progress: 0, message })
-    tosuProcess.endUpdate()
+    // 1. Snapshot current installation for safe rollback
+    await backupCurrentInstall(tosuDir)
 
+    // 2. Download, extract and stage update files
+    stagedVersion = await tosuUpdater.stageAndInstall(tosuDir, sendProgress)
+
+    // 3. Best-effort overlay patching
+    sendProgress({ phase: 'restarting', progress: 93, message: 'Подготовка оверлея…' })
     try {
-      await tosuProcess.startAfterUpdate({ startupTimeoutMs: 60_000 })
-      tosuApi.setBaseUrl(getTosuBaseUrl())
-      tosuApi.setEnvPath(tosuProcess.getEnvPath())
-      startSocketBridge()
-    } catch (restartErr) {
-      console.error('[tosu] failed to restart after update error:', restartErr)
+      await ensureGameOverlay(tosuDir, stagedVersion)
+      await patchIngameOverlay(tosuDir)
+    } catch (overlayErr) {
+      console.warn('[tosu] overlay prepare after update failed (non-fatal):', overlayErr)
     }
 
-    throw new Error(message)
-  }
+    sendProgress({ phase: 'restarting', progress: 95, message: 'Запуск обновлённого tosu…' })
+    const guiSettings = readGuiSettings()
+    setOverlayAntialiasing(tosuDir, guiSettings.disableAntialiasing)
 
-  // Overlay prep is best-effort only — never abort the update restart because of it
-  sendProgress({ phase: 'restarting', progress: 93, message: 'Подготовка оверлея…' })
-  try {
-    await ensureGameOverlay(tosuDir, installedVersion)
-    await patchIngameOverlay(tosuDir)
-  } catch (overlayErr) {
-    console.warn('[tosu] overlay prepare after update failed (non-fatal):', overlayErr)
-  }
-
-  sendProgress({ phase: 'restarting', progress: 95, message: 'Перезапуск tosu…' })
-  const guiSettings = readGuiSettings()
-  setOverlayAntialiasing(tosuDir, guiSettings.disableAntialiasing)
-
-  let restartFailed = false
-  try {
-    // Always force-respawn after files were replaced (even if a stale child ref exists)
-    await tosuProcess.startAfterUpdate({ startupTimeoutMs: 30_000 })
+    // 4. Start updated tosu and wait for API health check
+    await tosuProcess.startAfterUpdate({ startupTimeoutMs: 35_000 })
     tosuApi.setBaseUrl(getTosuBaseUrl())
     tosuApi.setEnvPath(tosuProcess.getEnvPath())
     startSocketBridge()
-    sendProgress({ phase: 'done', progress: 100, message: 'Готово' })
-  } catch (restartErr) {
-    restartFailed = true
-    tosuProcess.endUpdate()
-    console.error('[tosu] restart after update failed:', restartErr)
-  }
 
-  writeGuiSettings({ dismissedTosuVersion: null })
-  return { ok: true, version: installedVersion, restartFailed }
+    // 5. Success! Commit the new version and cleanup backup/temp
+    tosuUpdater.commitUpdate(tosuDir, stagedVersion)
+    writeGuiSettings({ dismissedTosuVersion: null })
+    sendProgress({ phase: 'done', progress: 100, message: 'Готово' })
+
+    return { ok: true, version: stagedVersion, restartFailed: false }
+  } catch (err) {
+    const errorReason = formatUserFacingError(err, 'Ошибка при установке или запуске обновления')
+    console.error('[tosu] update failed, starting rollback:', err)
+
+    sendProgress({
+      phase: 'restarting',
+      progress: 96,
+      message: 'Откат к предыдущей версии…',
+    })
+
+    // Roll back files to backup snapshot
+    await restoreBackup(tosuDir)
+    cleanupBackup(tosuDir)
+
+    // Restart old working tosu
+    let oldRecovered = false
+    try {
+      await tosuProcess.startAfterUpdate({ startupTimeoutMs: 40_000 })
+      tosuApi.setBaseUrl(getTosuBaseUrl())
+      tosuApi.setEnvPath(tosuProcess.getEnvPath())
+      startSocketBridge()
+      oldRecovered = true
+    } catch (restartErr) {
+      console.error('[tosu] failed to restart old version after rollback:', restartErr)
+    }
+
+    const failureMessage = oldRecovered
+      ? `Не удалось обновить tosu (${errorReason}). Автоматически восстановлена предыдущая рабочая версия (v${previousVersion}).`
+      : `Не удалось обновить tosu (${errorReason}). Попробуйте перезапустить приложение.`
+
+    sendProgress({ phase: 'error', progress: 0, message: failureMessage })
+    throw new Error(failureMessage)
+  }
 })
