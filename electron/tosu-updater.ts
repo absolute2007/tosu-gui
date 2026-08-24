@@ -591,11 +591,8 @@ export class TosuUpdater {
       const sourceRoot = findTosuRoot(extractDir)
       if (!sourceRoot) throw new Error('tosu.exe не найден в загруженном архиве')
 
-      onProgress({ phase: 'installing', progress: 90, message: 'Установка файлов…' })
+      onProgress({ phase: 'installing', progress: 92, message: 'Установка файлов…' })
       await mergeInstall(sourceRoot, tosuDir)
-
-      // Overlay installation
-      await installMatchingOverlay(tosuDir, info.latestVersion, onProgress)
 
       if (fs.existsSync(zipPath)) {
         try { fs.unlinkSync(zipPath) } catch { /* ignore */ }

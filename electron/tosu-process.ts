@@ -340,35 +340,19 @@ export class TosuProcess {
       cleanupOverlayAsideDirs(tosuDir)
 
       if (isGameOverlayBroken(tosuDir)) {
-        console.log('[tosu] broken game-overlay, best-effort cleanup…')
         await removeGameOverlay(tosuDir)
       }
 
-      const tosuVersion = getInstalledVersion(tosuDir)
-      let overlayReady = await ensureGameOverlay(tosuDir, tosuVersion)
+      await ensureGameOverlay(tosuDir)
 
-      // If missing/mismatched, try downloading the matching tosu-overlay zip ourselves
-      // (tosu would also do this on start, but GitHub API failures used to leave users
-      // stuck with a stamped-old overlay that never painted).
-      if (!overlayReady && tosuVersion) {
-        console.log('[tosu] fetching matching game-overlay for', tosuVersion)
-        await installMatchingOverlay(tosuDir, tosuVersion)
-        overlayReady = await ensureGameOverlay(tosuDir, tosuVersion)
-      }
-
-      if (!overlayReady) {
-        console.warn('[tosu] game-overlay unavailable — starting tosu without overlay prep')
-        return
-      }
-
-      // Patch tray before launch so we never need to kill a live overlay
+      // Best-effort silent tray patch
       try {
         await patchIngameOverlay(tosuDir)
-      } catch (err) {
-        console.warn('[tosu] overlay patch failed (non-fatal):', err)
+      } catch {
+        /* ignore */
       }
-    } catch (err) {
-      console.warn('[tosu] prepareOverlay failed (non-fatal):', err)
+    } catch {
+      /* prepareOverlay must never throw */
     }
   }
 

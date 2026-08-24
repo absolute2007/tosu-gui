@@ -941,8 +941,8 @@ ipcMain.handle('tosu:install-update', async () => {
     }
 
     const failureMessage = oldRecovered
-      ? `Не удалось обновить tosu (${errorReason}). Автоматически восстановлена предыдущая рабочая версия (v${previousVersion}).`
-      : `Не удалось обновить tosu (${errorReason}). Попробуйте перезапустить приложение.`
+      ? `Не удалось обновить tosu: ${errorReason} (восстановлена v${previousVersion})`
+      : `Не удалось обновить tosu: ${errorReason}`
 
     sendProgress({ phase: 'error', progress: 0, message: failureMessage })
     throw new Error(failureMessage)

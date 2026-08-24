@@ -168,42 +168,17 @@ export async function seedGameOverlayIfMissing(tosuDir: string): Promise<boolean
  * overlay folder is removed so the matching package can be reinstalled
  * (by tosu itself or by installMatchingOverlay).
  */
-export async function ensureGameOverlay(tosuDir: string, tosuVersion?: string | null): Promise<boolean> {
+export async function ensureGameOverlay(tosuDir: string, _tosuVersion?: string | null): Promise<boolean> {
   try {
     cleanupOverlayAsideDirs(tosuDir)
 
     if (isGameOverlayBroken(tosuDir)) {
-      console.log('[overlay] broken game-overlay detected, trying to remove…')
-      await removeGameOverlay(tosuDir)
-    }
-
-    if (
-      isGameOverlayValid(tosuDir) &&
-      tosuVersion &&
-      !isGameOverlayVersionMatch(tosuDir, tosuVersion)
-    ) {
-      console.log(
-        '[overlay] version mismatch (overlay=%s tosu=%s) — removing stale game-overlay',
-        getGameOverlayVersion(tosuDir),
-        normalizeVersion(tosuVersion)
-      )
+      console.log('[overlay] broken game-overlay detected, trying to clean up…')
       await removeGameOverlay(tosuDir)
     }
 
     if (!isGameOverlayValid(tosuDir)) {
-      const seeded = await seedGameOverlayIfMissing(tosuDir)
-      if (!seeded) {
-        console.warn('[overlay] game-overlay missing/invalid — tosu will download it on start')
-        return false
-      }
-
-      // Seed may still be for an older tosu — drop it if versions diverge so
-      // tosu's updater can fetch the matching overlay zip.
-      if (tosuVersion && !isGameOverlayVersionMatch(tosuDir, tosuVersion)) {
-        console.log('[overlay] seed version does not match tosu — leaving for redownload')
-        await removeGameOverlay(tosuDir)
-        return false
-      }
+      await seedGameOverlayIfMissing(tosuDir)
     }
 
     return isGameOverlayValid(tosuDir)
