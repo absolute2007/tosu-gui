@@ -104,9 +104,13 @@ export function useTosuUpdate(
       await onInstalled?.()
       void checkForUpdate(true, { notify: false })
     } catch (err) {
-      const raw = err instanceof Error ? err.message : 'Ошибка обновления'
-      const msg = raw.replace(/^Error:\s*/i, '').trim()
-      onToast(msg, 'error')
+      const raw = err instanceof Error ? err.message : String(err ?? 'Ошибка обновления')
+      const msg = raw
+        .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+        .replace(/^Error:\s*/i, '')
+        .replace(/^Error:\s*/i, '')
+        .trim()
+      onToast(msg || 'Ошибка обновления', 'error')
       void checkForUpdate(true, { notify: false })
     } finally {
       setInstalling(false)
