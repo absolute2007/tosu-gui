@@ -496,6 +496,8 @@ export class TosuProcess {
 
         await this.waitForProcessesGone(['tosu.exe', 'tosu-ingame-overlay.exe'], 15_000)
         await this.waitForPortFree(5000)
+        // Give Windows OS kernel and antivirus a brief moment to close all file handles
+        await sleep(500)
       } catch (err) {
         this.updating = false
         throw err
