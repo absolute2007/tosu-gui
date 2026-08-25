@@ -1,23 +1,18 @@
 "use strict";
 /**
- * Tray-free tosu ingame-overlay + Maps mode (tosu-gui).
- *
- * Maps opens as a same-document panel over counters (show/hide, no navigation).
- * That keeps filters/results and feels closer to tosu (no full page reload lag).
- * Layout editor uses inputCaptureStart; maps mode does NOT (separate capture).
+ * tosu In-Game Overlay with Maps Browser support (tosu-gui).
+ * Compatible with tosu 4.26.0+ (@asdf-overlay/core v2).
  */
 const { app, BrowserWindow, Menu, protocol, session } = require("electron");
 const { on } = require("node:events");
 const EventEmitter = require("node:events");
 const fs = require("node:fs");
 const path = require("node:path");
-const { Overlay, defaultDllDir, length } = require("@asdf-overlay/core");
+const { Overlay, defaultDllDir } = require("@asdf-overlay/core");
 const { mapKeycode } = require("@asdf-overlay/electron/input/conv");
 const { ElectronOverlayInput } = require("@asdf-overlay/electron/input");
 const { ElectronOverlaySurface } = require("@asdf-overlay/electron/surface");
 
-const MAPS_APP_URL = "http://127.0.0.1:24777/maps-app.js";
-const MAPS_ENGINE_URL = "http://127.0.0.1:24777/osu-preview-engine.js";
 const MAPS_KEYBIND_FILES = [
   path.join(path.dirname(process.execPath), "maps-overlay-keybind.txt"),
   path.join(path.dirname(process.execPath), "..", "maps-overlay-keybind.txt"),
@@ -91,22 +86,7 @@ async function loadMainPage(webContents) {
   await webContents.loadFile(path.join(__dirname, "../renderer/index.html"));
 }
 
-/** Must match APP_VERSION in maps-app.js — mismatch remounts panel and wipes filters. */
-const MAPS_APP_VERSION = 19;
-
-function loadScriptTag(src, attr) {
-  return `
-    await new Promise(function (resolve, reject) {
-      var s = document.createElement('script');
-      s.src = ${JSON.stringify(src)} + '?v=' + need;
-      s.async = false;
-      s.setAttribute(${JSON.stringify(attr)}, String(need));
-      s.onload = function () { resolve(); };
-      s.onerror = function () { reject(new Error(${JSON.stringify(src)} + ' load failed')); };
-      document.documentElement.appendChild(s);
-    });
-  `;
-}
+const preloadPath = path.join(__dirname, "../preload/index.js");
 
 function readStaticFile(filename) {
   const candidateDirs = [
@@ -132,7 +112,7 @@ async function ensureMapsApp(webContents) {
   let isReady = false;
   try {
     isReady = await webContents.executeJavaScript(
-      `!!(window.__TosuGuiMapsApp && window.__TosuGuiMapsAppVersion === ${MAPS_APP_VERSION} && typeof window.__TosuGuiMapsApp.show === 'function' && window.TosuOsuPreview)`,
+      `!!(window.__TosuGuiMapsApp && typeof window.__TosuGuiMapsApp.show === 'function' && window.TosuOsuPreview)`,
       true
     );
   } catch {
@@ -153,23 +133,35 @@ async function ensureMapsApp(webContents) {
     }
   }
 
-  // Fallback to HTTP script tags
-  await webContents.executeJavaScript(
-    `
+  // Fallback: try loading from server port 24050
+  await webContents.executeJavaScript(`
     (async function () {
-      var need = ${MAPS_APP_VERSION};
-      ${loadScriptTag(MAPS_ENGINE_URL, "data-tosu-gui-engine")}
-      ${loadScriptTag(MAPS_APP_URL, "data-tosu-gui-maps")}
-      return !!(window.__TosuGuiMapsApp && window.__TosuGuiMapsApp.show && window.TosuOsuPreview);
+      function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+          var s = document.createElement('script');
+          s.src = src;
+          s.async = false;
+          s.onload = function () { resolve(); };
+          s.onerror = function () { reject(new Error(src + ' load failed')); };
+          document.documentElement.appendChild(s);
+        });
+      }
+      try {
+        await loadScript('http://127.0.0.1:24050/Maps%20Browser%20by%20tosu-gui/osu-preview-engine.js');
+        await loadScript('http://127.0.0.1:24050/Maps%20Browser%20by%20tosu-gui/maps-app.js');
+      } catch (e) {
+        console.warn('Maps scripts HTTP load failed', e);
+      }
     })()
-  `,
-    true
-  ).catch((e) => console.warn("[maps] HTTP script tag load error:", e));
+  `, true).catch(() => {});
 }
 
 async function mapsShow(webContents) {
   await ensureMapsApp(webContents);
-  await webContents.executeJavaScript(`window.__TosuGuiMapsApp.show()`, true);
+  await webContents.executeJavaScript(
+    `window.__TosuGuiMapsApp && window.__TosuGuiMapsApp.show && window.__TosuGuiMapsApp.show()`,
+    true
+  );
 }
 
 async function mapsHide(webContents) {
@@ -201,13 +193,12 @@ async function mapsPreload(webContents) {
       `window.__TosuGuiMapsApp && window.__TosuGuiMapsApp.mount && window.__TosuGuiMapsApp.mount()`,
       true
     );
-  } catch (err) {
-    console.debug("[maps] preload:", err && err.message);
+  } catch {
+    /* ignore */
   }
 }
 
 function consoleMessageText(event, level, message) {
-  // Electron ≥28: details on event; older: (event, level, message)
   if (event && typeof event === "object" && typeof event.message === "string") {
     return event.message;
   }
@@ -216,51 +207,47 @@ function consoleMessageText(event, level, message) {
   return String(message ?? level ?? "");
 }
 
-const preloadPath = path.join(__dirname, "../preload/index.js");
-
 class OverlayProcess {
-  constructor(pid, windowId, overlay, window, luid) {
-    this.pid = pid;
-    this.windowId = windowId;
-    this.overlay = overlay;
+  constructor(surface, window) {
+    this.surface = surface;
     this.window = window;
-    this.luid = luid;
     this.event = new EventEmitter();
     this.keybind = new Keybind([]);
     this.mapsKeybind = new Keybind(readMapsKeybindKeys());
-    this.input = null;
+    this.inputs = [];
     this.configurationEnabled = false;
     this.mapsEnabled = false;
     this._togglingMaps = false;
-    this._toggleMapsSince = 0;
-    /** True while we intentionally call blockInput(false) — ignore spurious input_blocking_ended. */
-    this._releasingBlock = false;
-    this._closingMaps = false;
 
-    overlay.event.once("disconnected", () => {
-      this.window.destroy();
-      this.event.emit("destroyed");
-    });
+    const { overlay } = surface;
 
-    overlay.event.on("resized", (hwnd, width, height) => {
-      if (hwnd !== this.windowId) return;
-      this.window.setSize(width, height);
+    overlay.event.on("tracing_event", (e, t) => this.onOverlayLog(e, t));
+    overlay.event.once("disconnected", () => this.onDisconnected());
+
+    overlay.event.on("surface_resized", (id, width, height) => {
+      if (id === this.surface.id) {
+        console.debug("surface resized id:", this.surface.id, "width:", width, "height:", height);
+        this.window.setSize(width, height);
+      }
     });
 
     overlay.event.on("input_blocking_ended", () => {
-      // Fires often in windowed mode (focus loss / our own unblock). Don't fight ourselves.
-      if (this._releasingBlock || this._togglingMaps || this._closingMaps) return;
-      // Only clean up if we actually thought maps/config were open
-      if (!this.mapsEnabled && !this.configurationEnabled) return;
-      void this.forceCloseMaps("input_blocking_ended");
+      if (this.mapsEnabled) {
+        this.forceCloseMaps("input_blocking_ended");
+      }
+      if (this.configurationEnabled) {
+        this.closeConfiguration();
+        this.resetInputs();
+        this.configurationEnabled = false;
+      }
     });
 
-    overlay.event.on("keyboard_input", (_, input) => {
-      if (input.kind !== "Key") return;
+    overlay.event.on("window_keyboard_input", (windowId, keyEvent) => {
+      if (keyEvent.type !== "Key") return;
 
-      // Escape always force-closes maps if open
-      if (input.state === "Pressed") {
-        const code = input.key && input.key.code;
+      // Escape closes Maps Browser
+      if (keyEvent.state === "Pressed") {
+        const code = keyEvent.key && keyEvent.key.code;
         if (code === "Escape" || code === "Esc") {
           if (this.mapsEnabled || this._togglingMaps) {
             void this.forceCloseMaps("escape");
@@ -269,23 +256,38 @@ class OverlayProcess {
         }
       }
 
-      if (this.mapsKeybind.update(input.key, input.state)) {
+      // Maps Browser Hotkey (Ctrl + Shift + M)
+      if (this.mapsKeybind.update(keyEvent.key, keyEvent.state)) {
         this.keybind.reset();
         this.mapsKeybind.reset();
-        void this.toggleMapsMode();
+        void this.toggleMapsMode(windowId);
         return;
       }
 
       if (this.mapsEnabled) return;
 
-      if (this.keybind.update(input.key, input.state)) {
+      // Tosu Layout Editor Hotkey (Delete)
+      if (this.keybind.update(keyEvent.key, keyEvent.state)) {
         this.mapsKeybind.reset();
         this.keybind.reset();
-        void this.toggleConfigurationMode();
+        this.configurationEnabled = !this.configurationEnabled;
+        overlay.blockInput(this.configurationEnabled);
+
+        if (this.configurationEnabled) {
+          this.inputs.push(ElectronOverlayInput.connect({ id: windowId, overlay }, window.webContents));
+          const targetWindowId = this.surface.info.ty.windowId;
+          if (targetWindowId && targetWindowId !== windowId) {
+            this.inputs.push(ElectronOverlayInput.connect({ id: targetWindowId, overlay }, window.webContents));
+          }
+          this.openConfiguration();
+        } else {
+          this.closeConfiguration();
+          this.resetInputs();
+        }
       }
     });
 
-    // Close from maps panel (X / shade). Always force-close — ignore mapsEnabled desync.
+    // Close from UI (X button)
     this.window.webContents.on("console-message", (event, level, message) => {
       const text = consoleMessageText(event, level, message);
       if (text.includes("__TOSU_GUI_MAPS_CLOSE__")) {
@@ -293,218 +295,133 @@ class OverlayProcess {
       }
     });
 
-    this.surface = ElectronOverlaySurface.connect(
-      { id: windowId, overlay },
-      luid,
-      window.webContents
-    );
+    this.surfaceInterop = ElectronOverlaySurface.connect(this.surface, window.webContents);
+    this.surfaceInterop.events.on("error", (err) => this.onSurfaceError(err));
 
-    if (this.surface.events && typeof this.surface.events.on === "function") {
-      this.surface.events.on("error", (error) => {
-        console.error(error);
-      });
-    }
+    overlay.event.on("surface_destroyed", (id) => {
+      if (id === this.surface.id) {
+        console.log("main surface destroyed id:", this.surface.id);
+        findSurface(overlay).then(([newSurface]) => {
+          console.debug("surface found id:", newSurface.id, "info:", newSurface.info);
+          this.surfaceInterop.disconnect();
+          this.surfaceInterop = ElectronOverlaySurface.connect(newSurface, window.webContents);
+          this.surface = newSurface;
+          this.window.webContents.invalidate();
+        });
+      }
+    });
+
+    // Preload Maps Browser script into webContents on load
+    this.window.webContents.on("did-finish-load", () => {
+      void mapsPreload(this.window.webContents);
+    });
   }
 
-  /**
-   * notifyRenderer: only for tosu layout editor (inputCaptureStart/End).
-   * Maps must use notifyRenderer:false or the layout editor opens and steals clicks.
-   */
-  connectInput(opts = {}) {
-    const notifyRenderer = opts.notifyRenderer !== false;
-    try {
-      this.input?.disconnect();
-    } catch {
-      /* ignore */
-    }
-    this.input = null;
-    try {
-      this.input = ElectronOverlayInput.connect(
-        { id: this.windowId, overlay: this.overlay },
-        this.window.webContents
-      );
-    } catch (err) {
-      console.error("[maps] connectInput:", err);
-      this.input = null;
-    }
-    if (notifyRenderer) {
+  resetInputs() {
+    for (const input of this.inputs) {
       try {
-        this.window.webContents.send("inputCaptureStart");
+        input.disconnect();
       } catch {
         /* ignore */
       }
     }
-    try {
-      this.window.focusOnWebView();
-    } catch {
-      /* ignore */
-    }
+    this.inputs = [];
   }
 
-  disconnectInput(opts = {}) {
-    const notifyRenderer = opts.notifyRenderer !== false;
-    try {
-      this.input?.disconnect();
-    } catch {
-      /* ignore */
+  onOverlayLog(e, t) {
+    const msg = `${e.modulePath ?? "<unknown>"}:${e.line ?? "<unknown>"} ${t}`;
+    if (e.level === "Error") {
+      console.error(msg);
+      return;
     }
-    this.input = null;
-    if (notifyRenderer) {
-      try {
-        this.window.webContents.send("inputCaptureEnd");
-      } catch {
-        /* ignore */
-      }
-    }
-    try {
-      this.window.blurWebView();
-    } catch {
-      /* ignore */
-    }
+    console.log(msg);
   }
 
-  async setBlockInput(block) {
-    if (!block) this._releasingBlock = true;
-    try {
-      await this.overlay.blockInput(this.windowId, !!block);
-    } catch (err) {
-      console.error("[maps] blockInput:", block, err);
-    } finally {
-      if (!block) {
-        // brief guard so input_blocking_ended from our unblock is ignored
-        setTimeout(() => {
-          this._releasingBlock = false;
-        }, 80);
-      }
-    }
+  onDisconnected() {
+    this.window.destroy();
+    this.event.emit("destroyed");
   }
 
-  async endInputModes() {
-    await this.forceCloseMaps("endInputModes");
+  onSurfaceError(e) {
+    console.error(e);
   }
 
-  /**
-   * Always release input + hide panel. Safe if already closed / desynced.
-   * Order matters (windowed mode): hide surface first, then unblock, so the game
-   * cursor never sits "under" a still-visible panel without capture.
-   */
+  openConfiguration() {
+    this.window.webContents.send("inputCaptureStart");
+    this.window.focusOnWebView();
+  }
+
+  closeConfiguration() {
+    this.window.webContents.send("inputCaptureEnd");
+    this.window.blurWebView();
+  }
+
   async forceCloseMaps(reason) {
-    if (this._closingMaps) return;
-    this._closingMaps = true;
-    const wasConfig = this.configurationEnabled;
-    const wasMaps = this.mapsEnabled;
-    this.configurationEnabled = false;
     this.mapsEnabled = false;
-    this._toggleMapsSince = 0;
     this.mapsKeybind.reset();
     this.keybind.reset();
 
     try {
-      // 1) Hide panel immediately (stops eating clicks visually)
       await mapsHide(this.window.webContents);
-      // 2) Drop overlay input routing
-      this.disconnectInput({ notifyRenderer: wasConfig && !wasMaps });
-      // 3) Return mouse/keyboard to the game
-      await this.setBlockInput(false);
-      // 4) Hide again in case show raced
-      await mapsHide(this.window.webContents);
-
-      if (wasMaps || reason === "ui-close" || reason === "escape" || reason === "desync-close") {
-        console.log("[maps] force-closed:", reason || "unknown");
-      }
-    } finally {
-      this._closingMaps = false;
-      // Don't clear _togglingMaps here if toggleMapsMode owns it — caller finally does.
-      if (reason !== "hotkey-close" && reason !== "desync-close" && reason !== "show-failed") {
-        /* leave _togglingMaps to toggleMapsMode.finally when called from there */
-      }
+    } catch {
+      /* ignore */
     }
+
+    this.resetInputs();
+    this.window.blurWebView();
+    this.surface.overlay.blockInput(false);
+    console.log("[maps] force-closed:", reason || "unknown");
   }
 
-  async toggleConfigurationMode() {
-    if (this.mapsEnabled || this._togglingMaps || this._closingMaps) return;
-
-    this.configurationEnabled = !this.configurationEnabled;
-    await this.setBlockInput(this.configurationEnabled);
-
-    if (this.configurationEnabled) {
-      this.connectInput({ notifyRenderer: true });
-    } else {
-      this.disconnectInput({ notifyRenderer: true });
-    }
-  }
-
-  async toggleMapsMode() {
-    // Unstick if a previous toggle hung
-    if (this._togglingMaps) {
-      if (this._toggleMapsSince && Date.now() - this._toggleMapsSince > 4000) {
-        console.warn("[maps] toggle stuck — force reset");
-        this._togglingMaps = false;
-        this._closingMaps = false;
-      } else {
-        return;
-      }
-    }
-
+  async toggleMapsMode(windowId) {
+    if (this._togglingMaps) return;
     this._togglingMaps = true;
-    this._toggleMapsSince = Date.now();
+
     try {
-      let panelVisible = false;
+      let isVis = false;
       try {
-        panelVisible = await mapsIsVisible(this.window.webContents);
+        isVis = await mapsIsVisible(this.window.webContents);
       } catch {
-        panelVisible = false;
+        isVis = false;
       }
 
-      // Close if flag set OR panel still painted (desync after windowed focus loss)
-      if (this.mapsEnabled || panelVisible) {
-        await this.forceCloseMaps(
-          panelVisible && !this.mapsEnabled ? "desync-close" : "hotkey-close"
-        );
+      if (this.mapsEnabled || isVis) {
+        await this.forceCloseMaps("hotkey-toggle");
         return;
       }
-
-      // Always start from a clean closed state (fixes "cursor under overlay" on reopen)
-      this.disconnectInput({ notifyRenderer: false });
-      await this.setBlockInput(false);
-      await mapsHide(this.window.webContents);
 
       if (this.configurationEnabled) {
         this.configurationEnabled = false;
-        this.disconnectInput({ notifyRenderer: true });
+        this.closeConfiguration();
+        this.resetInputs();
       }
 
-      // Capture order for windowed: block + input FIRST, then show UI
       this.mapsEnabled = true;
-      await this.setBlockInput(true);
-      this.connectInput({ notifyRenderer: false });
+      this.surface.overlay.blockInput(true);
+      this.resetInputs();
 
-      try {
-        await mapsShow(this.window.webContents);
-      } catch (err) {
-        console.error("[maps] show error:", err);
+      const { overlay } = this.surface;
+      this.inputs.push(ElectronOverlayInput.connect({ id: windowId, overlay }, this.window.webContents));
+      const targetWindowId = this.surface.info.ty.windowId;
+      if (targetWindowId && targetWindowId !== windowId) {
+        this.inputs.push(ElectronOverlayInput.connect({ id: targetWindowId, overlay }, this.window.webContents));
       }
 
-      // Re-assert capture after show (windowed focus can steal it)
-      await this.setBlockInput(true);
-      this.connectInput({ notifyRenderer: false });
-      this.mapsKeybind.reset();
-      this.keybind.reset();
-      console.log("[maps] open (in-page panel)");
+      this.window.focusOnWebView();
+      await mapsShow(this.window.webContents);
+      console.log("[maps] opened (in-game panel)");
+    } catch (err) {
+      console.error("[maps] toggle error:", err);
+      await this.forceCloseMaps("error");
     } finally {
       this._togglingMaps = false;
-      this._toggleMapsSince = 0;
     }
   }
 
-  setMapsKeybind(keys) {
-    this.mapsKeybind = new Keybind(keys);
-  }
-
   destroy() {
-    this.input?.disconnect();
-    this.surface.disconnect();
-    this.overlay.destroy();
+    this.resetInputs();
+    this.surfaceInterop.disconnect();
+    this.surface.overlay.detach();
   }
 
   static async initialize(pid) {
@@ -514,15 +431,12 @@ class OverlayProcess {
       5000
     );
 
-    const [hwnd, width, height, luid] = await new Promise((resolve) =>
-      overlay.event.once("added", (h, w, ht, l) => resolve([h, w, ht, l]))
-    );
+    overlay.event.on("window_added", (windowId) => {
+      overlay.listenInput(windowId, false, true);
+    });
 
-    await overlay.setPosition(hwnd, length(0), length(0));
-    await overlay.setAnchor(hwnd, length(0), length(0));
-    await overlay.setMargin(hwnd, length(0), length(0), length(0), length(0));
-    // listen keyboard+mouse for hotkeys; block only when maps/config open
-    await overlay.listenInput(hwnd, false, true);
+    const [surface, width, height] = await findSurface(overlay);
+    console.debug("surface found id:", surface.id, "info:", surface.info, "for pid:", pid);
 
     const window = new BrowserWindow({
       webPreferences: {
@@ -537,42 +451,40 @@ class OverlayProcess {
       },
       show: false,
     });
-    window.setSize(width, height, false);
 
-    return new OverlayProcess(pid, hwnd, overlay, window, luid);
+    window.setSize(width, height, false);
+    return new OverlayProcess(surface, window);
   }
+}
+
+function findSurface(overlay) {
+  return new Promise((resolve) => {
+    const handler = (id, width, height, surfaceInfo) => {
+      if (surfaceInfo.ty.windowId != null) {
+        resolve([{ id, overlay, info: surfaceInfo }, width, height]);
+        overlay.event.off("surface_added", handler);
+      }
+    };
+    overlay.event.on("surface_added", handler);
+  });
 }
 
 class OverlayManager {
   constructor() {
     this.map = new Map();
     this.keybindKeys = ["Control", "Shift", "Space"];
-    this.mapsKeybindKeys = readMapsKeybindKeys();
     this.maxFps = 60;
-
-    for (const file of MAPS_KEYBIND_FILES) {
-      try {
-        fs.watchFile(file, { interval: 2000 }, () => {
-          this.mapsKeybindKeys = readMapsKeybindKeys();
-          for (const overlay of this.map.values()) {
-            overlay.setMapsKeybind(this.mapsKeybindKeys);
-          }
-          console.debug("[maps] keybind reloaded:", this.mapsKeybindKeys.join(" + "));
-        });
-      } catch {
-        /* ignore */
-      }
-    }
   }
 
   async runIpc() {
-    for await (const events of on(process, "message")) {
-      for (const msg of events) {
-        if (msg == null) continue;
-        try {
-          await this.handleEvent(msg);
-        } catch (exc) {
-          console.error("IPC:", exc);
+    for await (const messages of on(process, "message")) {
+      for (const msg of messages) {
+        if (msg != null) {
+          try {
+            await this.handleEvent(msg);
+          } catch (err) {
+            console.error("IPC:", err);
+          }
         }
       }
     }
@@ -583,65 +495,63 @@ class OverlayManager {
       console.debug("Already attached to process", pid);
       return;
     }
-
     try {
       console.log("initializing ingame overlay pid:", pid);
-      const overlay = await OverlayProcess.initialize(pid);
-      overlay.window.webContents.setFrameRate(this.maxFps);
-      overlay.keybind = new Keybind(this.keybindKeys);
-      overlay.setMapsKeybind(this.mapsKeybindKeys);
-      this.map.set(pid, overlay);
+      const proc = await OverlayProcess.initialize(pid);
+      proc.window.webContents.setFrameRate(this.maxFps);
+      proc.keybind = new Keybind(this.keybindKeys);
+      this.map.set(pid, proc);
+
       try {
-        await loadMainPage(overlay.window.webContents);
+        await loadMainPage(proc.window.webContents);
         console.log("warn: Initialized successfully");
-        console.log("[maps] hotkey:", this.mapsKeybindKeys.join(" + "));
-        // Mount maps app in background (no show) so first open is instant
-        setTimeout(() => {
-          void mapsPreload(overlay.window.webContents);
-        }, 2000);
-      } catch (exc) {
-        console.error("Unnable connect to ingame overlay:", exc);
+      } catch (err) {
+        console.error("Unable connect to ingame overlay:", err);
       }
-      overlay.event.once("destroyed", () => {
+
+      proc.event.once("destroyed", () => {
         this.map.delete(pid);
       });
-    } catch (exc) {
-      console.error("Injection failed:", exc);
+    } catch (err) {
+      console.error("Injection failed:", err);
     }
   }
 
   reloadAll() {
-    for (const overlay of this.map.values()) overlay.window.reload();
+    for (const proc of this.map.values()) {
+      proc.window.reload();
+    }
   }
 
   destroy() {
-    for (const overlay of this.map.values()) overlay.destroy();
+    for (const proc of this.map.values()) {
+      proc.destroy();
+    }
   }
 
-  updateKeybind(keybind) {
-    this.keybindKeys = parseKeybindString(keybind);
-    for (const overlay of this.map.values()) {
-      overlay.keybind = new Keybind(this.keybindKeys);
+  updateKeybind(keybindStr) {
+    this.keybindKeys = parseKeybindString(keybindStr);
+    for (const proc of this.map.values()) {
+      proc.keybind = new Keybind(this.keybindKeys);
     }
     console.debug(`Keybind updated to ${this.keybindKeys.join(" + ")}`);
   }
 
-  updateMaxFps(maxFps) {
-    this.maxFps = maxFps;
-    for (const overlay of this.map.values()) {
-      overlay.window.webContents.setFrameRate(maxFps);
+  updateMaxFps(fps) {
+    this.maxFps = fps;
+    for (const proc of this.map.values()) {
+      proc.window.webContents.setFrameRate(fps);
     }
+    console.debug(`MaxFps updated to ${fps}`);
   }
 
-  async handleEvent(message) {
-    if (message.cmd === "add") await this.runOverlay(message.pid);
-    else if (message.cmd === "keybind") this.updateKeybind(message.keybind);
-    else if (message.cmd === "maxFps") this.updateMaxFps(message.maxFps);
-    else if (message.cmd === "mapsKeybind") {
-      this.mapsKeybindKeys = parseKeybindString(message.keybind);
-      for (const overlay of this.map.values()) {
-        overlay.setMapsKeybind(this.mapsKeybindKeys);
-      }
+  async handleEvent(msg) {
+    if (msg.cmd === "add") {
+      await this.runOverlay(msg.pid);
+    } else if (msg.cmd === "keybind") {
+      this.updateKeybind(msg.keybind);
+    } else if (msg.cmd === "maxFps") {
+      this.updateMaxFps(msg.maxFps);
     }
   }
 }
@@ -659,44 +569,37 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-function registerTosuProtocol() {
+function setupCustomProtocol() {
   session.defaultSession.webRequest.onBeforeSendHeaders(
-    {
-      urls: [
-        "ws://localhost:24050/*",
-        "http://localhost:24050/*",
-        "http://127.0.0.1:24777/*",
-      ],
-    },
+    { urls: ["ws://localhost:24050/*", "http://localhost:24050/*"] },
     (details, callback) => {
-      if (details.url.includes("24050")) {
-        details.requestHeaders.Referer = "http://localhost:24050";
-      }
+      details.requestHeaders.Referer = "http://localhost:24050";
       callback({ requestHeaders: details.requestHeaders });
     }
   );
 
-  protocol.handle("tosu", (req) => {
-    if (!req.url.startsWith("tosu://server")) {
-      return new Response("Bad request", { status: 400 });
+  protocol.handle("tosu", (request) => {
+    if (request.url.startsWith("tosu://server")) {
+      return new Response("", {
+        status: 308,
+        headers: { Location: request.url.replace("tosu://server", "http://localhost:24050") },
+      });
     }
-    return new Response("", {
-      status: 308,
-      headers: {
-        Location: req.url.replace("tosu://server", "http://localhost:24050"),
-      },
-    });
+    return new Response("Bad request", { status: 400 });
   });
 }
 
 app.commandLine.appendSwitch("force_high_performance_gpu");
-app.commandLine.appendSwitch("high-dpi-support", "1");
-app.commandLine.appendSwitch("force-device-scale-factor", "1");
 app.commandLine.appendSwitch("in-process-gpu");
 app.commandLine.appendSwitch("disable-direct-composition");
+app.commandLine.appendSwitch("disable-features", "ThirdPartyStoragePartitioning");
 
 (async () => {
-  if (!app.requestSingleInstanceLock() || !process.channel) return;
+  if (app.requestSingleInstanceLock()) {
+    if (!process.channel) throw new Error("Failed to acquire IPC channel. Exiting...");
+  } else {
+    throw new Error("Another instance is already running. Please close it first. Exiting...");
+  }
 
   console.log("warn: Starting...");
   Menu.setApplicationMenu(null);
@@ -706,7 +609,8 @@ app.commandLine.appendSwitch("disable-direct-composition");
   manager.runIpc();
 
   await app.whenReady();
-  registerTosuProtocol();
-})().catch((exc) => {
-  console.error(exc);
+  setupCustomProtocol();
+})().catch((err) => {
+  console.error(err);
+  app.exit(0);
 });

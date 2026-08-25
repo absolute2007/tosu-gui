@@ -225,7 +225,8 @@ function downloadFile(
         res.on('data', (chunk: Buffer) => {
           received += chunk.length
           if (total > 0) {
-            onProgress(Math.min(80, (received / total) * 80))
+            const pct = Math.min(100, Math.round((received / total) * 100))
+            onProgress(pct)
           }
         })
 
@@ -239,7 +240,7 @@ function downloadFile(
                 return
               }
               const size = fs.statSync(dest).size
-              if (size < 1_000_000) {
+              if (size < 100_000) {
                 try { fs.unlinkSync(dest) } catch { /* ignore */ }
                 reject(new Error('Загруженный архив обновления повреждён (размер слишком мал)'))
                 return
@@ -283,38 +284,55 @@ function downloadFile(
   })
 }
 
-async function replacePath(src: string, dst: string, name: string) {
-  const isDir = fs.statSync(src).isDirectory()
+async function replaceFile(src: string, dest: string) {
   const maxAttempts = 10
-
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      if (fs.existsSync(dst)) {
-        const backup = `${dst}.bak-${Date.now()}`
+      if (fs.existsSync(dest)) {
         try {
-          fs.renameSync(dst, backup)
-          fs.rmSync(backup, { recursive: true, force: true })
+          fs.unlinkSync(dest)
         } catch {
-          if (fs.statSync(dst).isDirectory()) {
-            fs.rmSync(dst, { recursive: true, force: true })
-          } else {
-            fs.unlinkSync(dst)
+          const bak = `${dest}.bak-${Date.now()}`
+          try {
+            fs.renameSync(dest, bak)
+            try { fs.unlinkSync(bak) } catch { /* ignore */ }
+          } catch {
+            /* fall through to copy */
           }
         }
       }
-
-      if (isDir) {
-        fs.cpSync(src, dst, { recursive: true })
-      } else {
-        fs.copyFileSync(src, dst)
-      }
+      fs.copyFileSync(src, dest)
       return
     } catch (err) {
-      if (attempt === maxAttempts - 1) {
-        throw new Error(formatUserFacingError(err, `Не удалось обновить «${name}»`))
-      }
-      await sleep(300 * (attempt + 1))
+      if (attempt === maxAttempts - 1) throw err
+      await sleep(150 * (attempt + 1))
     }
+  }
+}
+
+async function copyDirOverwrite(srcDir: string, destDir: string) {
+  fs.mkdirSync(destDir, { recursive: true })
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true })
+  for (const entry of entries) {
+    const src = path.join(srcDir, entry.name)
+    const dst = path.join(destDir, entry.name)
+    if (entry.isDirectory()) {
+      await copyDirOverwrite(src, dst)
+    } else {
+      await replaceFile(src, dst)
+    }
+  }
+}
+
+async function replacePath(src: string, dst: string, name: string) {
+  try {
+    if (fs.statSync(src).isDirectory()) {
+      await copyDirOverwrite(src, dst)
+    } else {
+      await replaceFile(src, dst)
+    }
+  } catch (err) {
+    throw new Error(formatUserFacingError(err, `Не удалось обновить «${name}»`))
   }
 }
 
@@ -436,19 +454,24 @@ export async function installMatchingOverlay(
   const destOverlay = path.join(tosuDir, 'game-overlay')
 
   onProgress?.({
-    phase: 'installing',
-    progress: 91,
-    message: 'Загрузка in-game overlay…',
+    phase: 'downloading',
+    progress: 50,
+    message: 'Загрузка оверлея… 0%',
   })
 
   try {
     await downloadFile(downloadUrl, zipPath, (pct) => {
-      const mapped = 91 + (pct / 80) * 3
       onProgress?.({
-        phase: 'installing',
-        progress: Math.min(94, mapped),
-        message: `Загрузка overlay… ${Math.round(pct)}%`,
+        phase: 'downloading',
+        progress: 50 + Math.round(pct * 0.35),
+        message: `Загрузка оверлея… ${pct}%`,
       })
+    })
+
+    onProgress?.({
+      phase: 'extracting',
+      progress: 88,
+      message: 'Распаковка оверлея…',
     })
 
     fs.rmSync(extractDir, { recursive: true, force: true })
@@ -467,19 +490,19 @@ export async function installMatchingOverlay(
       throw new Error('tosu-ingame-overlay.exe не найден в архиве overlay')
     }
 
-    if (fs.existsSync(destOverlay)) {
-      await replacePath(sourceRoot, destOverlay, 'game-overlay')
-    } else {
-      fs.cpSync(sourceRoot, destOverlay, { recursive: true })
-    }
+    onProgress?.({
+      phase: 'installing',
+      progress: 92,
+      message: 'Установка оверлея…',
+    })
+
+    await copyDirOverwrite(sourceRoot, destOverlay)
 
     const versionFile = path.join(destOverlay, 'version')
-    if (!fs.existsSync(versionFile)) {
-      fs.writeFileSync(versionFile, normalizeVersion(version), 'utf8')
-    }
+    fs.writeFileSync(versionFile, normalizeVersion(version), 'utf8')
 
     // Drop tray-patch marker so the new asar is re-patched on next start
-    const marker = path.join(destOverlay, 'resources', '.tray-patch-v1')
+    const marker = path.join(destOverlay, 'resources', '.tray-patch-v2')
     if (fs.existsSync(marker)) {
       try {
         fs.unlinkSync(marker)
@@ -490,8 +513,8 @@ export async function installMatchingOverlay(
 
     onProgress?.({
       phase: 'installing',
-      progress: 94,
-      message: 'Overlay установлен',
+      progress: 95,
+      message: 'Оверлей установлен',
     })
     return true
   } catch (err) {
@@ -570,7 +593,7 @@ export class TosuUpdater {
     const zipPath = path.join(tosuDir, `.update-${zipName}`)
     const extractDir = path.join(tosuDir, '.update-tmp')
 
-    onProgress({ phase: 'downloading', progress: 0, message: 'Загрузка обновления tosu…' })
+    onProgress({ phase: 'downloading', progress: 0, message: 'Загрузка tosu… 0%' })
 
     try {
       cleanupUpdateTemp(tosuDir)
@@ -578,12 +601,12 @@ export class TosuUpdater {
       await downloadFile(info.downloadUrl, zipPath, (pct) => {
         onProgress({
           phase: 'downloading',
-          progress: pct,
-          message: `Загрузка… ${Math.round(pct)}%`,
+          progress: Math.round(pct * 0.45),
+          message: `Загрузка tosu… ${pct}%`,
         })
       })
 
-      onProgress({ phase: 'extracting', progress: 82, message: 'Распаковка архива…' })
+      onProgress({ phase: 'extracting', progress: 48, message: 'Распаковка архива tosu…' })
       fs.rmSync(extractDir, { recursive: true, force: true })
       fs.mkdirSync(extractDir, { recursive: true })
       extractZip(zipPath, extractDir)
@@ -591,7 +614,7 @@ export class TosuUpdater {
       const sourceRoot = findTosuRoot(extractDir)
       if (!sourceRoot) throw new Error('tosu.exe не найден в загруженном архиве')
 
-      onProgress({ phase: 'installing', progress: 92, message: 'Установка файлов…' })
+      onProgress({ phase: 'installing', progress: 50, message: 'Установка файлов tosu…' })
       await mergeInstall(sourceRoot, tosuDir)
 
       if (fs.existsSync(zipPath)) {
@@ -599,6 +622,10 @@ export class TosuUpdater {
       }
       fs.rmSync(extractDir, { recursive: true, force: true })
 
+      // Download and install matching overlay package
+      await installMatchingOverlay(tosuDir, info.latestVersion, onProgress)
+
+      onProgress({ phase: 'installing', progress: 98, message: 'Завершение установки…' })
       return info.latestVersion
     } catch (err) {
       fs.rmSync(extractDir, { recursive: true, force: true })

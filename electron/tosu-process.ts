@@ -343,7 +343,7 @@ export class TosuProcess {
         await removeGameOverlay(tosuDir)
       }
 
-      await ensureGameOverlay(tosuDir)
+      await ensureGameOverlay(tosuDir, getInstalledVersion(tosuDir))
 
       // Best-effort silent tray patch
       try {

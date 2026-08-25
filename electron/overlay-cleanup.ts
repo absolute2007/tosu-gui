@@ -1,5 +1,7 @@
 import fs from 'fs'
 import path from 'path'
+import { app } from 'electron'
+import { getInstalledVersion, installMatchingOverlay } from './tosu-updater'
 
 const SEED_OVERLAY_PATHS = [
   path.join(process.env.USERPROFILE || '', 'Desktop', 'Folders', 'Tosu', 'game-overlay'),
@@ -117,10 +119,17 @@ export function isGameOverlayVersionMatch(tosuDir: string, tosuVersion?: string 
   return normalizeVersion(tosuVersion) === overlayVersion
 }
 
-function findBundledOverlaySeed(): string | null {
-  // Packaged: we only have resources/tosu; if overlay is complete there, no seed needed.
-  // Dev: allow copying from a known-good sibling install.
-  for (const seed of SEED_OVERLAY_PATHS) {
+function findBundledOverlaySeed(tosuDir: string): string | null {
+  const candidates = [
+    path.join(process.resourcesPath || '', 'tosu', 'game-overlay'),
+    path.join(app.getAppPath ? app.getAppPath() : '', 'resources', 'tosu', 'game-overlay'),
+    path.join(__dirname, '..', 'resources', 'tosu', 'game-overlay'),
+    path.join(process.env.USERPROFILE || '', 'Desktop', 'Folders', 'Tosu', 'game-overlay'),
+    path.join(process.env.USERPROFILE || '', 'Documents', 'dev-projects', 'osu-auto', 'tosu_bin', 'game-overlay'),
+  ]
+
+  for (const seed of candidates) {
+    if (path.resolve(seed) === path.resolve(getGameOverlayDir(tosuDir))) continue
     if (fs.existsSync(path.join(seed, 'tosu-ingame-overlay.exe'))) return seed
   }
   return null
@@ -129,56 +138,62 @@ function findBundledOverlaySeed(): string | null {
 export async function seedGameOverlayIfMissing(tosuDir: string): Promise<boolean> {
   if (isGameOverlayValid(tosuDir)) return true
 
-  if (isGameOverlayBroken(tosuDir)) {
-    await removeGameOverlay(tosuDir)
-  }
-
-  // If still present and still broken, cannot seed into it cleanly
-  if (isGameOverlayValid(tosuDir)) return true
-  if (fs.existsSync(getGameOverlayDir(tosuDir)) && isGameOverlayBroken(tosuDir)) {
-    console.warn('[overlay] broken game-overlay still present; skip seed')
-    return false
-  }
-
-  const seed = findBundledOverlaySeed()
+  const seed = findBundledOverlaySeed(tosuDir)
   if (!seed) return false
 
   const dest = getGameOverlayDir(tosuDir)
   try {
-    if (fs.existsSync(dest)) {
+    if (isGameOverlayBroken(tosuDir)) {
       await removeGameOverlay(tosuDir)
     }
-    if (fs.existsSync(dest)) return false
+    fs.mkdirSync(dest, { recursive: true })
     fs.cpSync(seed, dest, { recursive: true })
     console.log('[overlay] seeded game-overlay from', seed)
-    // Keep seed's own version file if present — never rewrite it to the
-    // current tosu version (mismatched stamps block tosu's redownload).
     return isGameOverlayValid(tosuDir)
   } catch (err) {
     console.warn('[overlay] seed failed:', err)
-    return false
+    return isGameOverlayValid(tosuDir)
   }
 }
 
 /**
  * Best-effort overlay restore. Never throws.
  * Returns true only if a valid overlay exists after the call.
- *
- * If tosuVersion is provided and the on-disk overlay version differs, the
- * overlay folder is removed so the matching package can be reinstalled
- * (by tosu itself or by installMatchingOverlay).
  */
-export async function ensureGameOverlay(tosuDir: string, _tosuVersion?: string | null): Promise<boolean> {
+export async function ensureGameOverlay(tosuDir: string, tosuVersion?: string | null): Promise<boolean> {
   try {
     cleanupOverlayAsideDirs(tosuDir)
 
     if (isGameOverlayBroken(tosuDir)) {
-      console.log('[overlay] broken game-overlay detected, trying to clean up…')
+      console.log('[overlay] broken game-overlay detected, cleaning up…')
       await removeGameOverlay(tosuDir)
     }
 
     if (!isGameOverlayValid(tosuDir)) {
+      // Try seeding from packaged resources
       await seedGameOverlayIfMissing(tosuDir)
+    }
+
+    // If still missing and version is known, download matching overlay
+    if (!isGameOverlayValid(tosuDir)) {
+      const ver = tosuVersion || getInstalledVersion(tosuDir)
+      if (ver) {
+        console.log('[overlay] missing overlay; downloading matching overlay for v' + ver)
+        await installMatchingOverlay(tosuDir, ver)
+      }
+    }
+
+    // Ensure game-overlay/version file exists and has correct version so tosu does NOT delete it on startup
+    if (isGameOverlayValid(tosuDir)) {
+      const ver = tosuVersion || getInstalledVersion(tosuDir)
+      if (ver) {
+        const verFile = path.join(getGameOverlayDir(tosuDir), 'version')
+        try {
+          fs.writeFileSync(verFile, normalizeVersion(ver), 'utf8')
+        } catch {
+          /* ignore */
+        }
+      }
     }
 
     return isGameOverlayValid(tosuDir)
