@@ -4,7 +4,7 @@ const path = require('path')
 const { execSync } = require('child_process')
 
 const PATCHED_INDEX = path.join(__dirname, '..', 'resources', 'overlay-patch', 'index.js')
-const PATCH_MARKER = '.tray-patch-v1'
+const PATCH_MARKER = '.tray-patch-v2'
 
 function patchMarkerPath(gameOverlayDir) {
   return path.join(gameOverlayDir, 'resources', PATCH_MARKER)
@@ -12,23 +12,18 @@ function patchMarkerPath(gameOverlayDir) {
 
 function isAlreadyPatched(gameOverlayDir) {
   const markerPath = patchMarkerPath(gameOverlayDir)
-  if (!fs.existsSync(markerPath) || !fs.existsSync(PATCHED_INDEX)) return false
+  if (!fs.existsSync(markerPath)) return false
 
   const versionPath = path.join(gameOverlayDir, 'version')
   const overlayVersion = fs.existsSync(versionPath)
     ? fs.readFileSync(versionPath, 'utf8').trim()
     : 'unknown'
-  const patchHash = crypto.createHash('sha256').update(fs.readFileSync(PATCHED_INDEX)).digest('hex')
-  return fs.readFileSync(markerPath, 'utf8').trim() === `${overlayVersion}:${patchHash}`
+  return fs.readFileSync(markerPath, 'utf8').trim() === `${overlayVersion}:v2`
 }
 
 function patchOverlayInDir(gameOverlayDir) {
   const asarPath = path.join(gameOverlayDir, 'resources', 'app.asar')
   if (!fs.existsSync(asarPath)) return false
-  if (!fs.existsSync(PATCHED_INDEX)) {
-    console.warn('[overlay-patch] Patched index.js not found, skipping')
-    return false
-  }
   if (isAlreadyPatched(gameOverlayDir)) return false
 
   const extractDir = path.join(gameOverlayDir, 'resources', '.asar-patch-tmp')
@@ -36,14 +31,25 @@ function patchOverlayInDir(gameOverlayDir) {
 
   try {
     fs.rmSync(extractDir, { recursive: true, force: true })
-    fs.mkdirSync(path.dirname(targetIndex), { recursive: true })
 
     execSync(`npx --yes asar extract "${asarPath}" "${extractDir}"`, {
       stdio: 'pipe',
       windowsHide: true,
     })
 
-    fs.copyFileSync(PATCHED_INDEX, targetIndex)
+    if (!fs.existsSync(targetIndex)) {
+      console.warn('[overlay-patch] Target index.js not found in asar, skipping')
+      return false
+    }
+
+    const code = fs.readFileSync(targetIndex, 'utf8')
+    if (!code.includes('__TosuGuiDummyTray')) {
+      const dummyClass =
+        'class __TosuGuiDummyTray{constructor(){this.isDummy=true}setToolTip(){}setContextMenu(){}on(){}once(){}destroy(){}};'
+      const patched =
+        dummyClass + code.replace(/new\s+(?:[a-zA-Z0-9_$]+\.)?Tray\s*\(/g, 'new __TosuGuiDummyTray(')
+      fs.writeFileSync(targetIndex, patched, 'utf8')
+    }
 
     const bytecodeLoader = path.join(extractDir, 'dist', 'src', 'bytecode-loader.cjs')
     const bytecodeIndex = path.join(extractDir, 'dist', 'src', 'index.jsc')
@@ -62,8 +68,7 @@ function patchOverlayInDir(gameOverlayDir) {
     const overlayVersion = fs.existsSync(versionPath)
       ? fs.readFileSync(versionPath, 'utf8').trim()
       : 'unknown'
-    const patchHash = crypto.createHash('sha256').update(fs.readFileSync(PATCHED_INDEX)).digest('hex')
-    fs.writeFileSync(patchMarkerPath(gameOverlayDir), `${overlayVersion}:${patchHash}`, 'utf8')
+    fs.writeFileSync(patchMarkerPath(gameOverlayDir), `${overlayVersion}:v2`, 'utf8')
 
     return true
   } catch (err) {
