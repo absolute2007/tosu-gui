@@ -4,9 +4,6 @@ import { app } from 'electron'
 
 export interface GuiSettings {
   disableAntialiasing: boolean
-  /** Check for tosu.exe updates on GitHub */
-  checkTosuUpdates: boolean
-  dismissedTosuVersion: string | null
   /** Check for tosu GUI (this app) updates on GitHub */
   checkAppUpdates: boolean
   dismissedAppVersion: string | null
@@ -28,8 +25,6 @@ export interface GuiSettings {
 
 const DEFAULTS: GuiSettings = {
   disableAntialiasing: true,
-  checkTosuUpdates: true,
-  dismissedTosuVersion: null,
   checkAppUpdates: true,
   dismissedAppVersion: null,
   closeToTray: false,

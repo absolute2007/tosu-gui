@@ -4,26 +4,6 @@ import http from 'http'
 import https from 'https'
 import path from 'path'
 
-const GITHUB_LATEST = 'https://github.com/tosuapp/tosu/releases/latest'
-const PRESERVE_NAMES = new Set(['static', 'settings', 'logs', '.cache', 'tosu.env', '.update-backup'])
-
-export interface TosuUpdateInfo {
-  currentVersion: string
-  latestVersion: string | null
-  updateAvailable: boolean
-  releaseUrl: string | null
-  downloadUrl: string | null
-  error?: string
-}
-
-export type UpdatePhase = 'downloading' | 'extracting' | 'installing' | 'restarting' | 'done' | 'error'
-
-export interface UpdateProgress {
-  phase: UpdatePhase
-  progress: number
-  message: string
-}
-
 export function normalizeVersion(version: string): string {
   return version.replace(/^v/i, '').trim()
 }
@@ -84,74 +64,11 @@ export function getInstalledVersion(tosuDir: string): string | null {
   return null
 }
 
-export function formatUserFacingError(err: unknown, defaultMessage = 'Ошибка обновления'): string {
-  if (!err) return defaultMessage
-
-  const raw = err instanceof Error ? err.message : String(err)
-
-  if (/EBUSY|EPERM|EACCES|занят другим процессом|access is denied/i.test(raw)) {
-    return 'Файлы tosu заняты другим процессом. Закройте osu! и повторите попытку.'
-  }
-  if (/ENOTFOUND|ECONNRESET|ETIMEDOUT|ECONNREFUSED|fetch failed|socket hang up/i.test(raw)) {
-    return 'Не удалось загрузить файлы обновления (ошибка соединения). Проверьте интернет.'
-  }
-  if (/HTTP 403|rate limit/i.test(raw)) {
-    return 'Превышен лимит запросов к GitHub. Пожалуйста, попробуйте через несколько минут.'
-  }
-  if (/HTTP 404/i.test(raw)) {
-    return 'Файл обновления не найден на сервере GitHub.'
-  }
-  if (/слишком маленький|архив.*повреждён|archive entry was incomplete|end of central directory/i.test(raw)) {
-    return 'Загруженный архив обновления повреждён или неполон. Попробуйте снова.'
-  }
-  if (/timed? ?out|превышено время ожидания/i.test(raw)) {
-    return 'Превышено время ожидания при загрузке или запуске обновления.'
-  }
-
-  // Strip multi-line powershell/stack dumps
-  const firstLine = raw.split('\n')[0].replace(/^Error:\s*/i, '').trim()
-  if (firstLine.length > 0 && firstLine.length < 120 && !firstLine.includes('powershell -NoProfile')) {
-    return firstLine
-  }
-
-  return defaultMessage
-}
-
-async function fetchLatestReleaseTag(): Promise<{ tag: string; url: string }> {
-  const res = await fetch(GITHUB_LATEST, {
-    redirect: 'follow',
-    headers: { 'User-Agent': 'tosu-gui' },
-  })
-
-  const match = res.url.match(/\/tag\/(v[\d.]+)/i)
-  if (!match) throw new Error('Не удалось определить версию релиза tosu')
-  return { tag: match[1], url: res.url }
-}
-
-function findTosuRoot(dir: string): string | null {
-  const exeName = process.platform === 'win32' ? 'tosu.exe' : 'tosu'
-  const direct = path.join(dir, exeName)
-  if (fs.existsSync(direct)) return dir
-
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue
-    const found = findTosuRoot(path.join(dir, entry.name))
-    if (found) return found
-  }
-
-  return null
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 function extractZip(zipPath: string, destDir: string): void {
   if (!fs.existsSync(destDir)) {
     fs.mkdirSync(destDir, { recursive: true })
   }
 
-  // Fast path: use built-in tar (available in Win10+, macOS, Linux)
   try {
     const escapedDest = destDir.replace(/\\/g, '/')
     execSync(`tar -xf "${zipPath}" -C "${escapedDest}"`, {
@@ -164,42 +81,28 @@ function extractZip(zipPath: string, destDir: string): void {
     console.warn('[tosu-updater] tar extraction failed, trying fallback:', tarErr)
   }
 
-  // Fallback on Windows: PowerShell Expand-Archive
   if (process.platform === 'win32') {
-    try {
-      const escapedZip = zipPath.replace(/'/g, "''")
-      const escapedDest = destDir.replace(/'/g, "''")
-      execSync(
-        `powershell -NoProfile -Command "Expand-Archive -LiteralPath '${escapedZip}' -DestinationPath '${escapedDest}' -Force"`,
-        { stdio: 'pipe', windowsHide: true, timeout: 120_000 }
-      )
-      return
-    } catch (psErr) {
-      throw new Error(`Ошибка распаковки архива: ${formatUserFacingError(psErr)}`)
-    }
+    const escapedZip = zipPath.replace(/'/g, "''")
+    const escapedDest = destDir.replace(/'/g, "''")
+    execSync(
+      `powershell -NoProfile -Command "Expand-Archive -LiteralPath '${escapedZip}' -DestinationPath '${escapedDest}' -Force"`,
+      { stdio: 'pipe', windowsHide: true, timeout: 120_000 }
+    )
+    return
   }
 
-  // Fallback on Unix: unzip
-  try {
-    execSync(`unzip -o "${zipPath}" -d "${destDir}"`, {
-      stdio: 'pipe',
-      windowsHide: true,
-      timeout: 60_000,
-    })
-  } catch (unzipErr) {
-    throw new Error(`Ошибка распаковки архива: ${formatUserFacingError(unzipErr)}`)
-  }
+  execSync(`unzip -o "${zipPath}" -d "${destDir}"`, {
+    stdio: 'pipe',
+    windowsHide: true,
+    timeout: 60_000,
+  })
 }
 
-function downloadFile(
-  url: string,
-  dest: string,
-  onProgress: (pct: number) => void
-): Promise<void> {
+function downloadFile(url: string, dest: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const follow = (fetchUrl: string, redirects = 0) => {
       if (redirects > 10) {
-        reject(new Error('Слишком много перенаправлений при скачивании'))
+        reject(new Error('Too many redirects'))
         return
       }
 
@@ -214,46 +117,21 @@ function downloadFile(
         }
 
         if (res.statusCode && res.statusCode >= 400) {
-          reject(new Error(`Сервер вернул ошибку HTTP ${res.statusCode}`))
+          reject(new Error(`HTTP ${res.statusCode}`))
           return
         }
 
-        const total = parseInt(res.headers['content-length'] || '0', 10)
-        let received = 0
         const fileStream = fs.createWriteStream(dest)
-
-        res.on('data', (chunk: Buffer) => {
-          received += chunk.length
-          if (total > 0) {
-            const pct = Math.min(100, Math.round((received / total) * 100))
-            onProgress(pct)
-          }
-        })
-
         res.pipe(fileStream)
 
         fileStream.on('finish', () => {
           fileStream.close(() => {
-            try {
-              if (!fs.existsSync(dest)) {
-                reject(new Error('Файл обновления не был сохранён'))
-                return
-              }
-              const size = fs.statSync(dest).size
-              if (size < 100_000) {
-                try { fs.unlinkSync(dest) } catch { /* ignore */ }
-                reject(new Error('Загруженный архив обновления повреждён (размер слишком мал)'))
-                return
-              }
-              if (total > 0 && received < total) {
-                try { fs.unlinkSync(dest) } catch { /* ignore */ }
-                reject(new Error('Загрузка обновления была прервана'))
-                return
-              }
-              resolve()
-            } catch (err) {
-              reject(err)
+            if (!fs.existsSync(dest) || fs.statSync(dest).size < 100_000) {
+              try { fs.unlinkSync(dest) } catch { /* ignore */ }
+              reject(new Error('Downloaded file too small'))
+              return
             }
+            resolve()
           })
         })
 
@@ -276,7 +154,7 @@ function downloadFile(
       req.setTimeout(300_000, () => {
         req.destroy()
         try { fs.unlinkSync(dest) } catch { /* ignore */ }
-        reject(new Error('Превышено время ожидания загрузки'))
+        reject(new Error('Download timeout'))
       })
     }
 
@@ -284,167 +162,23 @@ function downloadFile(
   })
 }
 
-async function replaceFile(src: string, dest: string) {
-  const maxAttempts = 10
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      if (fs.existsSync(dest)) {
-        try {
-          fs.unlinkSync(dest)
-        } catch {
-          const bak = `${dest}.bak-${Date.now()}`
-          try {
-            fs.renameSync(dest, bak)
-            try { fs.unlinkSync(bak) } catch { /* ignore */ }
-          } catch {
-            /* fall through to copy */
-          }
-        }
-      }
-      fs.copyFileSync(src, dest)
-      return
-    } catch (err) {
-      if (attempt === maxAttempts - 1) throw err
-      await sleep(150 * (attempt + 1))
-    }
-  }
-}
-
-async function copyDirOverwrite(srcDir: string, destDir: string) {
+function copyDirOverwriteSync(srcDir: string, destDir: string) {
   fs.mkdirSync(destDir, { recursive: true })
   const entries = fs.readdirSync(srcDir, { withFileTypes: true })
   for (const entry of entries) {
     const src = path.join(srcDir, entry.name)
     const dst = path.join(destDir, entry.name)
     if (entry.isDirectory()) {
-      await copyDirOverwrite(src, dst)
+      copyDirOverwriteSync(src, dst)
     } else {
-      await replaceFile(src, dst)
+      fs.copyFileSync(src, dst)
     }
   }
 }
 
-async function replacePath(src: string, dst: string, name: string) {
-  try {
-    if (fs.statSync(src).isDirectory()) {
-      await copyDirOverwrite(src, dst)
-    } else {
-      await replaceFile(src, dst)
-    }
-  } catch (err) {
-    throw new Error(formatUserFacingError(err, `Не удалось обновить «${name}»`))
-  }
-}
-
-async function mergeInstall(sourceRoot: string, destDir: string) {
-  const sourceEntries = fs.readdirSync(sourceRoot, { withFileTypes: true })
-
-  for (const entry of sourceEntries) {
-    if (PRESERVE_NAMES.has(entry.name)) continue
-
-    const src = path.join(sourceRoot, entry.name)
-    const dst = path.join(destDir, entry.name)
-    await replacePath(src, dst, entry.name)
-  }
-}
-
-/**
- * Creates a backup snapshot of current tosu executables & overlay
- * into `.update-backup` for safe rollback if update fails.
- */
-export async function backupCurrentInstall(tosuDir: string): Promise<string> {
-  const backupDir = path.join(tosuDir, '.update-backup')
-  try {
-    if (fs.existsSync(backupDir)) {
-      fs.rmSync(backupDir, { recursive: true, force: true })
-    }
-    fs.mkdirSync(backupDir, { recursive: true })
-
-    const filesToBackup = ['tosu.exe', 'tosu', 'version']
-    for (const file of filesToBackup) {
-      const src = path.join(tosuDir, file)
-      if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(backupDir, file))
-      }
-    }
-
-    const overlayDir = path.join(tosuDir, 'game-overlay')
-    if (fs.existsSync(overlayDir)) {
-      fs.cpSync(overlayDir, path.join(backupDir, 'game-overlay'), { recursive: true })
-    }
-
-    return backupDir
-  } catch (err) {
-    console.warn('[tosu-updater] backup failed:', err)
-    return backupDir
-  }
-}
-
-/**
- * Restores previous tosu files from `.update-backup` if an update failed.
- */
-export async function restoreBackup(tosuDir: string): Promise<boolean> {
-  const backupDir = path.join(tosuDir, '.update-backup')
-  if (!fs.existsSync(backupDir)) {
-    console.warn('[tosu-updater] rollback: no backup found at', backupDir)
-    return false
-  }
-
-  try {
-    console.log('[tosu-updater] rolling back tosu from backup...')
-    const backupEntries = fs.readdirSync(backupDir, { withFileTypes: true })
-
-    for (const entry of backupEntries) {
-      const src = path.join(backupDir, entry.name)
-      const dst = path.join(tosuDir, entry.name)
-      await replacePath(src, dst, entry.name)
-    }
-
-    console.log('[tosu-updater] rollback completed successfully')
-    return true
-  } catch (err) {
-    console.error('[tosu-updater] rollback failed:', err)
-    return false
-  }
-}
-
-export function cleanupBackup(tosuDir: string): void {
-  const backupDir = path.join(tosuDir, '.update-backup')
-  if (fs.existsSync(backupDir)) {
-    try {
-      fs.rmSync(backupDir, { recursive: true, force: true })
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
-export function cleanupUpdateTemp(tosuDir: string): void {
-  try {
-    for (const name of fs.readdirSync(tosuDir)) {
-      if (name.startsWith('.update-') && name !== '.update-backup') {
-        const full = path.join(tosuDir, name)
-        try {
-          fs.rmSync(full, { recursive: true, force: true })
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
-/**
- * Install the matching in-game overlay package for a tosu version.
- * Recent tosu releases ship tosu.exe alone; the overlay is a separate
- * asset (`tosu-overlay-vX.Y.Z.zip`) and must track the same version.
- */
 export async function installMatchingOverlay(
   tosuDir: string,
-  version: string,
-  onProgress?: (progress: UpdateProgress) => void
+  version: string
 ): Promise<boolean> {
   const tag = `v${normalizeVersion(version)}`
   const assetName = `tosu-overlay-${tag}.zip`
@@ -453,26 +187,8 @@ export async function installMatchingOverlay(
   const extractDir = path.join(tosuDir, '.update-overlay-tmp')
   const destOverlay = path.join(tosuDir, 'game-overlay')
 
-  onProgress?.({
-    phase: 'downloading',
-    progress: 50,
-    message: 'Загрузка оверлея… 0%',
-  })
-
   try {
-    await downloadFile(downloadUrl, zipPath, (pct) => {
-      onProgress?.({
-        phase: 'downloading',
-        progress: 50 + Math.round(pct * 0.35),
-        message: `Загрузка оверлея… ${pct}%`,
-      })
-    })
-
-    onProgress?.({
-      phase: 'extracting',
-      progress: 88,
-      message: 'Распаковка оверлея…',
-    })
+    await downloadFile(downloadUrl, zipPath)
 
     fs.rmSync(extractDir, { recursive: true, force: true })
     fs.mkdirSync(extractDir, { recursive: true })
@@ -487,35 +203,14 @@ export async function installMatchingOverlay(
         : null
 
     if (!sourceRoot) {
-      throw new Error('tosu-ingame-overlay.exe не найден в архиве overlay')
+      throw new Error('tosu-ingame-overlay.exe not found')
     }
 
-    onProgress?.({
-      phase: 'installing',
-      progress: 92,
-      message: 'Установка оверлея…',
-    })
-
-    await copyDirOverwrite(sourceRoot, destOverlay)
+    copyDirOverwriteSync(sourceRoot, destOverlay)
 
     const versionFile = path.join(destOverlay, 'version')
     fs.writeFileSync(versionFile, normalizeVersion(version), 'utf8')
 
-    // Drop tray-patch marker so the new asar is re-patched on next start
-    const marker = path.join(destOverlay, 'resources', '.tray-patch-v2')
-    if (fs.existsSync(marker)) {
-      try {
-        fs.unlinkSync(marker)
-      } catch {
-        /* ignore */
-      }
-    }
-
-    onProgress?.({
-      phase: 'installing',
-      progress: 95,
-      message: 'Оверлей установлен',
-    })
     return true
   } catch (err) {
     console.warn('[tosu-updater] overlay install failed (non-fatal):', err)
@@ -529,123 +224,5 @@ export async function installMatchingOverlay(
         /* ignore */
       }
     }
-  }
-}
-
-export class TosuUpdater {
-  async checkForUpdate(tosuDir: string): Promise<TosuUpdateInfo> {
-    const currentVersion = getInstalledVersion(tosuDir)
-    if (!currentVersion) {
-      return {
-        currentVersion: 'unknown',
-        latestVersion: null,
-        updateAvailable: false,
-        releaseUrl: null,
-        downloadUrl: null,
-        error: 'Версия tosu не определена',
-      }
-    }
-
-    try {
-      const { tag, url } = await fetchLatestReleaseTag()
-      const latestVersion = normalizeVersion(tag)
-      const updateAvailable = compareVersions(latestVersion, currentVersion) > 0
-      const assetName =
-        process.platform === 'win32' ? `tosu-windows-${tag}.zip` : `tosu-linux-${tag}.zip`
-      const downloadUrl = `https://github.com/tosuapp/tosu/releases/download/${tag}/${assetName}`
-
-      return {
-        currentVersion,
-        latestVersion,
-        updateAvailable,
-        releaseUrl: url,
-        downloadUrl,
-      }
-    } catch (err) {
-      return {
-        currentVersion,
-        latestVersion: null,
-        updateAvailable: false,
-        releaseUrl: null,
-        downloadUrl: null,
-        error: formatUserFacingError(err, 'Ошибка проверки обновлений'),
-      }
-    }
-  }
-
-  /**
-   * Staged installation: downloads and extracts new tosu and matching overlay,
-   * then merges into tosuDir. Note: version file is deliberately NOT committed
-   * here — caller must verify successful launch before calling commitUpdate().
-   */
-  async stageAndInstall(
-    tosuDir: string,
-    onProgress: (progress: UpdateProgress) => void
-  ): Promise<string> {
-    const info = await this.checkForUpdate(tosuDir)
-    if (!info.updateAvailable || !info.latestVersion || !info.downloadUrl) {
-      throw new Error('Обновление недоступно')
-    }
-
-    const tag = `v${info.latestVersion}`
-    const zipName =
-      process.platform === 'win32' ? `tosu-windows-${tag}.zip` : `tosu-linux-${tag}.zip`
-    const zipPath = path.join(tosuDir, `.update-${zipName}`)
-    const extractDir = path.join(tosuDir, '.update-tmp')
-
-    onProgress({ phase: 'downloading', progress: 0, message: 'Загрузка tosu… 0%' })
-
-    try {
-      cleanupUpdateTemp(tosuDir)
-
-      await downloadFile(info.downloadUrl, zipPath, (pct) => {
-        onProgress({
-          phase: 'downloading',
-          progress: Math.round(pct * 0.45),
-          message: `Загрузка tosu… ${pct}%`,
-        })
-      })
-
-      onProgress({ phase: 'extracting', progress: 48, message: 'Распаковка архива tosu…' })
-      fs.rmSync(extractDir, { recursive: true, force: true })
-      fs.mkdirSync(extractDir, { recursive: true })
-      extractZip(zipPath, extractDir)
-
-      const sourceRoot = findTosuRoot(extractDir)
-      if (!sourceRoot) throw new Error('tosu.exe не найден в загруженном архиве')
-
-      onProgress({ phase: 'installing', progress: 50, message: 'Установка файлов tosu…' })
-      await mergeInstall(sourceRoot, tosuDir)
-
-      if (fs.existsSync(zipPath)) {
-        try { fs.unlinkSync(zipPath) } catch { /* ignore */ }
-      }
-      fs.rmSync(extractDir, { recursive: true, force: true })
-
-      // Download and install matching overlay package
-      await installMatchingOverlay(tosuDir, info.latestVersion, onProgress)
-
-      onProgress({ phase: 'installing', progress: 98, message: 'Завершение установки…' })
-      return info.latestVersion
-    } catch (err) {
-      fs.rmSync(extractDir, { recursive: true, force: true })
-      if (fs.existsSync(zipPath)) {
-        try { fs.unlinkSync(zipPath) } catch { /* ignore */ }
-      }
-      throw new Error(formatUserFacingError(err, 'Ошибка при установке обновления'))
-    }
-  }
-
-  /**
-   * Finalizes the update after tosu has successfully started and responded.
-   */
-  commitUpdate(tosuDir: string, version: string): void {
-    try {
-      fs.writeFileSync(path.join(tosuDir, 'version'), normalizeVersion(version), 'utf8')
-    } catch (err) {
-      console.warn('[tosu-updater] commit version write failed:', err)
-    }
-    cleanupBackup(tosuDir)
-    cleanupUpdateTemp(tosuDir)
   }
 }

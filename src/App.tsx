@@ -13,7 +13,6 @@ import { SettingsPage } from './pages/SettingsPage'
 import { useTosuSocket } from './hooks/useTosuSocket'
 import { useCounterDownloads } from './hooks/useCounterDownloads'
 import { useTosuSettings } from './hooks/useTosuSettings'
-import { useTosuUpdate } from './hooks/useTosuUpdate'
 import { useAppUpdate } from './hooks/useAppUpdate'
 import { useGuiSettings } from './hooks/useGuiSettings'
 import { UpdateBanner } from './components/UpdateBanner'
@@ -46,7 +45,6 @@ export default function App() {
 
   const tosuSettings = useTosuSettings(tosuStatus, showToast)
   const counterDownloads = useCounterDownloads(showToast)
-  const tosuUpdate = useTosuUpdate(showToast, refreshStatus)
   const appUpdate = useAppUpdate(showToast)
   const guiSettings = useGuiSettings()
 
@@ -94,58 +92,28 @@ export default function App() {
   }, [refreshStatus])
 
   const handleCheckUpdates = async () => {
-    const [appInfo, tosuInfo] = await Promise.all([
-      appUpdate.checkForUpdate(true, { notify: false }),
-      tosuUpdate.checkForUpdate(true, { notify: false }),
-    ])
+    const appInfo = await appUpdate.checkForUpdate(true, { notify: false })
 
-    const appAvail = Boolean(appInfo?.updateAvailable)
-    const tosuAvail = Boolean(tosuInfo?.updateAvailable)
-    const appErr = appInfo?.error && !appInfo.unsupported ? appInfo.error : null
-    const tosuErr = tosuInfo?.error || null
-
-    if (appAvail || tosuAvail) {
-      const parts: string[] = []
-      if (appAvail) parts.push(`tosu GUI v${appInfo?.latestVersion}`)
-      if (tosuAvail) parts.push(`tosu v${tosuInfo?.latestVersion}`)
-      showToast(`Доступно: ${parts.join(' и ')}`, 'success')
+    if (appInfo?.updateAvailable) {
+      showToast(`Доступно обновление tosu GUI v${appInfo.latestVersion}`, 'success')
       return
     }
 
-    if (appInfo?.unsupported && tosuErr) {
-      showToast(tosuErr, 'error')
-      return
-    }
-    if (appErr && tosuErr) {
-      showToast(`${appErr}; ${tosuErr}`, 'error')
-      return
-    }
-    if (appErr) {
-      showToast(appErr, 'error')
-      return
-    }
-    if (tosuErr) {
-      showToast(tosuErr, 'error')
-      return
-    }
     if (appInfo?.unsupported) {
-      // Dev build — still report tosu status if we have it
-      if (tosuInfo && !tosuInfo.updateAvailable) {
-        showToast(`tosu актуален (v${tosuInfo.currentVersion})`, 'success')
-      } else {
-        showToast(appInfo.error || 'Автообновление GUI только в установленной версии', 'error')
-      }
+      showToast(appInfo.error || 'Автообновление GUI только в установленной версии', 'error')
       return
     }
 
-    showToast(
-      `Всё актуально (GUI v${appInfo?.currentVersion ?? '—'}, tosu v${tosuInfo?.currentVersion ?? '—'})`,
-      'success'
-    )
+    if (appInfo?.error) {
+      showToast(appInfo.error, 'error')
+      return
+    }
+
+    showToast(`tosu GUI актуален (v${appInfo?.currentVersion ?? '—'})`, 'success')
   }
 
   const handleRestart = async () => {
-    if (tosuUpdate.installing || appUpdate.installing) {
+    if (appUpdate.installing) {
       showToast('Дождитесь окончания обновления', 'error')
       return
     }
@@ -193,32 +161,14 @@ export default function App() {
               }}
             />
           )}
-          {tosuUpdate.visible && tosuUpdate.updateInfo?.updateAvailable && (
-            <UpdateBanner
-              title="Доступно обновление tosu"
-              fromVersion={tosuUpdate.updateInfo.currentVersion}
-              toVersion={tosuUpdate.updateInfo.latestVersion}
-              installing={tosuUpdate.installing}
-              progress={tosuUpdate.progress}
-              releaseUrl={tosuUpdate.updateInfo.releaseUrl}
-              installLabel="Обновить tosu"
-              onInstall={() => void tosuUpdate.install()}
-              onDismiss={() => void tosuUpdate.dismiss()}
-              onOpenRelease={() => {
-                if (tosuUpdate.updateInfo?.releaseUrl) {
-                  void window.tosuGui.openExternal(tosuUpdate.updateInfo.releaseUrl)
-                }
-              }}
-            />
-          )}
           {page === 'status' && (
             <StatusPage
               game={game}
               tosuStatus={tosuStatus}
               onRestart={handleRestart}
-              restarting={restarting || tosuUpdate.installing || appUpdate.installing}
+              restarting={restarting || appUpdate.installing}
               onCheckUpdate={() => void handleCheckUpdates()}
-              checkingUpdate={tosuUpdate.installing || appUpdate.installing}
+              checkingUpdate={appUpdate.installing}
             />
           )}
           <div className="page-slot" hidden={page !== 'counters'}>
@@ -275,7 +225,6 @@ export default function App() {
               dirty={tosuSettings.dirty}
               saving={tosuSettings.saving}
               checkAppUpdates={appUpdate.checkEnabled}
-              checkTosuUpdates={tosuUpdate.checkEnabled}
               closeToTray={guiSettings.closeToTray}
               showBeatmapPanel={guiSettings.showBeatmapPanel}
               songsPath={guiSettings.songsPath}
@@ -285,7 +234,6 @@ export default function App() {
               skinsBrowserEnabled={guiSettings.skinsBrowserEnabled}
               mapsOverlayKeybind={guiSettings.mapsOverlayKeybind}
               onCheckAppUpdatesChange={appUpdate.setCheckAppUpdates}
-              onCheckTosuUpdatesChange={tosuUpdate.setCheckTosuUpdates}
               onCloseToTrayChange={guiSettings.setCloseToTraySetting}
               onShowBeatmapPanelChange={guiSettings.setShowBeatmapPanelSetting}
               onMapsOverlayKeybindChange={guiSettings.setMapsOverlayKeybindSetting}

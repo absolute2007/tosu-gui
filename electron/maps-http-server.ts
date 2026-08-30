@@ -218,6 +218,49 @@ async function handleApi(
     return
   }
 
+  // Audio preview streaming proxy with mirror fallbacks
+  if (pathName === '/api/maps/audio-preview' && req.method === 'GET') {
+    const setId = parseInt(url.searchParams.get('setId') || '0', 10) || 0
+    if (!setId) {
+      sendJson(res, 400, { error: 'setId required' })
+      return
+    }
+
+    const mirrors = [
+      `https://b.ppy.sh/preview/${setId}.mp3`,
+      `https://catboy.best/preview/audio/${setId}`,
+      `https://api.nerinyan.moe/preview/${setId}.mp3`,
+    ]
+
+    for (const mUrl of mirrors) {
+      try {
+        const audioRes = await fetch(mUrl, {
+          headers: { 'User-Agent': 'tosu-gui' },
+          signal: AbortSignal.timeout(5000),
+        })
+        if (audioRes.ok && audioRes.body) {
+          const contentType = audioRes.headers.get('content-type') || 'audio/mpeg'
+          const buf = Buffer.from(await audioRes.arrayBuffer())
+          if (buf.length > 500) {
+            res.writeHead(200, {
+              'Content-Type': contentType,
+              'Content-Length': buf.length,
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=86400',
+            })
+            res.end(buf)
+            return
+          }
+        }
+      } catch {
+        /* try next mirror */
+      }
+    }
+
+    sendJson(res, 502, { error: 'Не удалось загрузить аудио превью' })
+    return
+  }
+
   if (pathName === '/api/maps/download' && req.method === 'POST') {
     const raw = await readBody(req)
     let body: { setId?: number; artist?: string; title?: string } = {}

@@ -28,6 +28,7 @@ var TosuOsuPreview = (() => {
     drawPreviewFrame: () => drawPreviewFrame,
     parseOsu: () => parseOsu,
     pointAlongPath: () => pointAlongPath,
+    preloadHitSounds: () => preloadHitSounds,
     resetPreviewRuntime: () => resetPreviewRuntime
   });
   var IDKE_COMBO_COLORS = [
@@ -411,6 +412,15 @@ var TosuOsuPreview = (() => {
   };
   var tintedCircles = /* @__PURE__ */ new Map();
   var tintedApproaches = /* @__PURE__ */ new Map();
+  function getCandidateBases() {
+    const list = ["http://127.0.0.1:24777/skin/", "./skin/", "/skin/"];
+    if (typeof window !== "undefined") {
+      const custom = window.__TOSU_ASSET_BASE__;
+      if (custom) list.unshift(custom);
+      list.push("http://127.0.0.1:24050/Maps%20Browser%20by%20tosu-gui/skin/");
+    }
+    return list;
+  }
   function loadImg(src) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -420,10 +430,21 @@ var TosuOsuPreview = (() => {
       img.src = src;
     });
   }
+  async function loadImgWithFallback(filename) {
+    const bases = getCandidateBases();
+    for (const b of bases) {
+      try {
+        const url = `${b.replace(/\/+$/, "")}/${filename}`;
+        const img = await loadImg(url);
+        if (img && img.naturalWidth > 0) return img;
+      } catch {
+      }
+    }
+    return null;
+  }
   var skinLoadingPromise = null;
   function ensureSkinLoaded() {
     if (skinLoadingPromise) return skinLoadingPromise;
-    const base = "./skin/";
     skinLoadingPromise = (async () => {
       const [
         cursor,
@@ -438,17 +459,17 @@ var TosuOsuPreview = (() => {
         hit50,
         hit0
       ] = await Promise.all([
-        loadImg(`${base}cursor.png`).catch(() => null),
-        loadImg(`${base}cursortrail.png`).catch(() => null),
-        loadImg(`${base}hitcircle.png`).catch(() => null),
-        loadImg(`${base}hitcircleoverlay.png`).catch(() => null),
-        loadImg(`${base}approachcircle.png`).catch(() => null),
-        loadImg(`${base}reversearrow.png`).catch(() => null),
-        loadImg(`${base}sliderb0.png`).catch(() => null),
-        loadImg(`${base}hit300.png`).catch(() => null),
-        loadImg(`${base}hit100.png`).catch(() => null),
-        loadImg(`${base}hit50.png`).catch(() => null),
-        loadImg(`${base}hit0.png`).catch(() => null)
+        loadImgWithFallback("cursor.png"),
+        loadImgWithFallback("cursortrail.png"),
+        loadImgWithFallback("hitcircle.png"),
+        loadImgWithFallback("hitcircleoverlay.png"),
+        loadImgWithFallback("approachcircle.png"),
+        loadImgWithFallback("reversearrow.png"),
+        loadImgWithFallback("sliderb0.png"),
+        loadImgWithFallback("hit300.png"),
+        loadImgWithFallback("hit100.png"),
+        loadImgWithFallback("hit50.png"),
+        loadImgWithFallback("hit0.png")
       ]);
       skinImages.cursor = cursor;
       skinImages.cursortrail = cursortrail;
@@ -463,7 +484,7 @@ var TosuOsuPreview = (() => {
       skinImages.hit0 = hit0;
       const digits = [];
       for (let i = 0; i <= 9; i++) {
-        digits.push(await loadImg(`${base}default-${i}.png`).catch(() => null));
+        digits.push(await loadImgWithFallback(`default-${i}.png`));
       }
       skinImages.digits = digits;
       if (hitcircle) {
@@ -515,16 +536,27 @@ var TosuOsuPreview = (() => {
       return null;
     }
   }
+  async function loadSampleWithFallback(ctx, filename) {
+    const bases = getCandidateBases();
+    for (const b of bases) {
+      try {
+        const url = `${b.replace(/\/+$/, "")}/${filename}`;
+        const buf = await loadSample(ctx, url);
+        if (buf) return buf;
+      } catch {
+      }
+    }
+    return null;
+  }
   async function loadHitSoundBuffers(ctx) {
     if (cachedBuffers) return cachedBuffers;
     if (loadingBuffersPromise) return loadingBuffersPromise;
     loadingBuffersPromise = (async () => {
-      const base = "./skin/";
       const [normal, whistle, finish, clap] = await Promise.all([
-        loadSample(ctx, `${base}normal-hitnormal.wav`).catch(() => null),
-        loadSample(ctx, `${base}normal-hitwhistle.wav`).catch(() => null),
-        loadSample(ctx, `${base}normal-hitfinish.wav`).catch(() => null),
-        loadSample(ctx, `${base}normal-hitclap.wav`).catch(() => null)
+        loadSampleWithFallback(ctx, "normal-hitnormal.wav"),
+        loadSampleWithFallback(ctx, "normal-hitwhistle.wav"),
+        loadSampleWithFallback(ctx, "normal-hitfinish.wav"),
+        loadSampleWithFallback(ctx, "normal-hitclap.wav")
       ]);
       cachedBuffers = { normal, whistle, finish, clap };
       return cachedBuffers;
@@ -575,16 +607,24 @@ var TosuOsuPreview = (() => {
       }
     }
   }
+  function preloadHitSounds(rt) {
+    const ctx = ensureAudio(rt);
+    if (ctx) {
+      void loadHitSoundBuffers(ctx);
+    }
+  }
   function fireHits(data, t, rt) {
-    if (rt.lastT < 0) rt.lastT = t;
+    const AUDIO_LATENCY_OFFSET = 35;
+    const effectiveT = t + AUDIO_LATENCY_OFFSET;
+    if (rt.lastT < 0) rt.lastT = effectiveT;
     const from = rt.lastT;
-    const to = t;
-    rt.lastT = t;
+    const to = effectiveT;
+    rt.lastT = effectiveT;
     if (to < from) return;
     data.objects.forEach((o, i) => {
       if (o.kind === "circle") {
         const key = `c${i}`;
-        if (o.t >= from && o.t <= to + 0.5 && !rt.fired.has(key)) {
+        if (o.t >= from && o.t <= to && !rt.fired.has(key)) {
           rt.fired.add(key);
           playHitSound(rt, o.hitSound);
           rt.judgments.push({ x: o.x, y: o.y, t: o.t, type: "300" });
@@ -595,7 +635,7 @@ var TosuOsuPreview = (() => {
         for (let s = 0; s <= slides; s++) {
           const slideT = o.t + s * (span / slides);
           const key = `sl_${i}_${s}`;
-          if (slideT >= from && slideT <= to + 0.5 && !rt.fired.has(key)) {
+          if (slideT >= from && slideT <= to && !rt.fired.has(key)) {
             rt.fired.add(key);
             playHitSound(rt, o.hitSound);
             if (s === slides) {
@@ -627,8 +667,8 @@ var TosuOsuPreview = (() => {
         a.push({ t: o.t, p: { x: o.x, y: o.y } });
         a.push({ t: o.endTime, p: sliderBallPos(o, o.endTime) });
       } else {
-        a.push({ t: o.t, p: { x: PLAY_W / 2, y: PLAY_H / 2 } });
-        a.push({ t: o.endTime, p: { x: PLAY_W / 2, y: PLAY_H / 2 } });
+        a.push({ t: o.t, p: { x: PLAY_W / 2 + 50, y: PLAY_H / 2 } });
+        a.push({ t: o.endTime, p: { x: PLAY_W / 2 + 50, y: PLAY_H / 2 } });
       }
     }
     a.sort((x, y) => x.t - y.t);
@@ -644,7 +684,13 @@ var TosuOsuPreview = (() => {
         return sliderBallPos(o, t);
       }
       if (o.kind === "spinner" && t >= o.t && t <= o.endTime) {
-        return { x: PLAY_W / 2, y: PLAY_H / 2 };
+        const elapsed = t - o.t;
+        const angle = elapsed * 0.045;
+        const radius = 50;
+        return {
+          x: PLAY_W / 2 + Math.cos(angle) * radius,
+          y: PLAY_H / 2 + Math.sin(angle) * radius
+        };
       }
     }
     const anchors = buildAnchors(data.objects);
@@ -670,8 +716,11 @@ var TosuOsuPreview = (() => {
     return anchors[anchors.length - 1].p;
   }
   function updateCursor(data, t, rt) {
+    const isInsideSpinner = data.objects.some(
+      (o) => o.kind === "spinner" && t >= o.t && t <= o.endTime
+    );
     const target = autoplayTarget(data, t);
-    const k = 0.55;
+    const k = isInsideSpinner ? 0.9 : 0.55;
     rt.cursor = {
       x: rt.cursor.x + (target.x - rt.cursor.x) * k,
       y: rt.cursor.y + (target.y - rt.cursor.y) * k
@@ -852,20 +901,48 @@ var TosuOsuPreview = (() => {
   }
   function drawSpinner(ctx, layout, t, o, alpha) {
     const c = layout.scr({ x: PLAY_W / 2, y: PLAY_H / 2 });
-    const R = Math.min(layout.pfW, layout.pfH) * 0.28;
+    const R = Math.min(layout.pfW, layout.pfH) * 0.32;
     const progress = clamp((t - o.t) / Math.max(1, o.endTime - o.t), 0, 1);
+    const elapsed = Math.max(0, t - o.t);
+    const spinAngle = elapsed * 0.035 % (Math.PI * 2);
     ctx.save();
     ctx.beginPath();
     ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(255,255,255,${(0.25 * alpha).toFixed(3)})`;
+    ctx.fillStyle = `rgba(10,12,20,${(0.6 * alpha).toFixed(3)})`;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,255,255,${(0.3 * alpha).toFixed(3)})`;
     ctx.lineWidth = 4 * layout.scale;
+    ctx.stroke();
+    const numRays = 8;
+    ctx.strokeStyle = `rgba(255,255,255,${(0.22 * alpha).toFixed(3)})`;
+    ctx.lineWidth = 2 * layout.scale;
+    for (let i = 0; i < numRays; i++) {
+      const a = spinAngle + i * Math.PI * 2 / numRays;
+      ctx.beginPath();
+      ctx.moveTo(c.x + Math.cos(a) * (R * 0.22), c.y + Math.sin(a) * (R * 0.22));
+      ctx.lineTo(c.x + Math.cos(a) * (R * 0.88), c.y + Math.sin(a) * (R * 0.88));
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, R * 0.2, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(26,116,242,${(0.8 * alpha).toFixed(3)})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255,255,255,${(0.9 * alpha).toFixed(3)})`;
+    ctx.lineWidth = 3 * layout.scale;
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(c.x, c.y, R, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
-    ctx.strokeStyle = `rgba(26,116,242,${(0.9 * alpha).toFixed(3)})`;
+    ctx.strokeStyle = `rgba(26,116,242,${(0.95 * alpha).toFixed(3)})`;
     ctx.lineWidth = 6 * layout.scale;
     ctx.lineCap = "round";
     ctx.stroke();
+    ctx.fillStyle = `rgba(255,255,255,${(0.95 * alpha).toFixed(3)})`;
+    ctx.font = `bold ${Math.max(10, Math.round(12 * layout.scale))}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(progress >= 1 ? "CLEAR" : "SPIN", c.x, c.y);
     ctx.restore();
   }
   function drawCursor(ctx, layout, rt, nowT) {
@@ -1110,5 +1187,32 @@ var TosuOsuPreview = (() => {
     ctx.fillText(`${(t / 1e3).toFixed(1)}s`, 10, 18);
     return elapsed <= 34e3;
   }
+  if (typeof window !== "undefined") {
+    window.TosuOsuPreview = {
+      approachMs,
+      circleRadius,
+      createPreviewRuntime,
+      resetPreviewRuntime,
+      preloadHitSounds,
+      drawPreviewFrame,
+      parseOsu,
+      pointAlongPath,
+      IDKE_COMBO_COLORS
+    };
+  }
+  if (typeof globalThis !== "undefined") {
+    globalThis.TosuOsuPreview = {
+      approachMs,
+      circleRadius,
+      createPreviewRuntime,
+      resetPreviewRuntime,
+      preloadHitSounds,
+      drawPreviewFrame,
+      parseOsu,
+      pointAlongPath,
+      IDKE_COMBO_COLORS
+    };
+  }
   return __toCommonJS(osu_preview_exports);
 })();
+if(typeof window!=='undefined'){window.TosuOsuPreview=TosuOsuPreview;}if(typeof globalThis!=='undefined'){globalThis.TosuOsuPreview=TosuOsuPreview;}

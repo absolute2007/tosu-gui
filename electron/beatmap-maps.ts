@@ -269,14 +269,54 @@ export async function fetchBeatmapOsuFile(beatmapId: number): Promise<{
 }> {
   const id = Math.floor(Number(beatmapId) || 0)
   if (!id) throw new Error('beatmapId required')
-  if (!(await hasOsuSessionCookie())) {
-    throw new Error('Войдите в osu!, чтобы смотреть превью')
+
+  const fetchWithTimeout = async (url: string, headers?: Record<string, string>): Promise<string | null> => {
+    try {
+      const res = await fetch(url, {
+        headers: headers || { 'User-Agent': 'tosu-gui' },
+        signal: AbortSignal.timeout(4000),
+      })
+      if (res.ok) {
+        const text = await res.text()
+        if (text && text.length > 40 && text.includes('[HitObjects]')) {
+          return text
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return null
   }
-  const content = await osuTextGet(`/osu/${id}`)
-  if (!content || content.length < 40 || !content.includes('[HitObjects]')) {
-    throw new Error('Не удалось загрузить .osu (пусто или недоступно)')
+
+  // 1. Try with active osu! session if present
+  if (await hasOsuSessionCookie()) {
+    try {
+      const content = await osuTextGet(`/osu/${id}`)
+      if (content && content.length > 40 && content.includes('[HitObjects]')) {
+        return { beatmapId: id, content }
+      }
+    } catch {
+      /* fallback to public mirrors */
+    }
   }
-  return { beatmapId: id, content }
+
+  // 2. Try direct public osu.ppy.sh /osu/{id}
+  const publicOsu = await fetchWithTimeout(`https://osu.ppy.sh/osu/${id}`)
+  if (publicOsu) return { beatmapId: id, content: publicOsu }
+
+  // 3. Try osu.direct mirror
+  const directOsu = await fetchWithTimeout(`https://osu.direct/api/osu/${id}`)
+  if (directOsu) return { beatmapId: id, content: directOsu }
+
+  // 4. Try catboy mirror
+  const catboyOsu = await fetchWithTimeout(`https://catboy.best/osu/${id}`)
+  if (catboyOsu) return { beatmapId: id, content: catboyOsu }
+
+  // 5. Try nerinyan mirror
+  const neriOsu = await fetchWithTimeout(`https://api.nerinyan.moe/osu/${id}`)
+  if (neriOsu) return { beatmapId: id, content: neriOsu }
+
+  throw new Error('Не удалось загрузить .osu файл карты для предпросмотра')
 }
 
 export async function searchMapSets(params: MapSearchParams): Promise<MapSearchResult> {

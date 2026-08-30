@@ -287,9 +287,16 @@ class OverlayProcess {
       }
     });
 
-    // Close from UI (X button)
+    // Close from UI (X button) and log console output
     this.window.webContents.on("console-message", (event, level, message) => {
       const text = consoleMessageText(event, level, message);
+      try {
+        const line = `[${new Date().toISOString()}] [lvl:${level}] ${text}\n`;
+        fs.appendFileSync(path.join(process.cwd(), "overlay-console.log"), line);
+        fs.appendFileSync(path.join(path.dirname(process.execPath), "overlay-console.log"), line);
+      } catch {
+        /* ignore */
+      }
       if (text.includes("__TOSU_GUI_MAPS_CLOSE__")) {
         void this.forceCloseMaps("ui-close");
       }
@@ -593,6 +600,7 @@ app.commandLine.appendSwitch("force_high_performance_gpu");
 app.commandLine.appendSwitch("in-process-gpu");
 app.commandLine.appendSwitch("disable-direct-composition");
 app.commandLine.appendSwitch("disable-features", "ThirdPartyStoragePartitioning");
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 (async () => {
   if (app.requestSingleInstanceLock()) {

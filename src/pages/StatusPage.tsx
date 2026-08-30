@@ -105,7 +105,7 @@ export function StatusPage({
             className="btn btn-ghost"
             onClick={onCheckUpdate}
             disabled={checkingUpdate}
-            title="Проверить обновления tosu GUI и tosu"
+            title="Проверить обновления tosu GUI"
           >
             <Download size={14} className={checkingUpdate ? 'spin' : ''} />
             {checkingUpdate ? 'Проверка…' : 'Проверить обновления'}
