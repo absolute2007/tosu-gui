@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { TosuCounter, TosuAppSettings, CounterSetting } from './tosu-api'
-import type { TosuUpdateInfo, UpdateProgress } from './tosu-updater'
 import type { AppUpdateInfo, AppUpdateProgress } from './app-updater'
 import type { GuiSettings } from './gui-settings'
 import type { OnlineBeatmapScore } from './osu-user-score'
@@ -65,11 +64,6 @@ const api = {
     return () => ipcRenderer.removeListener('tosu:socket-event', handler)
   },
   openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
-  checkTosuUpdate: (): Promise<TosuUpdateInfo> => ipcRenderer.invoke('tosu:check-update'),
-  installTosuUpdate: (): Promise<{ ok: boolean; version: string; restartFailed?: boolean }> =>
-    ipcRenderer.invoke('tosu:install-update'),
-  dismissTosuUpdate: (version: string): Promise<void> =>
-    ipcRenderer.invoke('tosu:dismiss-update', version),
   checkAppUpdate: (): Promise<AppUpdateInfo> => ipcRenderer.invoke('app:check-update'),
   installAppUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('app:install-update'),
   dismissAppUpdate: (version: string): Promise<void> =>
@@ -85,11 +79,6 @@ const api = {
     mode: string
     osuPath: string
   }): Promise<OnlineBeatmapScore> => ipcRenderer.invoke('osu:user-beatmap-score', payload),
-  onUpdateProgress: (callback: (progress: UpdateProgress) => void) => {
-    const handler = (_event: unknown, payload: UpdateProgress) => callback(payload)
-    ipcRenderer.on('tosu:update-progress', handler)
-    return () => ipcRenderer.removeListener('tosu:update-progress', handler)
-  },
   onAppUpdateProgress: (callback: (progress: AppUpdateProgress) => void) => {
     const handler = (_event: unknown, payload: AppUpdateProgress) => callback(payload)
     ipcRenderer.on('app:update-progress', handler)

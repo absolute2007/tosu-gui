@@ -9,7 +9,6 @@ interface Props {
   dirty: boolean
   saving: boolean
   checkAppUpdates: boolean
-  checkTosuUpdates: boolean
   closeToTray: boolean
   showBeatmapPanel: boolean
   songsPath: string
@@ -19,7 +18,6 @@ interface Props {
   skinsBrowserEnabled: boolean
   mapsOverlayKeybind: string
   onCheckAppUpdatesChange: (enabled: boolean) => void
-  onCheckTosuUpdatesChange: (enabled: boolean) => void
   onCloseToTrayChange: (enabled: boolean) => void
   onShowBeatmapPanelChange: (enabled: boolean) => void
   onMapsOverlayKeybindChange: (bind: string) => void
@@ -37,7 +35,6 @@ export function SettingsPage({
   dirty,
   saving,
   checkAppUpdates,
-  checkTosuUpdates,
   closeToTray,
   showBeatmapPanel,
   songsPath,
@@ -47,7 +44,6 @@ export function SettingsPage({
   skinsBrowserEnabled,
   mapsOverlayKeybind,
   onCheckAppUpdatesChange,
-  onCheckTosuUpdatesChange,
   onCloseToTrayChange,
   onShowBeatmapPanelChange,
   onMapsOverlayKeybindChange,
@@ -153,17 +149,6 @@ export function SettingsPage({
             </div>
             <div className="setting-control">
               <Toggle checked={checkAppUpdates} onChange={onCheckAppUpdatesChange} />
-            </div>
-          </div>
-          <div className="setting-row">
-            <div className="setting-info">
-              <div className="setting-label">Обновления tosu</div>
-              <div className="setting-desc">
-                Проверять новые версии tosu.exe и in-game overlay
-              </div>
-            </div>
-            <div className="setting-control">
-              <Toggle checked={checkTosuUpdates} onChange={onCheckTosuUpdatesChange} />
             </div>
           </div>
         </div>

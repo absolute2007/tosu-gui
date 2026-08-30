@@ -7,7 +7,7 @@
  * simple gameplay preview without downloading the full set (osu!preview-style).
  */
 ;(function (global) {
-  var APP_VERSION = 19
+  var APP_VERSION = 31
   if (global.__TosuGuiMapsApp && global.__TosuGuiMapsAppVersion === APP_VERSION) return
   if (global.__TosuGuiMapsApp) {
     try {
@@ -132,6 +132,10 @@
       .replace(/"/g, '&quot;')
   }
 
+  function escapeHtml(t) {
+    return esc(t)
+  }
+
   function statusClass(st) {
     st = String(st || '').toLowerCase()
     if (st === 'ranked' || st === 'approved') return 'st-ranked'
@@ -242,8 +246,10 @@
   }
 
   async function api(path, opts) {
+    var timeoutSignal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(5000) : null
     var res = await fetch(API + path, {
       ...opts,
+      signal: (opts && opts.signal) || timeoutSignal || undefined,
       headers: {
         Accept: 'application/json',
         ...(opts && opts.body ? { 'Content-Type': 'application/json' } : {}),
@@ -267,11 +273,18 @@
     console.log('__TOSU_GUI_MAPS_CLOSE__')
   }
 
-  function previewUrlFor(s) {
-    if (s && s.previewUrl) return s.previewUrl
-    if (s && s.id) return 'https://b.ppy.sh/preview/' + s.id + '.mp3'
-    return ''
+  function audioUrlsForSet(setId) {
+    var id = Number(setId) || 0
+    if (!id) return []
+    return [
+      'http://127.0.0.1:24777/api/maps/audio-preview?setId=' + id,
+      'https://b.ppy.sh/preview/' + id + '.mp3',
+      'https://catboy.best/preview/audio/' + id,
+      'https://api.nerinyan.moe/preview/' + id + '.mp3',
+    ]
   }
+
+  var miniPlayerSession = 0
 
   function ensureAudio() {
     if (previewAudio) return previewAudio
@@ -286,15 +299,6 @@
         syncPlayerUi()
       }
     })
-    previewAudio.addEventListener('error', function () {
-      previewId = null
-      previewPaused = false
-      setLine('Не удалось воспроизвести превью')
-      if (visible) {
-        renderList()
-        syncPlayerUi()
-      }
-    })
     previewAudio.addEventListener('timeupdate', function () {
       if (visible) syncPlayerProgress()
     })
@@ -302,9 +306,12 @@
   }
 
   function stopPreview() {
+    miniPlayerSession++
     if (previewAudio) {
       try {
         previewAudio.pause()
+        previewAudio.oncanplay = null
+        previewAudio.onerror = null
         previewAudio.removeAttribute('src')
         previewAudio.load()
       } catch (e) {
@@ -317,55 +324,49 @@
   }
 
   function playSetById(id) {
-    var set = sets.find(function (s) {
-      return s.id === id
-    })
-    var primaryUrl = (set && set.previewUrl) || ('https://b.ppy.sh/preview/' + id + '.mp3')
-    var fallbackUrl = 'https://catboy.best/preview/audio/' + id
+    var session = ++miniPlayerSession
     var audio = ensureAudio()
     try {
       audio.pause()
       audio.volume = previewVolume
-      audio.onerror = function () {
-        if (audio.src !== fallbackUrl) {
-          audio.src = fallbackUrl
-          void audio.play().catch(function () {
-            previewId = null
-            previewPaused = false
-            setLine('Не удалось воспроизвести превью')
-            renderList()
-            syncPlayerUi()
-          })
-        } else {
+      previewId = id
+      previewPaused = false
+      renderList()
+      syncPlayerUi()
+
+      var urls = audioUrlsForSet(id)
+      var idx = 0
+      function tryNext() {
+        if (session !== miniPlayerSession) return
+        if (idx >= urls.length) {
           previewId = null
           previewPaused = false
           setLine('Не удалось воспроизвести превью')
           renderList()
           syncPlayerUi()
+          return
         }
-      }
-      audio.src = primaryUrl
-      previewId = id
-      previewPaused = false
-      renderList()
-      syncPlayerUi()
-      void audio.play().catch(function () {
-        if (audio.src !== fallbackUrl) {
-          audio.src = fallbackUrl
-          void audio.play().catch(function () {
-            previewId = null
-            previewPaused = false
-            setLine('Не удалось воспроизвести превью')
-            renderList()
-            syncPlayerUi()
+        var u = urls[idx++]
+        audio.onerror = function () {
+          if (session === miniPlayerSession) {
+            console.warn('[maps-audio] mini-player source error:', u)
+            tryNext()
+          }
+        }
+        audio.src = u
+        audio.load()
+        var p = audio.play()
+        if (p && p.catch) {
+          p.catch(function (err) {
+            if (session === miniPlayerSession && err && err.name !== 'AbortError') {
+              tryNext()
+            }
           })
         }
-      })
+      }
+      tryNext()
     } catch (e) {
-      previewId = null
-      setLine('Не удалось воспроизвести превью')
-      renderList()
-      syncPlayerUi()
+      console.error('[maps-audio] playSetById error:', e)
     }
   }
 
@@ -827,17 +828,36 @@
   // --- Gameplay preview (circles + sliders via TosuOsuPreview engine) ---
 
   function engine() {
-    return global.TosuOsuPreview || null
+    return (
+      (typeof window !== 'undefined' && window.TosuOsuPreview) ||
+      (typeof globalThis !== 'undefined' && globalThis.TosuOsuPreview) ||
+      global.TosuOsuPreview ||
+      null
+    )
   }
 
-  function stopGpLoop() {
+  var gpAudioSession = 0
+
+  function stopGpAnimation() {
     if (gp.raf) {
       cancelAnimationFrame(gp.raf)
       gp.raf = 0
     }
+    if (gp.timer) {
+      clearInterval(gp.timer)
+      gp.timer = null
+    }
+  }
+
+  function stopGpAudio() {
+    gpAudioSession++
     if (gp.audio) {
       try {
         gp.audio.pause()
+        gp.audio.oncanplay = null
+        gp.audio.onerror = null
+        gp.audio.onplaying = null
+        gp.audio.onended = null
         gp.audio.removeAttribute('src')
         gp.audio.load()
       } catch (e) {
@@ -845,6 +865,95 @@
       }
       gp.audio = null
     }
+  }
+
+  function startGpAudio(setId, onReady) {
+    stopGpAudio()
+    var session = ++gpAudioSession
+    var id = Number(setId) || 0
+    if (!id) {
+      if (typeof onReady === 'function') onReady()
+      return
+    }
+
+    var urls = audioUrlsForSet(id)
+    var audio = new Audio()
+    audio.volume = previewVolume
+    audio.preload = 'auto'
+    gp.audio = audio
+
+    var readyFired = false
+    function triggerReady() {
+      if (readyFired || session !== gpAudioSession || !gp.open) return
+      readyFired = true
+      gp.startPerf = performance.now() - (audio.currentTime || 0) * 1000
+      gp.audioStartPerf = gp.startPerf
+      gp.lastAudioSec = audio.currentTime || 0
+      if (typeof onReady === 'function') onReady()
+    }
+
+    // Safety fallback: if audio takes > 2500ms to start, launch replay anyway
+    var fallbackTimer = setTimeout(triggerReady, 2500)
+
+    var idx = 0
+    function tryNext() {
+      if (session !== gpAudioSession || !gp.open) {
+        clearTimeout(fallbackTimer)
+        try {
+          audio.pause()
+          audio.removeAttribute('src')
+        } catch (e) {}
+        return
+      }
+      if (idx >= urls.length) {
+        console.warn('[maps-gp] all audio urls failed for setId:', id)
+        triggerReady()
+        return
+      }
+      var u = urls[idx++]
+      audio.onerror = function () {
+        if (session === gpAudioSession && gp.open) {
+          console.warn('[maps-gp] audio source failed:', u)
+          tryNext()
+        }
+      }
+      audio.onplaying = function () {
+        clearTimeout(fallbackTimer)
+        triggerReady()
+      }
+      audio.src = u
+      audio.load()
+      var p = audio.play()
+      if (p && p.catch) {
+        p.catch(function (err) {
+          if (session === gpAudioSession && gp.open && err && err.name !== 'AbortError') {
+            console.warn('[maps-gp] audio play error:', err)
+            tryNext()
+          }
+        })
+      }
+    }
+    tryNext()
+  }
+
+  function stopGpLoop() {
+    stopGpAnimation()
+    stopGpAudio()
+  }
+
+  function startGpLoop() {
+    stopGpAnimation()
+    function tick(now) {
+      if (!gp.open || !gp.parsed) return
+      drawGameplay(now)
+      gp.raf = requestAnimationFrame(tick)
+    }
+    gp.raf = requestAnimationFrame(tick)
+    gp.timer = setInterval(function () {
+      if (gp.open && gp.parsed) {
+        drawGameplay(performance.now())
+      }
+    }, 16)
   }
 
   function closeGameplayPreview() {
@@ -889,52 +998,60 @@
     var eng = engine()
     if (!canvas || !gp.open || !eng || !gp.parsed) return
     var ctx = canvas.getContext('2d')
-    if (gp.audio && !gp.audio.paused && !gp.audio.ended && Number.isFinite(gp.audio.currentTime)) {
-      var curSec = gp.audio.currentTime
-      if (curSec !== gp.lastAudioSec) {
-        gp.lastAudioSec = curSec
-        gp.audioStartPerf = now - curSec * 1000
-      }
-      elapsed = Math.max(0, now - (gp.audioStartPerf || now))
-    } else if (gp.audio && (gp.audio.readyState < 2 || gp.audio.paused)) {
-      elapsed = 0
+    if (!ctx) return
+    var elapsed = 0
+    if (gp.audio && !gp.audio.paused && !gp.audio.ended && Number.isFinite(gp.audio.currentTime) && gp.audio.currentTime > 0) {
+      elapsed = Math.max(0, gp.audio.currentTime * 1000)
     } else {
-      elapsed = Math.max(0, now - gp.startPerf)
+      elapsed = Math.max(0, now - (gp.startPerf || now))
     }
 
-    var t = gp.parsed.previewTime + elapsed
+    var t = (gp.parsed.previewTime || 0) + elapsed
     var rt = ensureGpRuntime()
-    var cont = eng.drawPreviewFrame(
-      ctx,
-      gp.parsed,
-      canvas.width,
-      canvas.height,
-      t,
-      elapsed,
-      rt
-    )
+    var cont = true
+    try {
+      cont = eng.drawPreviewFrame(
+        ctx,
+        gp.parsed,
+        canvas.width || 640,
+        canvas.height || 480,
+        t,
+        elapsed,
+        rt
+      )
+    } catch (drawErr) {
+      console.error('[maps-gp] drawPreviewFrame error:', drawErr)
+    }
     if (!cont || (gp.audio && gp.audio.ended)) {
       closeGameplayPreview()
       return
     }
-    gp.raf = requestAnimationFrame(drawGameplay)
   }
 
   async function openGameplayPreview(setId) {
+    console.log('[maps-gp] openGameplayPreview called for setId:', setId)
     var set = sets.find(function (s) {
       return s.id === setId
     })
-    if (!set) return
+    if (!set) {
+      console.warn('[maps-gp] set not found for id:', setId)
+      return
+    }
     var bms = set.beatmaps || []
     if (!bms.length) {
       setLine('Нет сложностей для превью')
       return
     }
-    // Prefer osu!standard, else first
+    // Prefer osu!standard with valid ID
     var pick =
       bms.find(function (b) {
-        return b.mode === 'osu' || b.mode === '0'
-      }) || bms[Math.floor(bms.length / 2)] || bms[0]
+        return (b.mode === 'osu' || b.mode === '0') && b.id
+      }) || bms.find(function (b) { return b.id }) || bms[0]
+
+    if (!pick || !pick.id) {
+      setLine('Ошибка: не найден ID сложности')
+      return
+    }
 
     stopPreview()
     closeGameplayPreview()
@@ -943,6 +1060,7 @@
     gp.beatmapId = pick.id
     gp.loading = true
     gp.error = ''
+
     if (els.gpModal) els.gpModal.hidden = false
     if (els.gpTitle) els.gpTitle.textContent = set.artist + ' — ' + set.title
     if (els.gpSub) els.gpSub.textContent = pick.version + ' · ' + (pick.stars || 0).toFixed(2) + '★ · загрузка…'
@@ -956,7 +1074,7 @@
             b.id +
             '">' +
             '<span class="mg-diffico" style="color:' + getDiffColour(b.stars || 0) + '"><svg viewBox="0 0 1000 1000" width="18" height="18"><g transform="translate(0,1000) scale(1,-1)"><path fill="currentColor" fill-rule="evenodd" d="' + modePath(b.mode) + '"/></g></svg></span>' +
-            escapeHtml(b.version) + '</button>'
+            esc(b.version) + '</button>'
           )
         })
         .join('')
@@ -966,20 +1084,94 @@
   }
 
   async function loadGameplayDiff(beatmapId, set) {
+    console.log('[maps-gp] loadGameplayDiff started for beatmapId:', beatmapId)
     gp.loading = true
     gp.error = ''
     gp.beatmapId = beatmapId
-    stopGpLoop()
+    stopGpAnimation()
     if (els.gpSub) els.gpSub.textContent = 'Загрузка…'
+
+    var bm = (set.beatmaps || []).find(function (b) {
+      return b.id === beatmapId
+    })
+    if (els.gpDiffs) {
+      els.gpDiffs.querySelectorAll('[data-gp-diff]').forEach(function (b) {
+        b.classList.toggle('-on', Number(b.getAttribute('data-gp-diff')) === beatmapId)
+      })
+    }
+
     try {
       var eng = engine()
       if (!eng || typeof eng.parseOsu !== 'function') {
+        console.error('[maps-gp] engine not loaded!', eng)
         throw new Error('Движок превью не загружен')
       }
-      var r = await api('/api/maps/osu-file?beatmapId=' + beatmapId)
-      var parsed = eng.parseOsu(r.content || '')
+      var r = null
+      try {
+        console.log('[maps-gp] fetching from /api/maps/osu-file...')
+        r = await api('/api/maps/osu-file?beatmapId=' + beatmapId)
+      } catch (e1) {
+        console.warn('[maps-gp] local api failed, trying mirrors:', e1)
+        // Fallback 1: direct osu.ppy.sh /osu/{id}
+        try {
+          var pRes = await fetch('https://osu.ppy.sh/osu/' + beatmapId)
+          if (pRes.ok) {
+            var pTxt = await pRes.text()
+            if (pTxt && pTxt.includes('[HitObjects]')) {
+              r = { beatmapId: beatmapId, content: pTxt }
+            }
+          }
+        } catch (e2) {
+          /* ignore */
+        }
+        // Fallback 2: catboy mirror
+        if (!r) {
+          try {
+            var cRes = await fetch('https://catboy.best/osu/' + beatmapId)
+            if (cRes.ok) {
+              var cTxt = await cRes.text()
+              if (cTxt && cTxt.includes('[HitObjects]')) {
+                r = { beatmapId: beatmapId, content: cTxt }
+              }
+            }
+          } catch (e3) {
+            /* ignore */
+          }
+        }
+        // Fallback 3: osu.direct mirror
+        if (!r) {
+          try {
+            var dRes = await fetch('https://osu.direct/api/osu/' + beatmapId)
+            if (dRes.ok) {
+              var dTxt = await dRes.text()
+              if (dTxt && dTxt.includes('[HitObjects]')) {
+                r = { beatmapId: beatmapId, content: dTxt }
+              }
+            }
+          } catch (e4) {
+            /* ignore */
+          }
+        }
+        // Fallback 4: nerinyan mirror
+        if (!r) {
+          try {
+            var nRes = await fetch('https://api.nerinyan.moe/osu/' + beatmapId)
+            if (nRes.ok) {
+              var nTxt = await nRes.text()
+              if (nTxt && nTxt.includes('[HitObjects]')) {
+                r = { beatmapId: beatmapId, content: nTxt }
+              }
+            }
+          } catch (e5) {
+            /* ignore */
+          }
+        }
+        if (!r) throw e1
+      }
+      var parsed = eng.parseOsu((r && r.content) || '')
+      console.log('[maps-gp] parsed objects:', parsed.objects.length, 'previewTime:', parsed.previewTime)
       gp.parsed = parsed
-      gp.loading = false
+
       var rt = ensureGpRuntime()
       if (rt && typeof eng.resetPreviewRuntime === 'function') {
         eng.resetPreviewRuntime(rt, previewVolume)
@@ -990,58 +1182,33 @@
         rt.volume = previewVolume
         rt.cursor = { x: 256, y: 192 }
       }
-
-      var bm = (set.beatmaps || []).find(function (b) {
-        return b.id === beatmapId
-      })
-      if (els.gpSub) {
-        els.gpSub.textContent = bm
-          ? bm.version + ' · ' + (bm.stars || 0).toFixed(2) + '★'
-          : 'Предпросмотр'
-      }
-      if (els.gpDiffs) {
-        els.gpDiffs.querySelectorAll('[data-gp-diff]').forEach(function (b) {
-          b.classList.toggle('-on', Number(b.getAttribute('data-gp-diff')) === beatmapId)
-        })
+      if (rt && typeof eng.preloadHitSounds === 'function') {
+        eng.preloadHitSounds(rt)
       }
 
-      var primaryUrl = (set && set.previewUrl) || ('https://b.ppy.sh/preview/' + set.id + '.mp3')
-      var fallbackUrl = 'https://catboy.best/preview/audio/' + set.id
-      gp.audio = new Audio()
-      gp.audio.volume = previewVolume
-      gp.audio.preload = 'auto'
-      gp.audio.onerror = function () {
-        if (gp.audio && gp.audio.src !== fallbackUrl) {
-          gp.audio.src = fallbackUrl
-          void gp.audio.play().catch(function () {})
+      // Start audio and only start animation once audio actually plays
+      startGpAudio(set.id, function () {
+        if (!gp.open || gp.beatmapId !== beatmapId) return
+        gp.loading = false
+        if (els.gpSub) {
+          els.gpSub.textContent = bm
+            ? bm.version + ' · ' + (bm.stars || 0).toFixed(2) + '★'
+            : 'Предпросмотр'
         }
-      }
-      gp.audio.src = primaryUrl
-      var now = performance.now()
-      gp.startPerf = now
-      gp.audioStartPerf = now
-      gp.lastAudioSec = 0
-      gp.audio.addEventListener('playing', function () {
-        var pNow = performance.now()
-        var cur = gp.audio.currentTime || 0
-        gp.startPerf = pNow - cur * 1000
-        gp.audioStartPerf = pNow - cur * 1000
-        gp.lastAudioSec = cur
-      })
-      void gp.audio.play().catch(function () {
-        if (gp.audio && gp.audio.src !== fallbackUrl) {
-          gp.audio.src = fallbackUrl
-          void gp.audio.play().catch(function () {})
+        var curRt = ensureGpRuntime()
+        if (curRt && typeof eng.resetPreviewRuntime === 'function') {
+          eng.resetPreviewRuntime(curRt, previewVolume)
         }
+        // Unlock Web Audio for hitsounds
+        try {
+          if (curRt && curRt.audio && curRt.audio.resume) void curRt.audio.resume()
+        } catch (e) {
+          /* ignore */
+        }
+        startGpLoop()
       })
-      // Unlock Web Audio for hitsounds (user gesture chain)
-      try {
-        if (rt && rt.audio && rt.audio.resume) void rt.audio.resume()
-      } catch (e) {
-        /* ignore */
-      }
-      gp.raf = requestAnimationFrame(drawGameplay)
     } catch (err) {
+      console.error('[maps-gp] loadGameplayDiff failed:', err)
       gp.loading = false
       gp.error = err.message || 'Ошибка'
       if (els.gpSub) els.gpSub.textContent = gp.error
@@ -1242,7 +1409,7 @@
       })
     }
     if (els.gpDiffs) {
-      els.gpDiffs.addEventListener('pointerup', function (e) {
+      els.gpDiffs.addEventListener('click', function (e) {
         var t = e.target
         if (!(t instanceof Element)) return
         var btn = t.closest ? t.closest('[data-gp-diff]') : null
@@ -1636,10 +1803,10 @@
     '{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;display:none;align-items:stretch;justify-content:flex-end;padding:12px;box-sizing:border-box;font-size:13px;line-height:1.35;color:rgba(255,255,255,.92);pointer-events:auto}' +
     '#' +
     ROOT_ID +
-    ' .mg-shade{position:absolute;inset:0;background:rgba(0,0,0,.22)}' +
+    ' .mg-shade{position:absolute;inset:0;background:rgba(0,0,0,.65)}' +
     '#' +
     ROOT_ID +
-    ' .mg-panel{position:relative;z-index:1;width:min(640px,100%);height:100%;max-height:100%;min-height:0;display:flex;flex-direction:column;background:rgba(28,28,30,.97);border:1px solid rgba(255,255,255,.12);border-radius:12px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.5)}' +
+    ' .mg-panel{position:relative;z-index:1;width:min(640px,100%);height:100%;max-height:100%;min-height:0;display:flex;flex-direction:column;background:#1c1c1e;border:1px solid rgba(255,255,255,.14);border-radius:12px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.6)}' +
     '#' +
     ROOT_ID +
     ' .mg-top{flex-shrink:0;display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:10px;padding:16px 16px 8px 18px;min-height:52px;box-sizing:border-box}' +
@@ -1702,7 +1869,7 @@
     ' .mg-dd-btn.-active,.mg-dd-btn.-open{border-color:rgba(10,132,255,.55);color:#fff}' +
     '#' +
     ROOT_ID +
-    ' .mg-dd-menu{position:absolute;top:calc(100% + 4px);right:0;z-index:20;min-width:160px;max-height:240px;overflow:auto;padding:4px;border-radius:10px;background:rgba(36,36,40,.98);border:1px solid rgba(255,255,255,.12);box-shadow:0 12px 32px rgba(0,0,0,.45)}' +
+    ' .mg-dd-menu{position:absolute;top:calc(100% + 4px);right:0;z-index:20;min-width:160px;max-height:240px;overflow:auto;padding:4px;border-radius:10px;background:#242428;border:1px solid rgba(255,255,255,.14);box-shadow:0 12px 32px rgba(0,0,0,.55)}' +
     '#' +
     ROOT_ID +
     ' .mg-dd-item{display:block;width:100%;text-align:left;border:none;background:transparent;color:rgba(255,255,255,.88);padding:8px 10px;border-radius:6px;font-size:13px;cursor:pointer}' +
@@ -1854,7 +2021,7 @@
     // Mini-player
     '#' +
     ROOT_ID +
-    ' .mg-player{flex-shrink:0;border-top:1px solid rgba(255,255,255,.1);background:rgba(18,18,20,.98)}' +
+    ' .mg-player{flex-shrink:0;border-top:1px solid rgba(255,255,255,.1);background:#121214}' +
     '#' +
     ROOT_ID +
     ' .mg-player-bar{height:3px;background:rgba(255,255,255,.08);cursor:pointer}' +
@@ -1909,10 +2076,10 @@
     ' .mg-gp-modal[hidden]{display:none!important}' +
     '#' +
     ROOT_ID +
-    ' .mg-gp-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.55)}' +
+    ' .mg-gp-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.75)}' +
     '#' +
     ROOT_ID +
-    ' .mg-gp-panel{position:relative;z-index:1;width:min(680px,100%);background:rgba(22,22,26,.98);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px;box-shadow:0 20px 48px rgba(0,0,0,.55)}' +
+    ' .mg-gp-panel{position:relative;z-index:1;width:min(680px,100%);background:#16161a;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px;box-shadow:0 20px 48px rgba(0,0,0,.65)}' +
     '#' +
     ROOT_ID +
     ' .mg-gp-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px}' +

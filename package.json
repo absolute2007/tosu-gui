@@ -1,7 +1,7 @@
 {
   "name": "tosu-gui",
   "productName": "tosu GUI",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Desktop GUI for tosu — osu! memory reader with in-game overlay",
   "main": "dist-electron/main.js",
   "scripts": {

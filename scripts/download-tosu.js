@@ -8,11 +8,44 @@ const EXE_NAME = isWin ? 'tosu.exe' : 'tosu'
 const TARGET = path.join(RESOURCES_DIR, EXE_NAME)
 
 async function getLatestRelease() {
-  const res = await fetch('https://api.github.com/repos/tosuapp/tosu/releases/latest', {
+  try {
+    const res = await fetch('https://api.github.com/repos/tosuapp/tosu/releases/latest', {
+      headers: { 'User-Agent': 'tosu-gui' },
+    })
+    if (res.ok) {
+      return await res.json()
+    }
+  } catch {
+    /* fallback to html redirect */
+  }
+
+  const res = await fetch('https://github.com/tosuapp/tosu/releases/latest', {
+    redirect: 'follow',
     headers: { 'User-Agent': 'tosu-gui' },
   })
-  if (!res.ok) throw new Error(`GitHub API error: ${res.status}`)
-  return res.json()
+  const match = res.url.match(/\/tag\/(v[\d.]+)/i)
+  if (!match) throw new Error(`Could not determine latest tosu version from ${res.url}`)
+  const tag = match[1]
+  return {
+    tag_name: tag,
+    assets: [
+      {
+        name: `tosu-windows-${tag}.zip`,
+        browser_download_url: `https://github.com/tosuapp/tosu/releases/download/${tag}/tosu-windows-${tag}.zip`,
+        size: 45_000_000,
+      },
+      {
+        name: `tosu-linux-${tag}.zip`,
+        browser_download_url: `https://github.com/tosuapp/tosu/releases/download/${tag}/tosu-linux-${tag}.zip`,
+        size: 38_000_000,
+      },
+      {
+        name: `tosu-overlay-${tag}.zip`,
+        browser_download_url: `https://github.com/tosuapp/tosu/releases/download/${tag}/tosu-overlay-${tag}.zip`,
+        size: 145_000_000,
+      },
+    ],
+  }
 }
 
 async function download(url, dest) {
@@ -41,10 +74,10 @@ function findExe(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true })
   for (const entry of entries) {
     const full = path.join(dir, entry.name)
-    if (entry.isFile() && (entry.name === EXE_NAME || entry.name.endsWith('.exe'))) {
+    if (entry.isFile() && entry.name.toLowerCase() === EXE_NAME.toLowerCase()) {
       return full
     }
-    if (entry.isDirectory()) {
+    if (entry.isDirectory() && entry.name !== 'game-overlay' && !entry.name.startsWith('.')) {
       const found = findExe(full)
       if (found) return found
     }
@@ -196,18 +229,21 @@ async function main() {
   }
 
   console.log('Extracting...')
-  extractZip(zipPath, RESOURCES_DIR)
+  const extractDir = path.join(RESOURCES_DIR, '.tosu-extract')
+  fs.rmSync(extractDir, { recursive: true, force: true })
+  fs.mkdirSync(extractDir, { recursive: true })
+  extractZip(zipPath, extractDir)
   fs.unlinkSync(zipPath)
 
-  const found = findExe(RESOURCES_DIR)
+  const found = findExe(extractDir)
   if (!found) {
-    console.error('tosu binary not found after extraction. Contents:', fs.readdirSync(RESOURCES_DIR))
+    console.error('tosu binary not found after extraction. Contents:', fs.readdirSync(extractDir))
+    fs.rmSync(extractDir, { recursive: true, force: true })
     process.exit(1)
   }
 
-  if (found !== TARGET) {
-    fs.copyFileSync(found, TARGET)
-  }
+  fs.copyFileSync(found, TARGET)
+  fs.rmSync(extractDir, { recursive: true, force: true })
 
   fs.writeFileSync(path.join(RESOURCES_DIR, 'version'), version, 'utf8')
   console.log(`tosu ${tag} ready at ${TARGET}`)

@@ -502,16 +502,13 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
       const audio = gpAudioRef.current
       let elapsed = 0
 
-      if (audio && !audio.paused && !audio.ended && Number.isFinite(audio.currentTime)) {
+      if (audio && !audio.paused && !audio.ended && Number.isFinite(audio.currentTime) && audio.currentTime > 0) {
         const curSec = audio.currentTime
         if (curSec !== gpAudioSyncRef.current.lastAudioSec) {
           gpAudioSyncRef.current.lastAudioSec = curSec
           gpAudioSyncRef.current.audioStartPerf = now - curSec * 1000
         }
         elapsed = Math.max(0, now - gpAudioSyncRef.current.audioStartPerf)
-      } else if (audio && (audio.readyState < 2 || audio.paused)) {
-        // Hold on starting frame while buffering
-        elapsed = 0
       } else {
         elapsed = Math.max(0, now - gpStartRef.current)
       }
