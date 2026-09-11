@@ -12,6 +12,7 @@ import {
   Trash2,
   Volume2,
 } from 'lucide-react'
+import { useI18n } from '../i18n/context'
 import type {
   LocalSkinEntry,
   SkinCustomizationData,
@@ -28,15 +29,16 @@ interface Props {
 
 type FilterCategory = 'all' | SkinTweakCategory
 
-const CATEGORIES: { id: FilterCategory; label: string }[] = [
-  { id: 'all', label: 'Все' },
-  { id: 'cursor', label: 'Курсор' },
-  { id: 'gameplay', label: 'Геймплей' },
-  { id: 'interface', label: 'Интерфейс' },
-  { id: 'audio', label: 'Звуки' },
-]
-
 export function SkinCustomizerPage({ visible, onToast }: Props) {
+  const { t, lang } = useI18n()
+
+  const CATEGORIES: { id: FilterCategory; label: string }[] = [
+    { id: 'all', label: t('skinCustomizer.catAll') },
+    { id: 'cursor', label: t('skinCustomizer.catCursor') },
+    { id: 'gameplay', label: t('skinCustomizer.catGameplay') },
+    { id: 'interface', label: t('skinCustomizer.catInterface') },
+    { id: 'audio', label: t('skinCustomizer.catAudio') },
+  ]
   const [skins, setSkins] = useState<LocalSkinEntry[]>([])
   const [selectedSkinPath, setSelectedSkinPath] = useState<string>('')
   const [loadingSkins, setLoadingSkins] = useState<boolean>(true)
@@ -115,12 +117,15 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         enable: nextState,
       })
       setCustomData(updated)
+      const title = t(`skinCustomizer.tweaks.${tweak.id}.title`) || tweak.title
       onToast(
-        nextState ? `Настройка «${tweak.title}» применена` : `Настройка «${tweak.title}» отменена`,
+        nextState
+          ? (lang === 'en' ? `Applied «${title}»` : `Настройка «${title}» применена`)
+          : (lang === 'en' ? `Reverted «${title}»` : `Настройка «${title}» отменена`),
         'success'
       )
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка применения настройки'
+      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to apply tweak' : 'Ошибка применения настройки')
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -136,9 +141,15 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         tweakId: tweak.id,
       })
       setCustomData(updated)
-      onToast(`Элемент «${tweak.title}» возвращён к исходному состоянию`, 'success')
+      const title = t(`skinCustomizer.tweaks.${tweak.id}.title`) || tweak.title
+      onToast(
+        lang === 'en'
+          ? `Element «${title}» restored to original state`
+          : `Элемент «${title}» возвращён к исходному состоянию`,
+        'success'
+      )
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка сброса элемента'
+      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to reset element' : 'Ошибка сброса элемента')
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -155,9 +166,9 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         recolorTrail,
       })
       setCustomData(updated)
-      onToast('Цвет курсора успешно обновлен в скине', 'success')
+      onToast(lang === 'en' ? 'Cursor color successfully updated in skin' : 'Цвет курсора успешно обновлен в скине', 'success')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка применения цвета курсора'
+      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to recolor cursor' : 'Ошибка применения цвета курсора')
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -173,9 +184,9 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         colors,
       })
       setCustomData(updated)
-      onToast('Цвета комбо-нот успешно сохранены в скине', 'success')
+      onToast(lang === 'en' ? 'Combo note colors saved to skin.ini' : 'Цвета комбо-нот успешно сохранены в скине', 'success')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка сохранения цветов комбо'
+      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to save combo colors' : 'Ошибка сохранения цветов комбо')
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -189,9 +200,9 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       const updated = await window.tosuGui.resetAllSkinTweaks(selectedSkinPath)
       setCustomData(updated)
       setShowResetModal(false)
-      onToast('Все настройки скина успешно сброшены к оригиналу', 'success')
+      onToast(lang === 'en' ? 'All skin modifications successfully reset to original' : 'Все настройки скина успешно сброшены к оригиналу', 'success')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка сброса настроек скина'
+      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to reset skin modifications' : 'Ошибка сброса настроек скина')
       onToast(msg, 'error')
     } finally {
       setResettingAll(false)
@@ -202,7 +213,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
     try {
       await window.tosuGui.openSkinsFolder()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Папка Skins не найдена'
+      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Skins folder not found' : 'Папка Skins не найдена')
       onToast(msg, 'error')
     }
   }
@@ -235,22 +246,20 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       <div className="customizer-header">
         <div className="customizer-title-row">
           <div className="customizer-title-group">
-            <h1>Тюнинг скина</h1>
+            <h1>{t('skinCustomizer.title')}</h1>
             <p className="customizer-subtitle">
-              Настройка параметров, которые нельзя изменить в настройках osu! stable:
-              отключение шлейфа и пульсации курсора, скрытие оценок 300, удаление кружков концов слайдеров,
-              заглушение звуков, перекрашивание курсора и палитры комбо-нот.
+              {t('skinCustomizer.subtitle')}
             </p>
           </div>
           {customData && (
             <div className="customizer-status-summary">
               {customData.modifiedCount > 0 ? (
                 <span className="customizer-status-badge -active">
-                  Изменено элементов: {customData.modifiedCount}
+                  {t('skinCustomizer.modifiedElements', { count: customData.modifiedCount })}
                 </span>
               ) : (
                 <span className="customizer-status-badge">
-                  Оригинальный скин
+                  {t('skinCustomizer.originalSkin')}
                 </span>
               )}
             </div>
@@ -266,7 +275,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
               disabled={loadingSkins || skins.length === 0}
             >
               {skins.length === 0 ? (
-                <option value="">Скины не найдены</option>
+                <option value="">{t('skinCustomizer.noSkinsFound')}</option>
               ) : (
                 skins.map((skin) => (
                   <option key={skin.path} value={skin.path}>
@@ -279,20 +288,20 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
             <button
               className="customizer-btn"
               onClick={() => void loadLocalSkins(selectedSkinPath)}
-              title="Обновить список скинов"
+              title={t('skinCustomizer.updateSkinList')}
               disabled={loadingSkins}
             >
               <RefreshCw size={14} className={loadingSkins ? 'spin' : ''} />
-              Обновить
+              {t('skinCustomizer.updateSkinList')}
             </button>
 
             <button
               className="customizer-btn"
               onClick={() => void handleOpenFolder()}
-              title="Открыть папку Skins в проводнике"
+              title={t('skinCustomizer.skinsFolder')}
             >
               <FolderOpen size={14} />
-              Папка скинов
+              {t('skinCustomizer.skinsFolder')}
             </button>
           </div>
 
@@ -301,10 +310,10 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
               className="customizer-btn -danger"
               disabled={!customData || customData.modifiedCount === 0 || !customData.hasBackup}
               onClick={() => setShowResetModal(true)}
-              title="Вернуть абсолютно все файлы и skin.ini к состоянию до модификации"
+              title={t('skinCustomizer.resetAll')}
             >
               <RotateCcw size={14} />
-              Сбросить весь скин
+              {t('skinCustomizer.resetAll')}
             </button>
           </div>
         </div>
@@ -318,7 +327,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
               onClick={() => setMainView('tweaks')}
             >
               <SlidersHorizontal size={14} />
-              <span>Модификации элементов</span>
+              <span>{t('skinCustomizer.modeTweaks')}</span>
               <span className="customizer-mode-count">{toggleTweaks.length}</span>
             </button>
 
@@ -328,9 +337,9 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
               onClick={() => setMainView('colors')}
             >
               <Palette size={14} />
-              <span>Редактор цветов</span>
+              <span>{t('skinCustomizer.modeColors')}</span>
               {modifiedColorsCount > 0 ? (
-                <span className="customizer-mode-badge -modified">{modifiedColorsCount} изм.</span>
+                <span className="customizer-mode-badge -modified">{t('skinCustomizer.modifiedCount', { count: modifiedColorsCount })}</span>
               ) : (
                 <span className="customizer-mode-count">2</span>
               )}
@@ -369,9 +378,9 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
                 onClick={() => setColorSubTab('combo')}
               >
                 <span className="color-studio-tab-indicator -combo" />
-                <span>Комбо-ноты (Combo 1–8)</span>
+                <span>{t('skinCustomizer.subtabCombo')}</span>
                 {comboColorTweak?.applied && (
-                  <span className="color-studio-tab-pill">Изменено</span>
+                  <span className="color-studio-tab-pill">{t('skinCustomizer.modified')}</span>
                 )}
               </button>
 
@@ -381,9 +390,9 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
                 onClick={() => setColorSubTab('cursor')}
               >
                 <span className="color-studio-tab-indicator -cursor" />
-                <span>Курсор и шлейф</span>
+                <span>{t('skinCustomizer.subtabCursor')}</span>
                 {cursorColorTweak?.applied && (
-                  <span className="color-studio-tab-pill">Изменено</span>
+                  <span className="color-studio-tab-pill">{t('skinCustomizer.modified')}</span>
                 )}
               </button>
             </div>
@@ -395,14 +404,14 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       {loadingCustomData ? (
         <div className="customizer-empty">
           <Loader2 size={24} className="spin" />
-          <span>Считывание элементов скина…</span>
+          <span>{t('skinCustomizer.readingElements')}</span>
         </div>
       ) : skins.length === 0 ? (
         <div className="customizer-empty">
-          <p>В папке Skins osu! не найдено установленных скинов.</p>
+          <p>{t('skinCustomizer.noSkinsInFolder')}</p>
           <button className="customizer-btn" onClick={() => void handleOpenFolder()}>
             <FolderOpen size={14} />
-            Открыть папку Skins
+            {t('skinCustomizer.openSkinsFolder')}
           </button>
         </div>
       ) : mainView === 'colors' ? (
@@ -417,7 +426,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
               />
             ) : (
               <div className="customizer-empty">
-                <p>Настройки комбо-цветов недоступны для этого скина.</p>
+                <p>{lang === 'en' ? 'Combo color settings are not available for this skin.' : 'Настройки комбо-цветов недоступны для этого скина.'}</p>
               </div>
             )
           ) : cursorColorTweak ? (
@@ -432,13 +441,13 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
             />
           ) : (
             <div className="customizer-empty">
-              <p>Настройки цвета курсора недоступны для этого скина.</p>
+              <p>{lang === 'en' ? 'Cursor color settings are not available for this skin.' : 'Настройки цвета курсора недоступны для этого скина.'}</p>
             </div>
           )}
         </div>
       ) : filteredTweaks.length === 0 ? (
         <div className="customizer-empty">
-          <p>Нет настроек в выбранной категории.</p>
+          <p>{t('skinCustomizer.noTweaksInCategory')}</p>
         </div>
       ) : (
         <div className="customizer-grid">
@@ -464,10 +473,9 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       {showResetModal && (
         <div className="customizer-modal-overlay" onClick={() => setShowResetModal(false)}>
           <div className="customizer-modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="customizer-modal-title">Сбросить все настройки скина?</h2>
+            <h2 className="customizer-modal-title">{t('skinCustomizer.resetConfirmTitle')}</h2>
             <p className="customizer-modal-desc">
-              Все модифицированные спрайты и параметры skin.ini будут восстановлены из резервной копии к исходному виду.
-              Временные файлы tosu будут полностью удалены.
+              {t('skinCustomizer.resetConfirmDesc')}
             </p>
             <div className="customizer-modal-actions">
               <button
@@ -475,7 +483,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
                 onClick={() => setShowResetModal(false)}
                 disabled={resettingAll}
               >
-                Отмена
+                {t('common.cancel')}
               </button>
               <button
                 className="customizer-btn -danger"
@@ -485,10 +493,10 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
                 {resettingAll ? (
                   <>
                     <Loader2 size={14} className="spin" />
-                    Восстановление…
+                    {t('skinCustomizer.restoring')}
                   </>
                 ) : (
-                  'Сбросить скин'
+                  t('skinCustomizer.resetAllBtn')
                 )}
               </button>
             </div>
@@ -706,12 +714,19 @@ function TweakCard({
   onToggle,
   onReset,
 }: TweakCardProps) {
+  const { t } = useI18n()
   const categoryLabels: Record<SkinTweakCategory, string> = {
-    cursor: 'Курсор',
-    gameplay: 'Геймплей',
-    interface: 'Интерфейс',
-    audio: 'Звук',
+    cursor: t('skinCustomizer.catCursor'),
+    gameplay: t('skinCustomizer.catGameplay'),
+    interface: t('skinCustomizer.catInterface'),
+    audio: t('skinCustomizer.catAudioSingle'),
   }
+
+  const localizedTitle = t(`skinCustomizer.tweaks.${tweak.id}.title`)
+  const title = localizedTitle !== `skinCustomizer.tweaks.${tweak.id}.title` ? localizedTitle : tweak.title
+
+  const localizedDesc = t(`skinCustomizer.tweaks.${tweak.id}.description`)
+  const description = localizedDesc !== `skinCustomizer.tweaks.${tweak.id}.description` ? localizedDesc : tweak.description
 
   return (
     <div className={`customizer-card ${tweak.applied ? '-modified' : ''}`}>
@@ -726,7 +741,7 @@ function TweakCard({
               className="customizer-icon-btn"
               onClick={onReset}
               disabled={isBusy}
-              title="Вернуть исходный файл из бэкапа"
+              title={t('skinCustomizer.revertBackupTooltip')}
             >
               <RotateCcw size={14} />
             </button>
@@ -773,17 +788,17 @@ function TweakCard({
 
       {/* Card Body */}
       <div className="customizer-card-body">
-        <h3 className="customizer-card-title">{tweak.title}</h3>
+        <h3 className="customizer-card-title">{title}</h3>
         <span className="customizer-card-files" title={tweak.subtitle}>
           {tweak.subtitle}
         </span>
-        <p className="customizer-card-desc">{tweak.description}</p>
+        <p className="customizer-card-desc">{description}</p>
       </div>
 
       {/* Card Footer */}
       <div className="customizer-card-footer">
         <span className={`customizer-status-text ${tweak.applied ? '-on' : ''}`}>
-          {tweak.applied ? 'Модификация активна' : 'Стандартный вид'}
+          {tweak.applied ? t('skinCustomizer.tweakActive') : t('skinCustomizer.standardLook')}
         </span>
         {isBusy && <Loader2 size={14} className="spin" />}
       </div>
@@ -806,6 +821,7 @@ function ComboColorStudio({
   onSetComboColors,
   onReset,
 }: ComboColorStudioProps) {
+  const { t } = useI18n()
   const rawComboColors: string[] =
     Array.isArray(tweak.meta?.colors) && tweak.meta.colors.length > 0
       ? tweak.meta.colors
@@ -848,9 +864,7 @@ function ComboColorStudio({
   }, [selectedComboIdx, rawHue, rawSat, rawLit])
 
   const currentComboHue = comboHues[selectedComboIdx] !== undefined ? comboHues[selectedComboIdx] : rawHue
-  const currentComboSat = rawSat <= 0.01 && comboSats[selectedComboIdx] !== undefined
-    ? rawSat // Keep 0 if user explicitly dragged it to 0
-    : rawSat
+  const currentComboSat = comboSats[selectedComboIdx] !== undefined ? comboSats[selectedComboIdx] : rawSat
   const currentComboLit = rawLit
 
   const handleComboPresetSelect = (hex: string) => {
@@ -868,11 +882,9 @@ function ComboColorStudio({
 
   const handleComboHueSlider = (hue: number) => {
     setComboHues((prev) => ({ ...prev, [selectedComboIdx]: hue }))
-    const sat = rawSat < 0.05 ? 0.85 : rawSat
-    if (sat > 0.02) {
-      setComboSats((prev) => ({ ...prev, [selectedComboIdx]: sat }))
-    }
-    const lit = Math.max(0.12, Math.min(0.88, currentComboLit || 0.52))
+    const sat = Math.max(0.4, currentComboSat)
+    setComboSats((prev) => ({ ...prev, [selectedComboIdx]: sat }))
+    const lit = Math.max(0.2, Math.min(0.8, currentComboLit))
     const [nr, ng, nb] = hslToRgb(hue, sat, lit)
     const updated = [...comboColors]
     updated[selectedComboIdx] = `${nr}, ${ng}, ${nb}`
@@ -880,13 +892,10 @@ function ComboColorStudio({
     setHasComboChanged(true)
   }
 
-  const handleComboSatSlider = (satPercent: number) => {
-    const sat = Math.max(0, Math.min(1, satPercent / 100))
-    if (sat > 0.02) {
-      setComboSats((prev) => ({ ...prev, [selectedComboIdx]: sat }))
-    }
-    const lit = Math.max(0.1, Math.min(0.9, currentComboLit || 0.52))
-    // Use preserved currentComboHue so dragging sat to 0 does not alter the selected hue!
+  const handleComboSatSlider = (satPct: number) => {
+    const sat = satPct / 100
+    setComboSats((prev) => ({ ...prev, [selectedComboIdx]: sat }))
+    const lit = Math.max(0.05, Math.min(0.95, currentComboLit))
     const [nr, ng, nb] = hslToRgb(currentComboHue, sat, lit)
     const updated = [...comboColors]
     updated[selectedComboIdx] = `${nr}, ${ng}, ${nb}`
@@ -894,9 +903,9 @@ function ComboColorStudio({
     setHasComboChanged(true)
   }
 
-  const handleComboLitSlider = (litPercent: number) => {
-    const lit = Math.max(0.04, Math.min(0.96, litPercent / 100))
-    const sat = rawSat < 0.05 && comboSats[selectedComboIdx] !== undefined ? comboSats[selectedComboIdx] : (rawSat < 0.05 ? 0.85 : rawSat)
+  const handleComboLitSlider = (litPct: number) => {
+    const lit = litPct / 100
+    const sat = currentComboSat
     const [nr, ng, nb] = hslToRgb(currentComboHue, sat, lit)
     const updated = [...comboColors]
     updated[selectedComboIdx] = `${nr}, ${ng}, ${nb}`
@@ -990,21 +999,21 @@ function ComboColorStudio({
       <div className="color-studio-header">
         <div className="color-studio-header-info">
           <div className="color-studio-title-badge-row">
-            <h2>Цвета комбо-нот</h2>
+            <h2>{t('skinCustomizer.comboTitle')}</h2>
             <span className="color-studio-tag">Combo 1–{comboColors.length}</span>
           </div>
           <span className="color-studio-header-files">skin.ini: [Colours] → Combo1…Combo8</span>
           <p className="color-studio-header-desc">
-            Настройка оттенков кругов нот для каждой серии комбо. Цвета сохраняются прямо в skin.ini и поддерживаются всеми версиями osu!.
+            {t('skinCustomizer.comboDesc')}
           </p>
         </div>
         <div className="color-studio-header-status">
           <span className={`customizer-status-badge ${tweak.applied ? '-active' : ''}`}>
             {tweak.applied
-              ? `Кастомная палитра (${comboColors.length} комбо)`
+              ? t('skinCustomizer.customPaletteActive', { count: comboColors.length })
               : tweak.meta?.isDefault
-              ? `Стандартные цвета osu! (${comboColors.length} комбо)`
-              : `Оригинальные цвета скина (${comboColors.length} комбо)`}
+              ? t('skinCustomizer.defaultColorsOsu', { count: comboColors.length })
+              : t('skinCustomizer.originalSkinColors', { count: comboColors.length })}
           </span>
           {tweak.canReset && (
             <button
@@ -1012,10 +1021,10 @@ function ComboColorStudio({
               className="customizer-btn -danger"
               onClick={onReset}
               disabled={isBusy}
-              title="Вернуть исходные цвета скина из бэкапа"
+              title={t('skinCustomizer.revertBackup')}
             >
               <RotateCcw size={13} />
-              Вернуть исходные цвета
+              {t('skinCustomizer.revertBackup')}
             </button>
           )}
         </div>
@@ -1039,8 +1048,8 @@ function ComboColorStudio({
 
           <div className="color-studio-pills-card">
             <div className="color-studio-pills-header">
-              <span className="color-studio-pills-title">Серия комбо-нот:</span>
-              <span className="color-studio-pills-count">{comboColors.length} из 8</span>
+              <span className="color-studio-pills-title">{t('skinCustomizer.comboSequence')}</span>
+              <span className="color-studio-pills-count">{t('skinCustomizer.comboOfEight', { count: comboColors.length })}</span>
             </div>
 
             <div className="combo-pills-row">
@@ -1053,7 +1062,7 @@ function ComboColorStudio({
                     className={`combo-pill ${selectedComboIdx === idx ? '-active' : ''}`}
                     style={{ backgroundColor: hex }}
                     onClick={() => setSelectedComboIdx(idx)}
-                    title={`Выбрать комбо ${idx + 1}: ${hex} (RGB: ${colStr})`}
+                    title={`Combo ${idx + 1}: ${hex} (RGB: ${colStr})`}
                     disabled={isBusy}
                   >
                     {idx + 1}
@@ -1066,7 +1075,7 @@ function ComboColorStudio({
                 className="combo-pill-btn"
                 onClick={handleAddCombo}
                 disabled={isBusy || comboColors.length >= 8}
-                title="Добавить новый цвет комбо (макс. 8)"
+                title="+ Combo (max 8)"
               >
                 <Plus size={14} />
               </button>
@@ -1076,13 +1085,13 @@ function ComboColorStudio({
                 className="combo-pill-btn -danger"
                 onClick={handleRemoveCombo}
                 disabled={isBusy || comboColors.length <= 1}
-                title="Удалить выбранный цвет комбо"
+                title="- Combo"
               >
                 <Trash2 size={13} />
               </button>
             </div>
             <span className="color-studio-pills-hint">
-              Кликните по цифре для редактирования оттенка выбранной ноты
+              {t('skinCustomizer.clickNoteHint')}
             </span>
           </div>
         </div>
@@ -1092,7 +1101,7 @@ function ComboColorStudio({
           {/* Active Note Info & Direct Input */}
           <div className="color-studio-section">
             <div className="color-studio-section-title">
-              <span>Цвет активной ноты (#{selectedComboIdx + 1}):</span>
+              <span>{t('skinCustomizer.activeNoteColor', { num: selectedComboIdx + 1 })}</span>
               <span className="combo-color-badge">{activeComboHex.toUpperCase()}</span>
             </div>
 
@@ -1100,7 +1109,7 @@ function ComboColorStudio({
               <div
                 className="combo-native-picker-wrapper"
                 style={{ backgroundColor: activeComboHex }}
-                title="Нажмите для вызова системной палитры"
+                title={t('skinCustomizer.nativePickerTitle')}
               >
                 <input
                   type="color"
@@ -1120,10 +1129,10 @@ function ComboColorStudio({
                 maxLength={7}
                 placeholder="#ff9f0a"
                 disabled={isBusy}
-                title="Шестнадцатеричный HEX-код"
+                title="HEX"
               />
 
-              <div className="combo-rgb-badge" title="Значения RGB активной комбо-ноты">
+              <div className="combo-rgb-badge" title="RGB">
                 <span>R: {activeR}</span>
                 <span>G: {activeG}</span>
                 <span>B: {activeB}</span>
@@ -1133,7 +1142,7 @@ function ComboColorStudio({
 
           {/* Quick Swatches */}
           <div className="color-studio-section">
-            <span className="color-studio-section-title">Быстрые оттенки:</span>
+            <span className="color-studio-section-title">{t('skinCustomizer.quickColors')}</span>
             <div className="combo-swatches-grid">
               {COMBO_COLOR_PRESETS.map((p) => {
                 const isSelected = activeComboHex.toLowerCase() === p.hex.toLowerCase()
@@ -1154,10 +1163,10 @@ function ComboColorStudio({
 
           {/* HSL Sliders */}
           <div className="color-studio-section">
-            <span className="color-studio-section-title">Точная настройка (HSL):</span>
+            <span className="color-studio-section-title">{t('skinCustomizer.hslTitle')}</span>
             <div className="combo-sliders-block">
               <div className="combo-slider-row">
-                <span className="combo-slider-label">Оттенок (H)</span>
+                <span className="combo-slider-label">{t('skinCustomizer.smoothHue')}</span>
                 <input
                   type="range"
                   min="0"
@@ -1166,13 +1175,13 @@ function ComboColorStudio({
                   onChange={(e) => handleComboHueSlider(Number(e.target.value))}
                   className="combo-hue-slider"
                   disabled={isBusy}
-                  title="Оттенок цвета (Hue: 0-360°)"
+                  title="Hue (0-360°)"
                 />
                 <span className="combo-slider-val">{Math.round(currentComboHue)}°</span>
               </div>
 
               <div className="combo-slider-row">
-                <span className="combo-slider-label">Насыщ. (S)</span>
+                <span className="combo-slider-label">{t('skinCustomizer.saturation')}</span>
                 <input
                   type="range"
                   min="0"
@@ -1184,13 +1193,13 @@ function ComboColorStudio({
                     background: `linear-gradient(to right, ${hslToHex(currentComboHue, 0, currentComboLit || 0.5)}, ${hslToHex(currentComboHue, 1, currentComboLit || 0.5)})`,
                   }}
                   disabled={isBusy}
-                  title="Насыщенность (Saturation: 0-100%)"
+                  title="Saturation (0-100%)"
                 />
                 <span className="combo-slider-val">{Math.round(currentComboSat * 100)}%</span>
               </div>
 
               <div className="combo-slider-row">
-                <span className="combo-slider-label">Яркость (L)</span>
+                <span className="combo-slider-label">{t('skinCustomizer.lightness')}</span>
                 <input
                   type="range"
                   min="5"
@@ -1202,7 +1211,7 @@ function ComboColorStudio({
                     background: `linear-gradient(to right, #000000, ${hslToHex(currentComboHue, currentComboSat || 0.85, 0.5)}, #ffffff)`,
                   }}
                   disabled={isBusy}
-                  title="Яркость (Lightness: 5-95%)"
+                  title="Lightness (5-95%)"
                 />
                 <span className="combo-slider-val">{Math.round(currentComboLit * 100)}%</span>
               </div>
@@ -1211,7 +1220,7 @@ function ComboColorStudio({
 
           {/* Themes Presets */}
           <div className="color-studio-section">
-            <span className="color-studio-section-title">Готовые палитры скина:</span>
+            <span className="color-studio-section-title">{t('skinCustomizer.themes')}</span>
             <div className="combo-themes-list">
               {COMBO_THEMES.map((theme) => (
                 <button
@@ -1220,7 +1229,7 @@ function ComboColorStudio({
                   className="combo-theme-btn"
                   onClick={() => handleApplyTheme(theme.colors)}
                   disabled={isBusy}
-                  title={`Применить палитру «${theme.name}»`}
+                  title={theme.name}
                 >
                   <span className="combo-theme-preview-dots">
                     {theme.colors.map((c, i) => (
@@ -1244,10 +1253,10 @@ function ComboColorStudio({
               className="color-studio-apply-btn"
               onClick={handleApplyComboColors}
               disabled={isBusy || (!hasComboChanged && tweak.applied)}
-              title="Сохранить цвета комбо в skin.ini"
+              title={t('skinCustomizer.applyColorsIni')}
             >
               {isBusy ? <Loader2 size={14} className="spin" /> : <Palette size={14} />}
-              Применить цвета в skin.ini
+              {t('skinCustomizer.applyColorsIni')}
             </button>
 
             {hasComboChanged && (
@@ -1256,10 +1265,10 @@ function ComboColorStudio({
                 className="color-studio-cancel-btn"
                 onClick={handleCancelComboChanges}
                 disabled={isBusy}
-                title="Отменить несохраненные изменения"
+                title={t('skinCustomizer.cancelChanges')}
               >
                 <RotateCcw size={13} />
-                Отменить
+                {t('skinCustomizer.cancelChanges')}
               </button>
             )}
           </div>
@@ -1284,6 +1293,7 @@ function CursorColorStudio({
   onRecolorCursor,
   onReset,
 }: CursorColorStudioProps) {
+  const { t } = useI18n()
   const initialHue = typeof tweak.meta?.hue === 'number' ? tweak.meta.hue : 215
   const initialRecolorTrail = typeof tweak.meta?.recolorTrail === 'boolean' ? tweak.meta.recolorTrail : true
 
@@ -1320,16 +1330,16 @@ function CursorColorStudio({
       <div className="color-studio-header">
         <div className="color-studio-header-info">
           <div className="color-studio-title-badge-row">
-            <h2>Цвет курсора и шлейфа</h2>
+            <h2>{t('skinCustomizer.cursorTitle')}</h2>
             <span className="color-studio-tag">cursor.png, cursortrail.png</span>
           </div>
           <p className="color-studio-header-desc">
-            Плавное перекрашивание курсора и его шлейфа с сохранением внутренних градиентов, бликов и белых контуров.
+            {t('skinCustomizer.cursorDesc')}
           </p>
         </div>
         <div className="color-studio-header-status">
           <span className={`customizer-status-badge ${tweak.applied ? '-active' : ''}`}>
-            {tweak.applied ? 'Кастомный цвет активен' : 'Оригинальный цвет скина'}
+            {tweak.applied ? t('skinCustomizer.customColorActive') : t('skinCustomizer.originalSkinColor')}
           </span>
           {tweak.canReset && (
             <button
@@ -1337,10 +1347,10 @@ function CursorColorStudio({
               className="customizer-btn -danger"
               onClick={onReset}
               disabled={isBusy}
-              title="Вернуть исходный цвет курсора из резервной копии"
+              title={t('skinCustomizer.revertCursorBackup')}
             >
               <RotateCcw size={13} />
-              Вернуть исходный курсор
+              {t('skinCustomizer.revertCursorBackup')}
             </button>
           )}
         </div>
@@ -1360,17 +1370,17 @@ function CursorColorStudio({
 
           <div className="color-studio-trail-info-card">
             <div className="color-studio-trail-info-row">
-              <span className="color-studio-trail-info-title">Поведение шлейфа:</span>
+              <span className="color-studio-trail-info-title">{t('skinCustomizer.trailStatus')}</span>
               <span className={`color-studio-trail-badge ${isTrailDisabled ? '-disabled' : '-enabled'}`}>
-                {isTrailDisabled ? 'Шлейф выключен' : 'Шлейф включен'}
+                {isTrailDisabled ? t('skinCustomizer.trailDisabled') : t('skinCustomizer.trailEnabled')}
               </span>
             </div>
             <p className="color-studio-trail-info-desc">
               {isTrailDisabled
-                ? 'Шлейф отключен во вкладке «Модификации элементов». Чтобы его перекрасить, сначала включите его обратно.'
+                ? t('skinCustomizer.trailDescDisabled')
                 : recolorTrail
-                ? 'Файл cursortrail.png перекрашивается в тот же оттенок, что и курсор.'
-                : 'Файл cursortrail.png сохраняет свои исходные цвета без изменений.'}
+                ? t('skinCustomizer.trailDescSync')
+                : t('skinCustomizer.trailDescKeep')}
             </p>
           </div>
         </div>
@@ -1378,7 +1388,7 @@ function CursorColorStudio({
         {/* Right Column: Presets & Controls */}
         <div className="color-studio-controls-col">
           <div className="color-studio-section">
-            <span className="color-studio-section-title">Быстрые оттенки курсора:</span>
+            <span className="color-studio-section-title">{t('skinCustomizer.quickCursorColors')}</span>
             <div className="cursor-color-palette">
               {COLOR_PRESETS.map((p) => (
                 <button
@@ -1396,7 +1406,7 @@ function CursorColorStudio({
 
           <div className="color-studio-section">
             <div className="color-studio-section-title">
-              <span>Плавный выбор оттенка (Hue):</span>
+              <span>{t('skinCustomizer.smoothHueTitle')}</span>
               <span className="cursor-hue-badge">{selectedHue}°</span>
             </div>
             <div className="cursor-hue-row">
@@ -1408,7 +1418,7 @@ function CursorColorStudio({
                 onChange={(e) => handleHueSlider(Number(e.target.value))}
                 className="cursor-hue-slider"
                 disabled={isBusy}
-                title="Плавный выбор оттенка (0–360°)"
+                title="Hue (0–360°)"
               />
             </div>
           </div>
@@ -1424,7 +1434,7 @@ function CursorColorStudio({
                 }}
                 disabled={isBusy}
               />
-              <span>Перекрашивать шлейф (cursortrail) синхронно с курсором</span>
+              <span>{t('skinCustomizer.trailSync')}</span>
             </label>
           </div>
 
@@ -1434,10 +1444,10 @@ function CursorColorStudio({
               className="color-studio-apply-btn"
               onClick={handleApplyColor}
               disabled={isBusy || (!hasColorChanged && tweak.applied)}
-              title="Применить выбранный цвет к файлам скина"
+              title={t('skinCustomizer.applyCursorColor')}
             >
               {isBusy ? <Loader2 size={14} className="spin" /> : <Palette size={14} />}
-              Применить цвет курсора
+              {t('skinCustomizer.applyCursorColor')}
             </button>
           </div>
         </div>
@@ -2165,6 +2175,8 @@ function CursorInteractivePreview({
     lastPosRef.current = null
   }
 
+  const { t } = useI18n()
+
   return (
     <div
       ref={containerRef}
@@ -2174,9 +2186,9 @@ function CursorInteractivePreview({
       onMouseLeave={handleMouseLeave}
     >
       <canvas ref={canvasRef} className="cursor-preview-canvas" />
-      <span className="cursor-preview-hint">Поводите курсор для теста</span>
+      <span className="cursor-preview-hint">{t('skinCustomizer.hoverCursorHint')}</span>
       <span className="customizer-preview-overlay-badge">
-        {trailDisabled ? 'Шлейф отключен' : 'Шлейф включен'}
+        {trailDisabled ? t('skinCustomizer.trailDisabled') : t('skinCustomizer.trailEnabled')}
       </span>
     </div>
   )
@@ -2193,6 +2205,7 @@ function IniCursorPreview({
   isRotateTweak: boolean
   applied: boolean
 }) {
+  const { t } = useI18n()
   const [clicked, setClicked] = useState(false)
   const [rotation, setRotation] = useState(0)
 
@@ -2220,10 +2233,10 @@ function IniCursorPreview({
     <div
       className="cursor-preview-container"
       onClick={handleClick}
-      title={isExpandTweak ? 'Нажмите для проверки клика' : ''}
+      title={isExpandTweak ? t('skinCustomizer.clickTestHint') : ''}
     >
       <span className="cursor-preview-hint">
-        {isExpandTweak ? 'Кликните для теста' : isRotateTweak ? 'Авто-вращение' : ''}
+        {isExpandTweak ? t('skinCustomizer.clickTestHint') : isRotateTweak ? t('skinCustomizer.autoRotateHint') : ''}
       </span>
 
       <div
@@ -2245,12 +2258,12 @@ function IniCursorPreview({
       <span className="customizer-preview-overlay-badge">
         {isExpandTweak
           ? applied
-            ? 'Размер статичен'
-            : 'Пульсирует при клике'
+            ? t('skinCustomizer.staticSizeBadge')
+            : t('skinCustomizer.pulseOnClickBadge')
           : isRotateTweak
           ? applied
-            ? 'Вращение выключено'
-            : 'Вращается'
+            ? t('skinCustomizer.rotationOffBadge')
+            : t('skinCustomizer.rotatingBadge')
           : ''}
       </span>
     </div>
@@ -2264,6 +2277,7 @@ function AudioTweakPreview({
   audioUrl?: string | null
   applied: boolean
 }) {
+  const { t } = useI18n()
   const [playing, setPlaying] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -2298,7 +2312,7 @@ function AudioTweakPreview({
         <button
           className="audio-play-btn"
           onClick={togglePlay}
-          title={playing ? 'Остановить звук' : 'Прослушать звук'}
+          title={playing ? t('skinCustomizer.stopAudio') : t('skinCustomizer.playOriginal')}
         >
           {playing ? <Pause size={18} /> : <Play size={18} style={{ marginLeft: 2 }} />}
         </button>
@@ -2306,11 +2320,11 @@ function AudioTweakPreview({
         <Volume2 size={24} style={{ opacity: 0.4 }} />
       )}
       <span className="audio-preview-label">
-        {audioUrl ? (playing ? 'Воспроизведение…' : 'Прослушать оригинал') : 'Звук из скина'}
+        {audioUrl ? (playing ? t('skinCustomizer.playing') : t('skinCustomizer.playOriginal')) : t('skinCustomizer.audioSkinLabel')}
       </span>
       {applied && (
         <span className="customizer-preview-overlay-badge -hidden">
-          Заглушен (тишина)
+          {t('skinCustomizer.mutedBadge')}
         </span>
       )}
     </div>

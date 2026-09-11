@@ -34,6 +34,7 @@ import {
   type ParsedBeatmap,
   type PreviewRuntime,
 } from '../lib/osu-preview'
+import { useI18n } from '../i18n/context'
 import { DiffIcon } from '../components/DiffIcon'
 import { normalizeOsuMode } from '../lib/osu-diff'
 import './MapsPage.css'
@@ -52,54 +53,10 @@ const SEARCH_COOLDOWN_MS = 1200
 /** After 429, pause auto-load this long. */
 const RATE_LIMIT_COOLDOWN_MS = 45_000
 
-const MODE_OPTIONS: { id: MapModeFilter; label: string }[] = [
-  { id: 'any', label: 'Все' },
-  { id: 'osu', label: 'osu!' },
-  { id: 'taiko', label: 'Taiko' },
-  { id: 'fruits', label: 'Catch' },
-  { id: 'mania', label: 'Mania' },
-]
-
-/** Primary categories — always visible as chips (like osu! listing). */
-const MAIN_STATUS_OPTIONS: { id: MapStatusFilter; label: string }[] = [
-  { id: 'ranked', label: 'Ranked' },
-  { id: 'qualified', label: 'Qualified' },
-  { id: 'loved', label: 'Loved' },
-  { id: 'any', label: 'Любой' },
-]
-
-/** Secondary categories — dropdown (Pending/WIP/etc. on the website). */
-const MORE_STATUS_OPTIONS: { id: MapStatusFilter; label: string }[] = [
-  { id: 'pending', label: 'На рассмотрении' },
-  { id: 'wip', label: 'В разработке' },
-  { id: 'graveyard', label: 'Graveyard' },
-  { id: 'favourites', label: 'Избранное' },
-  { id: 'mine', label: 'Мои карты' },
-]
-
-const LANGUAGE_OPTIONS: { id: MapLanguageFilter; label: string }[] = [
-  { id: 'any', label: 'Любой язык' },
-  { id: 'english', label: 'English' },
-  { id: 'japanese', label: 'Japanese' },
-  { id: 'chinese', label: 'Chinese' },
-  { id: 'korean', label: 'Korean' },
-  { id: 'russian', label: 'Russian' },
-  { id: 'instrumental', label: 'Instrumental' },
-  { id: 'french', label: 'French' },
-  { id: 'german', label: 'German' },
-  { id: 'spanish', label: 'Spanish' },
-  { id: 'italian', label: 'Italian' },
-  { id: 'swedish', label: 'Swedish' },
-  { id: 'polish', label: 'Polish' },
-  { id: 'unspecified', label: 'Не указан' },
-  { id: 'other', label: 'Другой' },
-]
-
-function isMoreStatus(id: MapStatusFilter): boolean {
-  return MORE_STATUS_OPTIONS.some((o) => o.id === id)
-}
-
-function pluralizeDiffs(n: number): string {
+function pluralizeDiffs(n: number, lang: string): string {
+  if (lang === 'en') {
+    return `${n} ${n === 1 ? 'difficulty' : 'difficulties'}`
+  }
   const abs = Math.abs(n) % 100
   const rem = abs % 10
   if (abs > 10 && abs < 20) return `${n} сложностей`
@@ -108,6 +65,52 @@ function pluralizeDiffs(n: number): string {
   return `${n} сложностей`
 }
 
+const MODE_OPTIONS = (lang: string): { id: MapModeFilter; label: string }[] => [
+  { id: 'any', label: lang === 'en' ? 'All' : 'Все' },
+  { id: 'osu', label: 'osu!' },
+  { id: 'taiko', label: 'Taiko' },
+  { id: 'fruits', label: 'Catch' },
+  { id: 'mania', label: 'Mania' },
+]
+
+const MAIN_STATUS_OPTIONS = (lang: string): { id: MapStatusFilter; label: string }[] => [
+  { id: 'ranked', label: 'Ranked' },
+  { id: 'qualified', label: 'Qualified' },
+  { id: 'loved', label: 'Loved' },
+  { id: 'any', label: lang === 'en' ? 'Any' : 'Любой' },
+]
+
+const MORE_STATUS_OPTIONS = (lang: string): { id: MapStatusFilter; label: string }[] => [
+  { id: 'pending', label: lang === 'en' ? 'Pending' : 'На рассмотрении' },
+  { id: 'wip', label: lang === 'en' ? 'WIP' : 'В разработке' },
+  { id: 'graveyard', label: 'Graveyard' },
+  { id: 'favourites', label: lang === 'en' ? 'Favourites' : 'Избранное' },
+  { id: 'mine', label: lang === 'en' ? 'My Maps' : 'Мои карты' },
+]
+
+const MORE_STATUS_IDS: MapStatusFilter[] = ['pending', 'wip', 'graveyard', 'favourites', 'mine']
+
+function isMoreStatus(id: MapStatusFilter): boolean {
+  return MORE_STATUS_IDS.includes(id)
+}
+
+const LANGUAGE_OPTIONS = (lang: string): { id: MapLanguageFilter; label: string }[] => [
+  { id: 'any', label: lang === 'en' ? 'Any language' : 'Любой язык' },
+  { id: 'english', label: 'English' },
+  { id: 'japanese', label: 'Japanese' },
+  { id: 'chinese', label: 'Chinese' },
+  { id: 'korean', label: 'Korean' },
+  { id: 'russian', label: lang === 'en' ? 'Russian' : 'Русский' },
+  { id: 'instrumental', label: 'Instrumental' },
+  { id: 'french', label: 'French' },
+  { id: 'german', label: 'German' },
+  { id: 'spanish', label: 'Spanish' },
+  { id: 'italian', label: 'Italian' },
+  { id: 'swedish', label: 'Swedish' },
+  { id: 'polish', label: 'Polish' },
+  { id: 'unspecified', label: lang === 'en' ? 'Unspecified' : 'Не указан' },
+  { id: 'other', label: lang === 'en' ? 'Other' : 'Другой' },
+]
 
 function statusClass(status: string): string {
   const s = status.toLowerCase()
@@ -139,6 +142,7 @@ interface MapRowProps {
   download: MapDownloadProgress | undefined
   canDownload: boolean
   previewPlaying: boolean
+  lang: string
   onTogglePreview: (set: MapSetSummary) => void
   onGameplayPreview: (set: MapSetSummary) => void
   onDownload: (set: MapSetSummary) => void
@@ -152,6 +156,7 @@ const MapRow = memo(function MapRow({
   download,
   canDownload,
   previewPlaying,
+  lang,
   onTogglePreview,
   onGameplayPreview,
   onDownload,
@@ -170,8 +175,10 @@ const MapRow = memo(function MapRow({
   const displayBeatmaps = matchingBeatmaps.length > 0 ? matchingBeatmaps : set.beatmaps || []
   const totalDiffCount = set.beatmaps?.length || (set.modes?.length ? 1 : 0)
   const countLabel = pluralizeDiffs(
-    activeMode !== 'any' && matchingBeatmaps.length > 0 ? matchingBeatmaps.length : totalDiffCount
+    activeMode !== 'any' && matchingBeatmaps.length > 0 ? matchingBeatmaps.length : totalDiffCount,
+    lang
   )
+
 
   return (
     <div className="map-row">
@@ -227,8 +234,8 @@ const MapRow = memo(function MapRow({
           className={`btn btn-ghost btn-sm map-preview-btn ${previewPlaying ? '-playing' : ''}`}
           disabled={!canPreview}
           onClick={() => onTogglePreview(set)}
-          title={previewPlaying ? 'Пауза' : 'Слушать'}
-          aria-label={previewPlaying ? 'Пауза' : 'Слушать превью'}
+          title={previewPlaying ? (lang === 'en' ? 'Pause' : 'Пауза') : (lang === 'en' ? 'Listen' : 'Слушать')}
+          aria-label={previewPlaying ? (lang === 'en' ? 'Pause' : 'Пауза') : (lang === 'en' ? 'Preview' : 'Слушать превью')}
         >
           {previewPlaying ? <Pause size={14} strokeWidth={2} /> : <Play size={14} strokeWidth={2} />}
         </button>
@@ -237,22 +244,22 @@ const MapRow = memo(function MapRow({
           className="btn btn-ghost btn-sm map-preview-btn"
           disabled={!canGp}
           onClick={() => onGameplayPreview(set)}
-          title="Предпросмотр карты"
-          aria-label="Предпросмотр карты"
+          title={lang === 'en' ? 'Preview map gameplay' : 'Предпросмотр карты'}
+          aria-label={lang === 'en' ? 'Preview map gameplay' : 'Предпросмотр карты'}
         >
           <Eye size={14} strokeWidth={2} />
         </button>
         {owned ? (
           <button type="button" className="btn btn-ghost btn-sm map-dl-btn -owned" disabled>
             <Check size={14} strokeWidth={2} />
-            Есть
+            {lang === 'en' ? 'Owned' : 'Есть'}
           </button>
         ) : busy ? (
           <button
             type="button"
             className="btn btn-ghost btn-sm map-dl-btn -busy"
             onClick={() => onCancel(set.id)}
-            title="Отменить"
+            title={lang === 'en' ? 'Cancel' : 'Отменить'}
           >
             <X size={14} strokeWidth={2} />
             {Math.round(pct)}%
@@ -265,7 +272,7 @@ const MapRow = memo(function MapRow({
             onClick={() => onDownload(set)}
           >
             <Download size={14} strokeWidth={1.8} />
-            Скачать
+            {lang === 'en' ? 'Download' : 'Скачать'}
           </button>
         )}
       </div>
@@ -273,6 +280,7 @@ const MapRow = memo(function MapRow({
     </div>
   )
 })
+
 
 const VOL_KEY = 'tosu-gui-preview-volume'
 const MUTE_OSU_KEY = 'tosu-gui-mute-osu-on-preview'
@@ -1084,14 +1092,23 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   const rateLimitActive = rateLimitedUntil > Date.now()
   const rateLimitSec = rateLimitActive ? Math.ceil((rateLimitedUntil - Date.now()) / 1000) : 0
 
+  const { lang } = useI18n()
+
+  const currentModeOptions = MODE_OPTIONS(lang)
+  const currentMainStatusOptions = MAIN_STATUS_OPTIONS(lang)
+  const currentMoreStatusOptions = MORE_STATUS_OPTIONS(lang)
+  const currentLanguageOptions = LANGUAGE_OPTIONS(lang)
+
   return (
     <div className={`page maps-page${overlay ? ' -overlay' : ''}`}>
       <div className="maps-page-top">
         <div className="page-header maps-header">
           <div>
-            <h1 className="page-title">Карты</h1>
+            <h1 className="page-title">{lang === 'en' ? 'Beatmaps' : 'Карты'}</h1>
             <p className="page-subtitle">
-              {overlay ? 'osu.ppy.sh · поверх игры' : 'Официально с osu.ppy.sh (нужен вход)'}
+              {overlay
+                ? (lang === 'en' ? 'osu.ppy.sh · overlay mode' : 'osu.ppy.sh · поверх игры')
+                : (lang === 'en' ? 'Official osu.ppy.sh (login required)' : 'Официально с osu.ppy.sh (нужен вход)')}
             </p>
           </div>
           <div className="maps-header-actions">
@@ -1106,10 +1123,10 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                 className="btn btn-ghost btn-sm"
                 disabled={authBusy}
                 onClick={() => void handleLogout()}
-                title={account?.username || 'Выйти'}
+                title={account?.username || (lang === 'en' ? 'Log out' : 'Выйти')}
               >
                 {authBusy ? <Loader2 size={14} className="spin" /> : <LogOut size={14} strokeWidth={1.8} />}
-                {account?.username || 'Выйти'}
+                {account?.username || (lang === 'en' ? 'Log out' : 'Выйти')}
               </button>
             ) : (
               <button
@@ -1119,14 +1136,14 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                 onClick={() => void handleLogin()}
               >
                 {authBusy ? <Loader2 size={14} className="spin" /> : <LogIn size={14} strokeWidth={1.8} />}
-                Войти
+                {lang === 'en' ? 'Log in' : 'Войти'}
               </button>
             )}
             <button
               type="button"
               className={`btn btn-sm ${songsPath ? 'btn-ghost' : 'btn-primary'}`}
               onClick={handleSongsClick}
-              title={songsPath ? 'Открыть Songs' : 'Указать папку Songs'}
+              title={songsPath ? (lang === 'en' ? 'Open Songs folder' : 'Открыть Songs') : (lang === 'en' ? 'Choose Songs folder' : 'Указать папку Songs')}
             >
               <FolderOpen size={14} strokeWidth={1.8} />
               Songs
@@ -1137,8 +1154,8 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         {authReady && !loggedIn && (
           <div className="maps-banner">
             <div className="maps-banner-text">
-              <strong>Войдите в osu!</strong>
-              <span>Поиск и скачивание идут с osu.ppy.sh под вашим аккаунтом</span>
+              <strong>{lang === 'en' ? 'Log in to osu!' : 'Войдите в osu!'}</strong>
+              <span>{lang === 'en' ? 'Search and downloads work via your official osu.ppy.sh account' : 'Поиск и скачивание идут с osu.ppy.sh под вашим аккаунтом'}</span>
             </div>
             <div className="maps-banner-actions">
               <button
@@ -1148,7 +1165,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                 onClick={() => void handleLogin()}
               >
                 {authBusy ? <Loader2 size={14} className="spin" /> : <LogIn size={14} strokeWidth={1.8} />}
-                Войти
+                {lang === 'en' ? 'Log in' : 'Войти'}
               </button>
             </div>
           </div>
@@ -1157,16 +1174,16 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         {authReady && loggedIn && !songsPath && (
           <div className="maps-banner">
             <div className="maps-banner-text">
-              <strong>Нужна папка Songs</strong>
-              <span>Куда складывать .osz (обычно %LocalAppData%\osu!\Songs)</span>
+              <strong>{lang === 'en' ? 'Songs folder required' : 'Нужна папка Songs'}</strong>
+              <span>{lang === 'en' ? 'Where to save .osz (usually %LocalAppData%\\osu!\\Songs)' : 'Куда складывать .osz (обычно %LocalAppData%\\osu!\\Songs)'}</span>
             </div>
             <div className="maps-banner-actions">
               <button type="button" className="btn btn-primary btn-sm" onClick={() => void handlePickSongs()}>
-                Выбрать папку
+                {lang === 'en' ? 'Choose folder' : 'Выбрать папку'}
               </button>
               {onOpenSettings && (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenSettings}>
-                  Настройки
+                  {lang === 'en' ? 'Settings' : 'Настройки'}
                 </button>
               )}
             </div>
@@ -1176,8 +1193,8 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         {rateLimitActive && (
           <div className="maps-banner maps-banner-warn">
             <div className="maps-banner-text">
-              <strong>Лимит osu!</strong>
-              <span>Подождите ~{rateLimitSec}с — слишком много запросов подряд</span>
+              <strong>{lang === 'en' ? 'osu! Rate Limit' : 'Лимит osu!'}</strong>
+              <span>{lang === 'en' ? `Please wait ~${rateLimitSec}s — too many requests` : `Подождите ~${rateLimitSec}с — слишком много запросов подряд`}</span>
             </div>
           </div>
         )}
@@ -1187,7 +1204,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
             <Search size={15} strokeWidth={1.8} className="maps-search-icon" />
             <input
               className="glass-input maps-search-input"
-              placeholder="Название, артист, mapper…"
+              placeholder={lang === 'en' ? 'Title, artist, mapper…' : 'Название, артист, mapper…'}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               spellCheck={false}
@@ -1197,8 +1214,8 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
               <button
                 type="button"
                 className="maps-search-clear"
-                title="Очистить"
-                aria-label="Очистить поиск"
+                title={lang === 'en' ? 'Clear' : 'Очистить'}
+                aria-label={lang === 'en' ? 'Clear search' : 'Очистить поиск'}
                 disabled={!authReady || !loggedIn}
                 onClick={() => setQuery('')}
               >
@@ -1211,10 +1228,10 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
             value={language}
             onChange={(e) => setLanguage(e.target.value as MapLanguageFilter)}
             disabled={!authReady || !loggedIn}
-            title="Язык"
-            aria-label="Язык"
+            title={lang === 'en' ? 'Language' : 'Язык'}
+            aria-label={lang === 'en' ? 'Language' : 'Язык'}
           >
-            {LANGUAGE_OPTIONS.map((o) => (
+            {currentLanguageOptions.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
               </option>
@@ -1224,7 +1241,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
 
         <div className="maps-filter-row">
           <div className="tabs-inline maps-statuses">
-            {MAIN_STATUS_OPTIONS.map((o) => (
+            {currentMainStatusOptions.map((o) => (
               <button
                 key={o.id}
                 type="button"
@@ -1244,11 +1261,11 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
               if (v) setStatus(v as MapStatusFilter)
             }}
             disabled={!authReady || !loggedIn}
-            title="Другие категории"
-            aria-label="Другие категории"
+            title={lang === 'en' ? 'More categories' : 'Другие категории'}
+            aria-label={lang === 'en' ? 'More categories' : 'Другие категории'}
           >
-            <option value="">{isMoreStatus(status) ? 'Другие…' : 'Ещё…'}</option>
-            {MORE_STATUS_OPTIONS.map((o) => (
+            <option value="">{isMoreStatus(status) ? (lang === 'en' ? 'Other…' : 'Другие…') : (lang === 'en' ? 'More…' : 'Ещё…')}</option>
+            {currentMoreStatusOptions.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
               </option>
@@ -1257,7 +1274,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         </div>
 
         <div className="tabs-inline maps-modes">
-          {MODE_OPTIONS.map((o) => (
+          {currentModeOptions.map((o) => (
             <button
               key={o.id}
               type="button"
@@ -1275,18 +1292,18 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         {!authReady ? (
           <div className="empty-state">
             <Loader2 size={22} className="spin" />
-            <p>Проверка входа в osu!…</p>
+            <p>{lang === 'en' ? 'Checking osu! login…' : 'Проверка входа в osu!…'}</p>
           </div>
         ) : !loggedIn ? (
           <div className="empty-state">
             <LogIn size={26} strokeWidth={1.5} style={{ opacity: 0.55 }} />
-            <p>Войдите, чтобы искать и скачивать карты</p>
-            <span className="empty-state-subtitle">Поиск и загрузка работают через ваш официальный аккаунт</span>
+            <p>{lang === 'en' ? 'Log in to search and download maps' : 'Войдите, чтобы искать и скачивать карты'}</p>
+            <span className="empty-state-subtitle">{lang === 'en' ? 'Search and downloads work through your official osu! account' : 'Поиск и загрузка работают через ваш официальный аккаунт'}</span>
           </div>
         ) : loading && sets.length === 0 ? (
           <div className="empty-state">
             <Loader2 size={22} className="spin" />
-            <p>Поиск карт…</p>
+            <p>{lang === 'en' ? 'Searching beatmaps…' : 'Поиск карт…'}</p>
           </div>
         ) : error && sets.length === 0 ? (
           <div className="empty-state">
@@ -1299,14 +1316,14 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
               disabled={rateLimitActive}
               onClick={() => void fetchPage(debouncedQuery, mode, status, language, false, null, 0)}
             >
-              Повторить поиск
+              {lang === 'en' ? 'Retry search' : 'Повторить поиск'}
             </button>
           </div>
         ) : sets.length === 0 ? (
           <div className="empty-state">
             <MapIcon size={26} strokeWidth={1.5} style={{ opacity: 0.45 }} />
-            <p>Карты не найдены</p>
-            <span className="empty-state-subtitle">Попробуйте изменить запрос или фильтры</span>
+            <p>{lang === 'en' ? 'No beatmaps found' : 'Карты не найдены'}</p>
+            <span className="empty-state-subtitle">{lang === 'en' ? 'Try adjusting your search query or filters' : 'Попробуйте изменить запрос или фильтры'}</span>
           </div>
         ) : (
           <>
@@ -1324,6 +1341,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                   canDownload={canDownload && !rateLimitActive}
                   onDownload={handleDownload}
                   onCancel={handleCancel}
+                  lang={lang}
                 />
               ))}
             </div>
@@ -1332,10 +1350,10 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
               {loadingMore ? (
                 <div className="maps-load-more-status">
                   <Loader2 size={14} className="spin" />
-                  Загрузка…
+                  {lang === 'en' ? 'Loading…' : 'Загрузка…'}
                 </div>
               ) : rateLimitActive ? (
-                <div className="maps-load-more-status -done">Лимит — ~{rateLimitSec}с</div>
+                <div className="maps-load-more-status -done">{lang === 'en' ? `Limit — ~${rateLimitSec}s` : `Лимит — ~${rateLimitSec}с`}</div>
               ) : hasMore ? (
                 <button
                   type="button"
@@ -1343,10 +1361,10 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                   disabled={loading || loadingMore}
                   onClick={() => loadMore()}
                 >
-                  Показать ещё
+                  {lang === 'en' ? 'Show more' : 'Показать ещё'}
                 </button>
               ) : (
-                <div className="maps-load-more-status -done">Все загружено</div>
+                <div className="maps-load-more-status -done">{lang === 'en' ? 'All loaded' : 'Все загружено'}</div>
               )}
             </div>
           </>
@@ -1379,13 +1397,13 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
             <div className="maps-miniplayer-title">
               {(() => {
                 const cur = sets.find((s) => s.id === previewId)
-                return cur ? `${cur.artist} — ${cur.title}` : 'Нет трека'
+                return cur ? `${cur.artist} — ${cur.title}` : (lang === 'en' ? 'No track' : 'Нет трека')
               })()}
             </div>
             <div className="maps-miniplayer-sub">
               {(() => {
                 const cur = sets.find((s) => s.id === previewId)
-                return cur ? cur.creator : 'Выберите карту для прослушивания'
+                return cur ? cur.creator : (lang === 'en' ? 'Select a beatmap to listen' : 'Выберите карту для прослушивания')
               })()}
             </div>
           </div>
@@ -1394,7 +1412,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
               type="button"
               className="btn btn-ghost btn-sm map-preview-btn"
               onClick={() => playAdjacent(-1)}
-              title="Предыдущая"
+              title={lang === 'en' ? 'Previous' : 'Предыдущая'}
               disabled={!sets.length}
             >
               <ChevronLeft size={16} strokeWidth={2} />
@@ -1410,7 +1428,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                   playSet(sets[0])
                 }
               }}
-              title={previewId && !previewPaused ? 'Пауза' : 'Играть'}
+              title={previewId && !previewPaused ? (lang === 'en' ? 'Pause' : 'Пауза') : (lang === 'en' ? 'Play' : 'Играть')}
               disabled={!sets.length}
             >
               {previewId && !previewPaused ? (
@@ -1423,7 +1441,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
               type="button"
               className="btn btn-ghost btn-sm map-preview-btn"
               onClick={() => playAdjacent(1)}
-              title="Следующая"
+              title={lang === 'en' ? 'Next' : 'Следующая'}
               disabled={!sets.length}
             >
               <ChevronRight size={16} strokeWidth={2} />
@@ -1434,11 +1452,11 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
               type="button"
               className={`btn btn-sm maps-mute-toggle ${muteOsu ? '-on' : 'btn-ghost'}`}
               onClick={toggleMuteOsu}
-              title={muteOsu ? 'Заглушать osu! при превью (включено)' : 'Заглушать osu! при превью (выключено)'}
+              title={muteOsu ? (lang === 'en' ? 'Mute osu! during preview (enabled)' : 'Заглушать osu! при превью (включено)') : (lang === 'en' ? 'Mute osu! during preview (disabled)' : 'Заглушать osu! при превью (выключено)')}
               aria-pressed={muteOsu}
             >
               {muteOsu ? <VolumeX size={14} strokeWidth={1.8} /> : <Volume2 size={14} strokeWidth={1.8} />}
-              <span>Глушить osu!</span>
+              <span>{lang === 'en' ? 'Mute osu!' : 'Глушить osu!'}</span>
             </button>
             <Volume2 size={14} strokeWidth={1.8} />
             <input
@@ -1447,7 +1465,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
               max={100}
               value={Math.round(volume * 100)}
               onChange={(e) => setVolumePersist((parseInt(e.target.value, 10) || 0) / 100)}
-              aria-label="Громкость"
+              aria-label={lang === 'en' ? 'Volume' : 'Громкость'}
             />
             <span>{Math.round(volume * 100)}%</span>
           </div>
@@ -1467,9 +1485,10 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
                   {gpLoading ? (
                     <>
                       <Loader2 size={13} className="spin" />
-                      <span>{gpStatus || 'Загрузка…'}</span>
+                      <span>{gpStatus || (lang === 'en' ? 'Loading…' : 'Загрузка…')}</span>
                     </>
                   ) : (() => {
+
                     const bm = gpSet.beatmaps?.find((b) => b.id === gpBeatmapId)
                     if (!bm) return <span>{gpStatus}</span>
                     return (

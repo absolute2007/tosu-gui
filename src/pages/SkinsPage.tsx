@@ -22,6 +22,7 @@ import type {
   SkinSort,
   SkinSummary,
 } from '../../electron/skins-types'
+import { useI18n } from '../i18n/context'
 import './SkinsPage.css'
 
 function toFullShotUrl(url: string): string {
@@ -34,20 +35,21 @@ interface Props {
   onOpenSettings?: () => void
 }
 
-const MODE_OPTIONS: { id: SkinModeFilter; label: string }[] = [
-  { id: 'any', label: 'Все' },
+const MODE_OPTIONS = (lang: string): { id: SkinModeFilter; label: string }[] => [
+  { id: 'any', label: lang === 'en' ? 'All' : 'Все' },
   { id: 'osu', label: 'osu!' },
   { id: 'taiko', label: 'Taiko' },
   { id: 'fruits', label: 'Catch' },
   { id: 'mania', label: 'Mania' },
 ]
 
-const SORT_OPTIONS: { id: SkinSort; label: string }[] = [
-  { id: 'recent', label: 'Новые' },
-  { id: 'popular', label: 'Популярные' },
-  { id: 'downloads', label: 'Скачивания' },
-  { id: 'likes', label: 'Лайки' },
+const SORT_OPTIONS = (lang: string): { id: SkinSort; label: string }[] => [
+  { id: 'recent', label: lang === 'en' ? 'Recent' : 'Новые' },
+  { id: 'popular', label: lang === 'en' ? 'Popular' : 'Популярные' },
+  { id: 'downloads', label: lang === 'en' ? 'Downloads' : 'Скачивания' },
+  { id: 'likes', label: lang === 'en' ? 'Likes' : 'Лайки' },
 ]
+
 
 const QUERY_DEBOUNCE_MS = 320
 
@@ -413,18 +415,22 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
   const filterBusy = loading && !loadingMore
   const queryPending = query.trim() !== debouncedQuery
 
+  const { lang } = useI18n()
+  const currentModeOptions = MODE_OPTIONS(lang)
+  const currentSortOptions = SORT_OPTIONS(lang)
+
   return (
     <div className="page skins-page" hidden={!visible}>
       <div className="skins-page-top">
         <div className="skins-header">
           <div>
-            <h1 className="page-title">Скины</h1>
-            <p className="page-subtitle">Каталог skins.osuck.net · папка Skins</p>
+            <h1 className="page-title">{lang === 'en' ? 'Skins' : 'Скины'}</h1>
+            <p className="page-subtitle">{lang === 'en' ? 'Catalog skins.osuck.net · Skins folder' : 'Каталог skins.osuck.net · папка Skins'}</p>
           </div>
           <div className="skins-header-actions">
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => void importFile()}>
               <FileUp size={14} strokeWidth={1.8} />
-              Импорт
+              {lang === 'en' ? 'Import' : 'Импорт'}
             </button>
             <button
               type="button"
@@ -438,7 +444,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
               type="button"
               className="btn btn-ghost btn-sm"
               onClick={() => void window.tosuGui.openSkinsFolder().catch(() => onOpenSettings?.())}
-              title={skinsPath || 'Папка не найдена'}
+              title={skinsPath || (lang === 'en' ? 'Folder not found' : 'Папка не найдена')}
             >
               <FolderOpen size={14} strokeWidth={1.8} />
               Skins
@@ -449,16 +455,16 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
         {!skinsPath ? (
           <div className="skins-banner skins-banner-warn">
             <div className="skins-banner-text">
-              <strong>Папка Skins не найдена</strong>
-              <span>Укажите путь к Skins osu!stable</span>
+              <strong>{lang === 'en' ? 'Skins folder not found' : 'Папка Skins не найдена'}</strong>
+              <span>{lang === 'en' ? 'Specify path to osu!stable Skins' : 'Укажите путь к Skins osu!stable'}</span>
             </div>
             <div className="skins-banner-actions">
               <button type="button" className="btn btn-primary btn-sm" onClick={() => void pickPath()}>
-                Выбрать
+                {lang === 'en' ? 'Choose' : 'Выбрать'}
               </button>
               {onOpenSettings ? (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenSettings}>
-                  Настройки
+                  {lang === 'en' ? 'Settings' : 'Настройки'}
                 </button>
               ) : null}
             </div>
@@ -469,7 +475,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
           <div className="skins-url-row">
             <input
               className="glass-input skins-search-input"
-              placeholder="Прямая ссылка на .osk / .zip"
+              placeholder={lang === 'en' ? 'Direct link to .osk / .zip' : 'Прямая ссылка на .osk / .zip'}
               value={urlValue}
               onChange={(e) => setUrlValue(e.target.value)}
               onKeyDown={(e) => {
@@ -477,7 +483,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
               }}
             />
             <button type="button" className="btn btn-primary btn-sm" onClick={() => void downloadUrl()}>
-              Скачать
+              {lang === 'en' ? 'Download' : 'Скачать'}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setUrlOpen(false)}>
               <X size={14} />
@@ -490,7 +496,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
             <Search size={15} strokeWidth={1.8} className="skins-search-icon" />
             <input
               className={`glass-input skins-search-input ${filterBusy || queryPending ? '-has-busy' : ''}`}
-              placeholder="Поиск…"
+              placeholder={lang === 'en' ? 'Search skins…' : 'Поиск…'}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -503,8 +509,8 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
               <button
                 type="button"
                 className="skins-search-clear"
-                title="Очистить"
-                aria-label="Очистить поиск"
+                title={lang === 'en' ? 'Clear' : 'Очистить'}
+                aria-label={lang === 'en' ? 'Clear search' : 'Очистить поиск'}
                 onClick={() => setQuery('')}
               >
                 <X size={14} strokeWidth={1.8} />
@@ -515,7 +521,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
 
         <div className="skins-filters">
           <div className="tabs-inline skins-modes">
-            {MODE_OPTIONS.map((m) => (
+            {currentModeOptions.map((m) => (
               <button
                 key={m.id}
                 type="button"
@@ -527,7 +533,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
             ))}
           </div>
           <div className="tabs-inline skins-sorts">
-            {SORT_OPTIONS.map((s) => (
+            {currentSortOptions.map((s) => (
               <button
                 key={s.id}
                 type="button"
@@ -541,7 +547,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
           {filterBusy ? (
             <span className="skins-filter-status">
               <Loader2 size={13} className="spin" />
-              Обновление…
+              {lang === 'en' ? 'Updating…' : 'Обновление…'}
             </span>
           ) : null}
         </div>
@@ -559,7 +565,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
                   className="btn btn-ghost btn-sm"
                   onClick={() => void window.tosuGui.cancelSkinDownload(p.jobId)}
                 >
-                  Отмена
+                  {lang === 'en' ? 'Cancel' : 'Отмена'}
                 </button>
               </div>
             ))}
@@ -577,23 +583,24 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
         {loading && skins.length === 0 ? (
           <div className="skins-empty">
             <Loader2 size={22} className="spin" />
-            <span>Загрузка скинов…</span>
+            <span>{lang === 'en' ? 'Loading skins…' : 'Загрузка скинов…'}</span>
           </div>
         ) : error && skins.length === 0 ? (
           <div className="skins-empty">
             <AlertCircle size={26} strokeWidth={1.5} style={{ color: 'var(--danger)', opacity: 0.8 }} />
             <span>{error}</span>
             <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 4 }} onClick={() => void runSearch()}>
-              Повторить поиск
+              {lang === 'en' ? 'Retry search' : 'Повторить поиск'}
             </button>
           </div>
         ) : skins.length === 0 ? (
           <div className="skins-empty">
             <Palette size={26} strokeWidth={1.5} style={{ opacity: 0.45 }} />
-            <span>Скины не найдены</span>
-            <span className="empty-state-subtitle">Попробуйте изменить поисковый запрос или фильтры</span>
+            <span>{lang === 'en' ? 'No skins found' : 'Скины не найдены'}</span>
+            <span className="empty-state-subtitle">{lang === 'en' ? 'Try adjusting your search query or filters' : 'Попробуйте изменить поисковый запрос или фильтры'}</span>
           </div>
         ) : (
+
           <>
             <div className={`skins-grid ${filterBusy ? '-dim' : ''}`}>
               {skins.map((skin) => {
@@ -624,12 +631,12 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
                       )}
                       <span className="skin-card-shots-hint">
                         <Images size={13} strokeWidth={1.8} />
-                        Скрины
+                        {lang === 'en' ? 'Screens' : 'Скрины'}
                       </span>
                       {installed ? (
                         <span className="skin-card-badge skin-card-badge-installed">
                           <Check size={12} strokeWidth={2.4} />
-                          Установлен
+                          {lang === 'en' ? 'Installed' : 'Установлен'}
                         </span>
                       ) : null}
                     </button>
@@ -642,12 +649,12 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
                       {installed ? (
                         <div className="skin-card-installed-row">
                           <Check size={13} strokeWidth={2.2} />
-                          Уже в папке Skins
+                          {lang === 'en' ? 'Already in Skins folder' : 'Уже в папке Skins'}
                         </div>
                       ) : (
                         <div className="skin-card-stats">
-                          <span title="Скачивания">{formatCount(skin.downloads)} dl</span>
-                          <span title="Лайки">{formatCount(skin.likes)} likes</span>
+                          <span title={lang === 'en' ? 'Downloads' : 'Скачивания'}>{formatCount(skin.downloads)} dl</span>
+                          <span title={lang === 'en' ? 'Likes' : 'Лайки'}>{formatCount(skin.likes)} likes</span>
                           {skin.sizeLabel ? <span>{skin.sizeLabel} MB</span> : null}
                         </div>
                       )}
@@ -660,7 +667,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
                             />
                           </div>
                           <span className="skin-card-dl-msg">
-                            {job.message || 'Скачивание…'} {job.progress}%
+                            {job.message || (lang === 'en' ? 'Downloading…' : 'Скачивание…')} {job.progress}%
                           </span>
                         </div>
                       ) : null}
@@ -676,12 +683,12 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
                           ) : (
                             <Download size={14} strokeWidth={1.8} />
                           )}
-                          {busy ? `${job?.progress ?? 0}%` : installed ? 'Скачать снова' : 'Скачать'}
+                          {busy ? `${job?.progress ?? 0}%` : installed ? (lang === 'en' ? 'Redownload' : 'Скачать снова') : (lang === 'en' ? 'Download' : 'Скачать')}
                         </button>
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
-                          title="Открыть на osuck"
+                          title={lang === 'en' ? 'Open on osuck' : 'Открыть на osuck'}
                           onClick={() => void window.tosuGui.openExternal(skin.pageUrl)}
                         >
                           <ExternalLink size={14} strokeWidth={1.8} />
@@ -704,7 +711,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
                   }
                 >
                   {loadingMore ? <Loader2 size={16} className="spin" /> : null}
-                  Ещё
+                  {lang === 'en' ? 'More' : 'Ещё'}
                 </button>
               </div>
             ) : null}
@@ -712,7 +719,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
         )}
 
         <p className="skins-attribution">
-          Каталог:{' '}
+          {lang === 'en' ? 'Catalog: ' : 'Каталог: '}
           <button
             type="button"
             className="skins-link"
@@ -720,21 +727,22 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
           >
             skins.osuck.net
           </button>
-          . Файлы с Google Drive / MediaFire.
+          {lang === 'en' ? '. Files hosted on Google Drive / MediaFire.' : '. Файлы с Google Drive / MediaFire.'}
         </p>
       </div>
+
 
       {gallery ? (
         <div
           className="skin-gallery"
           role="dialog"
           aria-modal="true"
-          aria-label={`Скриншоты ${gallery.skin.name}`}
+          aria-label={lang === 'en' ? `Screenshots: ${gallery.skin.name}` : `Скриншоты ${gallery.skin.name}`}
         >
           <button
             type="button"
             className="skin-gallery-backdrop"
-            aria-label="Закрыть"
+            aria-label={lang === 'en' ? 'Close' : 'Закрыть'}
             onClick={() => setGallery(null)}
           />
           <div className="skin-gallery-panel">
@@ -743,16 +751,16 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
                 <div className="skin-gallery-name">{gallery.skin.name}</div>
                 <div className="skin-gallery-meta">
                   {gallery.loading
-                    ? 'Загрузка скриншотов…'
+                    ? (lang === 'en' ? 'Loading screenshots…' : 'Загрузка скриншотов…')
                     : gallery.shots.length
                       ? `${gallery.index + 1} / ${gallery.shots.length}`
-                      : gallery.error || 'Нет скриншотов'}
+                      : gallery.error || (lang === 'en' ? 'No screenshots' : 'Нет скриншотов')}
                 </div>
               </div>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                title="Открыть на osuck"
+                title={lang === 'en' ? 'Open on osuck' : 'Открыть на osuck'}
                 onClick={() => void window.tosuGui.openExternal(gallery.skin.pageUrl)}
               >
                 <ExternalLink size={14} strokeWidth={1.8} />
@@ -760,7 +768,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                title="Закрыть"
+                title={lang === 'en' ? 'Close' : 'Закрыть'}
                 onClick={() => setGallery(null)}
               >
                 <X size={16} strokeWidth={1.8} />
@@ -778,7 +786,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
                     <button
                       type="button"
                       className="skin-gallery-nav -prev"
-                      aria-label="Предыдущий"
+                      aria-label={lang === 'en' ? 'Previous' : 'Предыдущий'}
                       onClick={() =>
                         setGallery((g) =>
                           g
@@ -803,7 +811,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
                     <button
                       type="button"
                       className="skin-gallery-nav -next"
-                      aria-label="Следующий"
+                      aria-label={lang === 'en' ? 'Next' : 'Следующий'}
                       onClick={() =>
                         setGallery((g) =>
                           g ? { ...g, index: (g.index + 1) % g.shots.length } : g
@@ -816,10 +824,11 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
                 </>
               ) : (
                 <div className="skin-gallery-empty">
-                  {gallery.error || 'Нет скриншотов'}
+                  {gallery.error || (lang === 'en' ? 'No screenshots' : 'Нет скриншотов')}
                 </div>
               )}
             </div>
+
 
             {gallery.shots.length > 1 ? (
               <div className="skin-gallery-thumbs">

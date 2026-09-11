@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react'
 import { NumberInput } from './NumberInput'
 import { Toggle } from './Toggle'
 import type { CounterSetting } from '../../electron/tosu-api'
+import { useI18n } from '../i18n/context'
 
 interface Props {
   name: string
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function CounterSettingsModal({ name, onClose, onSaved, onError }: Props) {
+  const { lang } = useI18n()
   const [settings, setSettings] = useState<CounterSetting[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -44,16 +46,16 @@ export function CounterSettingsModal({ name, onClose, onSaved, onError }: Props)
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="glass-card modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title">Настройки: {name}</div>
+        <div className="modal-title">{lang === 'en' ? `Settings: ${name}` : `Настройки: ${name}`}</div>
         <div className="modal-body">
           {loading ? (
             <div className="empty-state">
               <Loader2 size={18} className="spin" />
-              <span>Загрузка параметров…</span>
+              <span>{lang === 'en' ? 'Loading parameters…' : 'Загрузка параметров…'}</span>
             </div>
           ) : settings.length === 0 ? (
             <div className="empty-state">
-              <p>Нет настраиваемых параметров</p>
+              <p>{lang === 'en' ? 'No configurable parameters' : 'Нет настраиваемых параметров'}</p>
             </div>
           ) : (
             settings.map((s) => (
@@ -104,9 +106,9 @@ export function CounterSettingsModal({ name, onClose, onSaved, onError }: Props)
           )}
         </div>
         <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Отмена</button>
+          <button className="btn btn-ghost" onClick={onClose}>{lang === 'en' ? 'Cancel' : 'Отмена'}</button>
           <button className="btn btn-primary" onClick={save} disabled={saving || loading}>
-            {saving ? 'Сохранение...' : 'Сохранить'}
+            {saving ? (lang === 'en' ? 'Saving...' : 'Сохранение...') : (lang === 'en' ? 'Save' : 'Сохранить')}
           </button>
         </div>
       </div>

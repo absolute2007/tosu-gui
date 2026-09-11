@@ -53,31 +53,29 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
             <span className={`status-dot ${overlayActive ? '-online' : '-offline'}`} />
             <div>
               <div className="setting-label">
-                {overlayActive ? (lang === 'en' ? 'Overlay enabled' : 'Оверлей включён') : (lang === 'en' ? 'Overlay disabled' : 'Оверлей выключен')}
+                {overlayActive ? t('overlay.statusEnabled') : t('overlay.statusDisabled')}
               </div>
               <div className="setting-desc">
-                {overlayActive
-                  ? (lang === 'en' ? 'Counters will display when osu! is launched' : 'Счётчики будут отображаться при запуске osu!')
-                  : (lang === 'en' ? 'Enable overlay to see counters in game' : 'Включите оверлей, чтобы видеть счётчики в игре')}
+                {overlayActive ? t('overlay.statusDescActive') : t('overlay.statusDescInactive')}
               </div>
             </div>
           </div>
           {!overlayActive && (
             <button className="btn btn-primary" onClick={quickEnable} disabled={saving || counters.length === 0}>
-              {lang === 'en' ? 'Enable Overlay' : 'Включить оверлей'}
+              {t('overlay.enableOverlayBtn')}
             </button>
           )}
         </div>
       </div>
 
       <div className="glass-card">
-        <div className="card-header">Основное</div>
+        <div className="card-header">{t('overlay.sectionMain')}</div>
         <div className="card-body">
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Включить оверлей</div>
+              <div className="setting-label">{t('overlay.enableOverlayLabel')}</div>
               <div className="setting-desc">
-                GPU-оверлей поверх окна osu! (OpenGL / DirectX)
+                {t('overlay.enableOverlayDesc')}
               </div>
             </div>
             <div className="setting-control">
@@ -91,13 +89,13 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
       </div>
 
       <div className="glass-card">
-        <div className="card-header">Параметры</div>
+        <div className="card-header">{t('overlay.sectionParams')}</div>
         <div className="card-body">
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Горячая клавиша</div>
+              <div className="setting-label">{t('overlay.hotkeyLabel')}</div>
               <div className="setting-desc">
-                Открывает режим редактирования: перетаскивание и масштаб счётчиков
+                {t('overlay.hotkeyDesc')}
               </div>
             </div>
             <div className="setting-control">
@@ -110,8 +108,8 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Макс. FPS оверлея</div>
-              <div className="setting-desc">Меньше FPS — меньше нагрузка на GPU</div>
+              <div className="setting-label">{t('overlay.maxFpsLabel')}</div>
+              <div className="setting-desc">{t('overlay.maxFpsDesc')}</div>
             </div>
             <div className="setting-control">
               <NumberInput
@@ -125,9 +123,9 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Отключить сглаживание (AA)</div>
+              <div className="setting-label">{t('overlay.disableAaLabel')}</div>
               <div className="setting-desc">
-                Чёткий текст без размытия. Применяется ко всем PP-счётчикам
+                {t('overlay.disableAaDesc')}
               </div>
             </div>
             <div className="setting-control">
@@ -141,12 +139,12 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
       </div>
 
       <div className="glass-card">
-        <div className="card-header">Счётчики в оверлее ({counters.length})</div>
+        <div className="card-header">{t('overlay.countersHeader', { count: counters.length })}</div>
         <div className="card-body">
           {counters.length === 0 ? (
             <div className="empty-state" style={{ padding: '20px 0' }}>
-              Нет установленных счётчиков
-              <p>Скачайте счётчик на вкладке «Счётчики», затем вернитесь сюда</p>
+              {t('overlay.noInstalledCounters')}
+              <p>{t('overlay.downloadHint')}</p>
             </div>
           ) : (
             <div className="counter-list">
@@ -166,7 +164,7 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
                       {c.author} · {c.resolution[0]}×{c.resolution[1]}
                     </div>
                     <div className="setting-desc" style={{ marginTop: 6 }}>
-                      Позицию настраивается в игре через горячую клавишу
+                      {t('overlay.counterDragHint')}
                     </div>
                   </div>
                   <div className="counter-actions">
@@ -176,7 +174,7 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
                         onClick={() => setSettingsCounter(c.folderName)}
                       >
                         <Settings size={13} />
-                        Настройки
+                        {t('overlay.settingsBtn')}
                       </button>
                     )}
                     <button
@@ -184,7 +182,7 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
                       onClick={() => window.tosuGui.openExternal(`${baseUrl}/${c.folderName}/`)}
                     >
                       <ExternalLink size={13} />
-                      Превью
+                      {t('overlay.previewBtn')}
                     </button>
                   </div>
                 </div>
@@ -195,30 +193,46 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
       </div>
 
       <div className="glass-card">
-        <div className="card-header">Как настроить в игре</div>
+        <div className="card-header">{t('overlay.guideHeader')}</div>
         <div className="card-body overlay-guide">
           <div className="overlay-step">
             <span className="overlay-step-num">1</span>
             <div>
-              <strong>Включите оверлей</strong> и нажмите «Сохранить и перезапустить»
+              {lang === 'en' ? (
+                <><strong>Enable overlay</strong> and click «Save and restart»</>
+              ) : (
+                <><strong>Включите оверлей</strong> и нажмите «Сохранить и перезапустить»</>
+              )}
             </div>
           </div>
           <div className="overlay-step">
             <span className="overlay-step-num">2</span>
             <div>
-              <strong>Запустите osu!</strong> — счётчики появятся автоматически
+              {lang === 'en' ? (
+                <><strong>Launch osu!</strong> — counters will appear automatically</>
+              ) : (
+                <><strong>Запустите osu!</strong> — счётчики появятся автоматически</>
+              )}
             </div>
           </div>
           <div className="overlay-step">
             <span className="overlay-step-num">3</span>
             <div>
-              Нажмите <span className="hotkey-hint">{settings.INGAME_OVERLAY_KEYBIND}</span> — войдёте в режим редактирования
+              {lang === 'en' ? (
+                <>Press <span className="hotkey-hint">{settings.INGAME_OVERLAY_KEYBIND}</span> to enter edit mode</>
+              ) : (
+                <>Нажмите <span className="hotkey-hint">{settings.INGAME_OVERLAY_KEYBIND}</span> — войдёте в режим редактирования</>
+              )}
             </div>
           </div>
           <div className="overlay-step">
             <span className="overlay-step-num">4</span>
             <div>
-              Перетащите счётчики мышью, измените размер — <strong>Esc</strong> для выхода
+              {lang === 'en' ? (
+                <>Drag counters with mouse, resize — <strong>Esc</strong> to exit</>
+              ) : (
+                <>Перетащите счётчики мышью, измените размер — <strong>Esc</strong> для выхода</>
+              )}
             </div>
           </div>
         </div>
@@ -228,7 +242,7 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
         <div className="save-bar">
           {dirty && (
             <button className="btn btn-primary" onClick={onSave} disabled={saving}>
-              {saving ? 'Сохранение...' : 'Сохранить и перезапустить'}
+              {saving ? t('settings.saving') : t('overlay.saveAndRestart')}
             </button>
           )}
         </div>
