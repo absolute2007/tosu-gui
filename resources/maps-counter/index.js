@@ -35,6 +35,17 @@
   let localIds = new Set()
   let loggedIn = false
   let username = ''
+  const MAPS_AUTH_KEY = 'tosu_maps_auth'
+  try {
+    const cachedAuth = localStorage.getItem(MAPS_AUTH_KEY)
+    if (cachedAuth) {
+      const parsedAuth = JSON.parse(cachedAuth)
+      if (parsedAuth && parsedAuth.loggedIn) {
+        loggedIn = true
+        username = parsedAuth.username || ''
+      }
+    }
+  } catch {}
   let downloads = {}
   let debounceTimer = null
   let apiOk = false
@@ -240,6 +251,9 @@
     if (!(await checkApi())) {
       loggedIn = false
       username = ''
+      try {
+        localStorage.removeItem(MAPS_AUTH_KEY)
+      } catch {}
       updateAuthUi()
       return
     }
@@ -247,9 +261,18 @@
       const a = await api('/api/maps/auth')
       loggedIn = !!a.loggedIn
       username = a.username || ''
+      try {
+        if (loggedIn) {
+          localStorage.setItem(MAPS_AUTH_KEY, JSON.stringify({ loggedIn, username }))
+        } else {
+          localStorage.removeItem(MAPS_AUTH_KEY)
+        }
+      } catch {}
     } catch {
-      loggedIn = false
-      username = ''
+      if (!loggedIn) {
+        loggedIn = false
+        username = ''
+      }
     }
     updateAuthUi()
   }

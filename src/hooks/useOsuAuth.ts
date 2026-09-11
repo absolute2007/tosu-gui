@@ -1,24 +1,52 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { OsuAccountInfo } from '../../electron/preload'
 
+const CACHE_KEY = 'tosu_cached_osu_account'
+
 export function useOsuAuth(onToast?: (msg: string, type: 'success' | 'error') => void) {
-  const [account, setAccount] = useState<OsuAccountInfo | null>(null)
+  const [account, setAccount] = useState<OsuAccountInfo | null>(() => {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as OsuAccountInfo
+        if (parsed && typeof parsed.loggedIn === 'boolean') {
+          return parsed
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return null
+  })
   const [authBusy, setAuthBusy] = useState(false)
   const [authReady, setAuthReady] = useState(false)
+
+  const syncAccountState = useCallback((info: OsuAccountInfo) => {
+    setAccount(info)
+    try {
+      if (info.loggedIn) {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(info))
+      } else {
+        localStorage.removeItem(CACHE_KEY)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   const refreshAuth = useCallback(async () => {
     try {
       const info = await window.tosuGui.getOsuAuthStatus()
-      setAccount(info)
+      syncAccountState(info)
       return info
     } catch {
       const fallback: OsuAccountInfo = { loggedIn: false, userId: null, username: null, avatarUrl: null }
-      setAccount(fallback)
+      syncAccountState(fallback)
       return fallback
     } finally {
       setAuthReady(true)
     }
-  }, [])
+  }, [syncAccountState])
 
   useEffect(() => {
     void refreshAuth()
@@ -28,7 +56,7 @@ export function useOsuAuth(onToast?: (msg: string, type: 'success' | 'error') =>
     setAuthBusy(true)
     try {
       const info = await window.tosuGui.loginOsu()
-      setAccount(info)
+      syncAccountState(info)
       if (info.loggedIn) {
         onToast?.(info.username ? `Вошли как ${info.username}` : 'Вход выполнен', 'success')
       } else {
@@ -43,13 +71,13 @@ export function useOsuAuth(onToast?: (msg: string, type: 'success' | 'error') =>
     } finally {
       setAuthBusy(false)
     }
-  }, [onToast])
+  }, [onToast, syncAccountState])
 
   const logout = useCallback(async () => {
     setAuthBusy(true)
     try {
       const info = await window.tosuGui.logoutOsu()
-      setAccount(info)
+      syncAccountState(info)
       onToast?.('Вышли из osu!', 'success')
       return info
     } catch {
@@ -58,7 +86,7 @@ export function useOsuAuth(onToast?: (msg: string, type: 'success' | 'error') =>
     } finally {
       setAuthBusy(false)
     }
-  }, [onToast])
+  }, [onToast, syncAccountState])
 
   return {
     account,

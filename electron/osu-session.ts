@@ -2,8 +2,10 @@
  * Official osu! website session (cookies) for search + beatmap downloads.
  * API v2 /beatmapsets/{id}/download is lazer-only; website download works with login.
  */
-import { BrowserWindow, session, shell } from 'electron'
+import { BrowserWindow, app, session, shell } from 'electron'
 import type { Session } from 'electron'
+import fs from 'fs'
+import path from 'path'
 import http from 'http'
 import https from 'https'
 import { URL } from 'url'
@@ -183,28 +185,118 @@ function parseUserFromHtml(html: string): Pick<OsuAccountInfo, 'userId' | 'usern
   return null
 }
 
-export async function fetchOsuAccount(): Promise<OsuAccountInfo> {
+function getAccountCachePath(): string {
+  try {
+    return path.join(app.getPath('userData'), 'osu-account.json')
+  } catch {
+    return ''
+  }
+}
+
+let memoryAccountCache: OsuAccountInfo | null = null
+
+function readPersistedAccountCache(): OsuAccountInfo | null {
+  if (memoryAccountCache) return memoryAccountCache
+  try {
+    const p = getAccountCachePath()
+    if (p && fs.existsSync(p)) {
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8')) as OsuAccountInfo
+      if (parsed && typeof parsed.loggedIn === 'boolean') {
+        memoryAccountCache = parsed
+        return parsed
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+function writePersistedAccountCache(account: OsuAccountInfo | null): void {
+  memoryAccountCache = account
+  try {
+    const p = getAccountCachePath()
+    if (!p) return
+    if (!account || !account.loggedIn) {
+      if (fs.existsSync(p)) fs.unlinkSync(p)
+    } else {
+      fs.mkdirSync(path.dirname(p), { recursive: true })
+      fs.writeFileSync(p, JSON.stringify(account, null, 2), 'utf8')
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+let backgroundRefreshInFlight = false
+async function refreshOsuAccountInBackground(): Promise<void> {
+  if (backgroundRefreshInFlight) return
+  backgroundRefreshInFlight = true
+  try {
+    if (await hasOsuSessionCookie()) {
+      await queryOsuAccountOnline()
+    }
+  } catch {
+    /* ignore background errors */
+  } finally {
+    backgroundRefreshInFlight = false
+  }
+}
+
+async function queryOsuAccountOnline(): Promise<OsuAccountInfo> {
   const empty: OsuAccountInfo = { loggedIn: false, userId: null, username: null, avatarUrl: null }
-  if (!(await hasOsuSessionCookie())) return empty
+  if (!(await hasOsuSessionCookie())) {
+    writePersistedAccountCache(null)
+    return empty
+  }
 
   try {
     const headers = await buildOsuHeaders({ Accept: 'text/html,application/xhtml+xml' })
-    const html = await requestText(`${OSU_ORIGIN}/home`, headers)
+    const html = await requestText(`${OSU_ORIGIN}/home`, headers, 12_000)
     const parsed = parseUserFromHtml(html)
     if (parsed?.username || parsed?.userId) {
-      return {
+      const account: OsuAccountInfo = {
         loggedIn: true,
         userId: parsed.userId,
         username: parsed.username,
         avatarUrl: parsed.avatarUrl,
       }
+      writePersistedAccountCache(account)
+      return account
     }
   } catch {
     /* cookie may still be valid for downloads */
   }
 
+  const cached = readPersistedAccountCache()
+  if (cached && cached.loggedIn) {
+    return cached
+  }
+
   // Session cookie present — enough for downloads
-  return { loggedIn: true, userId: null, username: 'osu!', avatarUrl: null }
+  const fallback: OsuAccountInfo = { loggedIn: true, userId: null, username: 'osu!', avatarUrl: null }
+  writePersistedAccountCache(fallback)
+  return fallback
+}
+
+export async function fetchOsuAccount(options?: { forceRefresh?: boolean }): Promise<OsuAccountInfo> {
+  const empty: OsuAccountInfo = { loggedIn: false, userId: null, username: null, avatarUrl: null }
+  if (!(await hasOsuSessionCookie())) {
+    writePersistedAccountCache(null)
+    return empty
+  }
+
+  const cached = readPersistedAccountCache()
+  if (!options?.forceRefresh && cached && cached.loggedIn) {
+    // Session cookie exists and we have cached account info!
+    // Return cached account immediately to prevent slow UI / "Log In" button flash
+    setTimeout(() => {
+      void refreshOsuAccountInBackground()
+    }, 1200)
+    return cached
+  }
+
+  return await queryOsuAccountOnline()
 }
 
 export async function osuJsonGet(pathOrUrl: string): Promise<unknown> {
@@ -229,6 +321,7 @@ export async function osuTextGet(pathOrUrl: string): Promise<string> {
 }
 
 export async function clearOsuSession(): Promise<void> {
+  writePersistedAccountCache(null)
   await getOsuSession().clearStorageData({
     storages: ['cookies', 'localstorage', 'cachestorage', 'indexdb', 'websql', 'serviceworkers'],
   })
@@ -276,7 +369,7 @@ export function loginWithOsuWindow(parent: BrowserWindow | null): Promise<OsuAcc
       settled = true
       stopPoll()
       try {
-        const account = await fetchOsuAccount()
+        const account = await fetchOsuAccount({ forceRefresh: true })
         resolve(account)
       } catch {
         resolve({ loggedIn: false, userId: null, username: null, avatarUrl: null })
@@ -298,7 +391,7 @@ export function loginWithOsuWindow(parent: BrowserWindow | null): Promise<OsuAcc
     const checkLoggedIn = async () => {
       if (await hasOsuSessionCookie()) {
         // Give site a moment to set all cookies after login redirect
-        const account = await fetchOsuAccount()
+        const account = await fetchOsuAccount({ forceRefresh: true })
         if (account.loggedIn) {
           await finish()
         }
@@ -313,7 +406,7 @@ export function loginWithOsuWindow(parent: BrowserWindow | null): Promise<OsuAcc
       stopPoll()
       if (!settled) {
         settled = true
-        void fetchOsuAccount().then(resolve)
+        void fetchOsuAccount({ forceRefresh: true }).then(resolve)
       }
       loginWindow = null
     })

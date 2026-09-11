@@ -10,6 +10,7 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Trash2,
+  Undo2,
   Volume2,
 } from 'lucide-react'
 import { useI18n } from '../i18n/context'
@@ -169,6 +170,26 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       onToast(lang === 'en' ? 'Cursor color successfully updated in skin' : 'Цвет курсора успешно обновлен в скине', 'success')
     } catch (err) {
       const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to recolor cursor' : 'Ошибка применения цвета курсора')
+      onToast(msg, 'error')
+    } finally {
+      setBusyTweakId(null)
+    }
+  }
+
+  const handleRevertPreviousCursorColor = async () => {
+    if (!selectedSkinPath || busyTweakId) return
+    setBusyTweakId('cursor-color')
+    try {
+      const updated = await window.tosuGui.revertPreviousCursorColor(selectedSkinPath)
+      setCustomData(updated)
+      onToast(
+        lang === 'en'
+          ? 'Cursor color reverted to previous change'
+          : 'Цвет курсора возвращён к предыдущему изменению',
+        'success'
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to revert cursor color' : 'Ошибка возврата цвета курсора')
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -436,8 +457,12 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
               isTrailDisabled={Boolean(
                 toggleTweaks.find((t) => t.id === 'cursor-trail')?.applied
               )}
+              isContinuousTrail={Boolean(
+                toggleTweaks.find((t) => t.id === 'continuous-cursor-trail')?.applied
+              )}
               onRecolorCursor={handleRecolorCursor}
               onReset={() => void handleResetTweak(cursorColorTweak)}
+              onRevertPrevious={handleRevertPreviousCursorColor}
             />
           ) : (
             <div className="customizer-empty">
@@ -762,9 +787,11 @@ function TweakCard({
       <div className="customizer-card-preview">
         {tweak.previewType === 'cursor' ? (
           <CursorInteractivePreview
+            key={`card-preview-${tweak.id}-${tweak.applied ? 'applied' : 'clean'}-${tweak.previewImage?.length || 0}`}
             cursorUrl={tweak.previewCursorImage}
             trailUrl={tweak.previewImage}
             trailDisabled={Boolean(tweak.id === 'cursor-trail' ? tweak.applied : isTrailDisabled)}
+            continuousTrail={Boolean(tweak.id === 'continuous-cursor-trail' ? tweak.applied : false)}
           />
         ) : tweak.previewType === 'audio' ? (
           <AudioTweakPreview
@@ -1282,16 +1309,20 @@ interface CursorColorStudioProps {
   tweak: SkinTweakInfo
   isBusy: boolean
   isTrailDisabled: boolean
+  isContinuousTrail?: boolean
   onRecolorCursor: (hue: number, recolorTrail: boolean) => Promise<void>
   onReset: () => void
+  onRevertPrevious?: () => void
 }
 
 function CursorColorStudio({
   tweak,
   isBusy,
   isTrailDisabled,
+  isContinuousTrail,
   onRecolorCursor,
   onReset,
+  onRevertPrevious,
 }: CursorColorStudioProps) {
   const { t } = useI18n()
   const initialHue = typeof tweak.meta?.hue === 'number' ? tweak.meta.hue : 215
@@ -1301,14 +1332,20 @@ function CursorColorStudio({
   const [recolorTrail, setRecolorTrail] = useState<boolean>(initialRecolorTrail)
   const [hasColorChanged, setHasColorChanged] = useState<boolean>(false)
 
+  const hasHistory = Array.isArray(tweak.meta?.history) && tweak.meta.history.length > 0
+  const canRevertPrevious = tweak.applied && (hasHistory || tweak.canReset)
+
   useEffect(() => {
-    if (typeof tweak.meta?.hue === 'number') {
+    if (tweak.applied && typeof tweak.meta?.hue === 'number') {
       setSelectedHue(tweak.meta.hue)
+      setRecolorTrail(typeof tweak.meta?.recolorTrail === 'boolean' ? tweak.meta.recolorTrail : true)
+      setHasColorChanged(false)
+    } else if (!tweak.applied) {
+      setSelectedHue(215)
+      setRecolorTrail(true)
+      setHasColorChanged(false)
     }
-    if (typeof tweak.meta?.recolorTrail === 'boolean') {
-      setRecolorTrail(tweak.meta.recolorTrail)
-    }
-  }, [tweak.meta?.hue, tweak.meta?.recolorTrail])
+  }, [tweak.applied, tweak.meta?.hue, tweak.meta?.recolorTrail])
 
   const handlePresetSelect = (hue: number) => {
     setSelectedHue(hue)
@@ -1322,6 +1359,29 @@ function CursorColorStudio({
 
   const handleApplyColor = () => {
     void onRecolorCursor(selectedHue, recolorTrail)
+    setHasColorChanged(false)
+  }
+
+  const handleReset = () => {
+    setHasColorChanged(false)
+    setSelectedHue(215)
+    setRecolorTrail(true)
+    onReset()
+  }
+
+  const handleRevertPrevious = () => {
+    setHasColorChanged(false)
+    onRevertPrevious?.()
+  }
+
+  const handleCancelChanges = () => {
+    if (tweak.applied && typeof tweak.meta?.hue === 'number') {
+      setSelectedHue(tweak.meta.hue)
+      setRecolorTrail(typeof tweak.meta?.recolorTrail === 'boolean' ? tweak.meta.recolorTrail : true)
+    } else {
+      setSelectedHue(215)
+      setRecolorTrail(true)
+    }
     setHasColorChanged(false)
   }
 
@@ -1341,11 +1401,23 @@ function CursorColorStudio({
           <span className={`customizer-status-badge ${tweak.applied ? '-active' : ''}`}>
             {tweak.applied ? t('skinCustomizer.customColorActive') : t('skinCustomizer.originalSkinColor')}
           </span>
+          {canRevertPrevious && onRevertPrevious && (
+            <button
+              type="button"
+              className="customizer-btn -secondary"
+              onClick={handleRevertPrevious}
+              disabled={isBusy}
+              title={t('skinCustomizer.revertPreviousColorTooltip')}
+            >
+              <Undo2 size={13} />
+              {t('skinCustomizer.revertPreviousColor')}
+            </button>
+          )}
           {tweak.canReset && (
             <button
               type="button"
               className="customizer-btn -danger"
-              onClick={onReset}
+              onClick={handleReset}
               disabled={isBusy}
               title={t('skinCustomizer.revertCursorBackup')}
             >
@@ -1361,10 +1433,12 @@ function CursorColorStudio({
         <div className="color-studio-preview-col">
           <div className="color-studio-preview-box">
             <CursorInteractivePreview
+              key={`studio-cursor-preview-${tweak.applied ? 'applied' : 'clean'}-${tweak.meta?.hue ?? 'orig'}-${hasColorChanged ? selectedHue : 'unchanged'}-${recolorTrail ? 'trail-sync' : 'trail-keep'}-${isContinuousTrail ? 'continuous' : 'standard'}-${tweak.previewCursorImage?.length || 0}-${tweak.previewImage?.length || 0}`}
               cursorUrl={tweak.previewCursorImage}
               trailUrl={tweak.previewImage}
               trailDisabled={Boolean(isTrailDisabled || !recolorTrail)}
-              hueShift={hasColorChanged ? selectedHue : (typeof tweak.meta?.hue === 'number' ? tweak.meta.hue : undefined)}
+              continuousTrail={isContinuousTrail}
+              hueShift={hasColorChanged ? selectedHue : (tweak.applied && typeof tweak.meta?.hue === 'number' ? tweak.meta.hue : undefined)}
             />
           </div>
 
@@ -1449,6 +1523,19 @@ function CursorColorStudio({
               {isBusy ? <Loader2 size={14} className="spin" /> : <Palette size={14} />}
               {t('skinCustomizer.applyCursorColor')}
             </button>
+
+            {hasColorChanged && (
+              <button
+                type="button"
+                className="color-studio-cancel-btn"
+                onClick={handleCancelChanges}
+                disabled={isBusy}
+                title={t('skinCustomizer.cancelChanges')}
+              >
+                <RotateCcw size={13} />
+                {t('skinCustomizer.cancelChanges')}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1901,11 +1988,13 @@ function CursorInteractivePreview({
   cursorUrl,
   trailUrl,
   trailDisabled,
+  continuousTrail,
   hueShift,
 }: {
   cursorUrl?: string | null
   trailUrl?: string | null
   trailDisabled: boolean
+  continuousTrail?: boolean
   hueShift?: number
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -2000,7 +2089,7 @@ function CursorInteractivePreview({
     if (!ctx) return
 
     let animId: number
-    const LIFESPAN = 360 // ms — authentic osu! lingering trail duration
+    const LIFESPAN = continuousTrail ? 520 : 360 // ms — longer lingering for continuous trail
 
     const render = (time: number) => {
       const dpr = window.devicePixelRatio || 1
@@ -2029,7 +2118,8 @@ function CursorInteractivePreview({
           const dx = x - last.x
           const dy = y - last.y
           const dist = Math.hypot(dx, dy)
-          const steps = Math.max(1, Math.min(Math.floor(dist / 4), 16))
+          const stepDist = continuousTrail ? 1.8 : 4
+          const steps = Math.max(1, Math.min(Math.floor(dist / stepDist), continuousTrail ? 36 : 16))
           for (let i = 1; i <= steps; i++) {
             particlesRef.current.push({
               x: last.x + dx * (i / steps),
@@ -2057,9 +2147,13 @@ function CursorInteractivePreview({
           const p = particlesRef.current[i]
           const age = now - p.birth
           const progress = age / LIFESPAN // 0 = newly born, 1 = dying
-          // Smooth exponential decay curve matching osu!
-          const alpha = Math.max(0, Math.pow(1 - progress, 1.25) * 0.85)
-          const size = Math.max(14, 28 * (1 - progress * 0.3))
+          // Smooth decay curve matching osu!
+          const alpha = continuousTrail
+            ? Math.max(0, Math.pow(1 - progress, 1.1) * 0.92)
+            : Math.max(0, Math.pow(1 - progress, 1.25) * 0.85)
+          const size = continuousTrail
+            ? Math.max(16, 28 * (1 - progress * 0.25))
+            : Math.max(14, 28 * (1 - progress * 0.3))
 
           ctx.save()
           ctx.globalAlpha = alpha
@@ -2119,7 +2213,7 @@ function CursorInteractivePreview({
 
     animId = requestAnimationFrame(render)
     return () => cancelAnimationFrame(animId)
-  }, [trailDisabled, hueShift])
+  }, [trailDisabled, hueShift, continuousTrail])
 
   const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
     isHoveredRef.current = true
@@ -2145,9 +2239,9 @@ function CursorInteractivePreview({
       const dx = x - last.x
       const dy = y - last.y
       const dist = Math.hypot(dx, dy)
-      // Interpolate every 4-5px for a rich, continuous, smooth ribbon like in osu!
-      const stepDist = 4.5
-      const steps = Math.max(1, Math.min(Math.floor(dist / stepDist), 28))
+      // Interpolate for a continuous smooth ribbon
+      const stepDist = continuousTrail ? 1.8 : 4.5
+      const steps = Math.max(1, Math.min(Math.floor(dist / stepDist), continuousTrail ? 48 : 28))
 
       for (let i = 1; i <= steps; i++) {
         const t = i / steps
@@ -2162,8 +2256,9 @@ function CursorInteractivePreview({
     }
 
     // Limit buffer length
-    if (particlesRef.current.length > 140) {
-      particlesRef.current = particlesRef.current.slice(-140)
+    const maxParticles = continuousTrail ? 260 : 140
+    if (particlesRef.current.length > maxParticles) {
+      particlesRef.current = particlesRef.current.slice(-maxParticles)
     }
 
     lastPosRef.current = { x, y }

@@ -209,6 +209,8 @@ const api = {
     recolorTrail?: boolean
   }): Promise<SkinCustomizationData> =>
     ipcRenderer.invoke('skins:customizer:recolor-cursor', payload),
+  revertPreviousCursorColor: (skinPath: string): Promise<SkinCustomizationData> =>
+    ipcRenderer.invoke('skins:customizer:revert-previous-cursor-color', skinPath),
   setSkinComboColors: (payload: {
     skinPath: string
     colors: string[]
