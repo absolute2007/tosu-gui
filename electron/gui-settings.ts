@@ -3,6 +3,7 @@ import path from 'path'
 import { app } from 'electron'
 
 export interface GuiSettings {
+  language: 'ru' | 'en'
   disableAntialiasing: boolean
   /** Check for tosu GUI (this app) updates on GitHub */
   checkAppUpdates: boolean
@@ -21,9 +22,14 @@ export interface GuiSettings {
    * Written to tosu/maps-overlay-keybind.txt for tosu-ingame-overlay.
    */
   mapsOverlayKeybind: string
+  /**
+   * Mute osu! audio while previewing beatmaps (mini-player or gameplay preview).
+   */
+  muteOsuOnPreview: boolean
 }
 
 const DEFAULTS: GuiSettings = {
+  language: 'ru',
   disableAntialiasing: true,
   checkAppUpdates: true,
   dismissedAppVersion: null,
@@ -33,6 +39,7 @@ const DEFAULTS: GuiSettings = {
   skinsPath: '',
   skinsBrowserEnabled: true,
   mapsOverlayKeybind: 'Control + Shift + M',
+  muteOsuOnPreview: true,
 }
 
 function getSettingsPath() {

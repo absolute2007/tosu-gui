@@ -16,6 +16,23 @@ import type {
   SkinSearchResult,
   LocalSkinEntry,
 } from './skins-types'
+import type {
+  SkinTweakInfo,
+  SkinCustomizationData,
+  SkinTweakCategory,
+  SkinPreviewType,
+} from './skins-customizer'
+
+export type {
+  LocalSkinEntry,
+  SkinTweakInfo,
+  SkinCustomizationData,
+  SkinTweakCategory,
+  SkinPreviewType,
+  OsuAccountInfo,
+}
+
+
 
 export interface TosuStatus {
   running: boolean
@@ -163,6 +180,40 @@ const api = {
       ipcRenderer.removeListener('skins:download-progress', handler)
     }
   },
+  getOsuAudioState: (): Promise<{ autoMute: boolean; isMuted: boolean; available: boolean }> =>
+    ipcRenderer.invoke('osuAudio:getState'),
+  setOsuAutoMute: (autoMute: boolean): Promise<{ autoMute: boolean; isMuted: boolean; available: boolean }> =>
+    ipcRenderer.invoke('osuAudio:setAutoMute', autoMute),
+  setOsuPreviewActive: (
+    active: boolean,
+    key?: string
+  ): Promise<{ autoMute: boolean; isMuted: boolean; available: boolean }> =>
+    ipcRenderer.invoke('osuAudio:setPreviewActive', active, key),
+  getSkinCustomization: (skinPath: string): Promise<SkinCustomizationData> =>
+    ipcRenderer.invoke('skins:customizer:get', skinPath),
+  applySkinTweak: (payload: {
+    skinPath: string
+    tweakId: string
+    enable: boolean
+  }): Promise<SkinCustomizationData> => ipcRenderer.invoke('skins:customizer:apply', payload),
+  resetSkinTweak: (payload: {
+    skinPath: string
+    tweakId: string
+  }): Promise<SkinCustomizationData> =>
+    ipcRenderer.invoke('skins:customizer:reset-element', payload),
+  resetAllSkinTweaks: (skinPath: string): Promise<SkinCustomizationData> =>
+    ipcRenderer.invoke('skins:customizer:reset-all', skinPath),
+  recolorSkinCursor: (payload: {
+    skinPath: string
+    hue: number
+    recolorTrail?: boolean
+  }): Promise<SkinCustomizationData> =>
+    ipcRenderer.invoke('skins:customizer:recolor-cursor', payload),
+  setSkinComboColors: (payload: {
+    skinPath: string
+    colors: string[]
+  }): Promise<SkinCustomizationData> =>
+    ipcRenderer.invoke('skins:customizer:set-combo-colors', payload),
 }
 
 contextBridge.exposeInMainWorld('tosuGui', api)

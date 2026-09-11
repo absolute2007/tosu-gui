@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { AppIcon } from './AppIcon'
+import { useI18n } from '../i18n/context'
 import './TitleBar.css'
 
 export function TitleBar() {
+  const { lang } = useI18n()
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export function TitleBar() {
             type="button"
             className="tl-btn -close"
             onClick={() => window.tosuGui.close()}
-            aria-label="Закрыть"
+            aria-label={lang === 'en' ? 'Close' : 'Закрыть'}
           >
             <svg viewBox="0 0 12 12" aria-hidden="true">
               <path d="M3 3l6 6M9 3L3 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -34,7 +36,7 @@ export function TitleBar() {
             type="button"
             className="tl-btn -minimize"
             onClick={() => window.tosuGui.minimize()}
-            aria-label="Свернуть"
+            aria-label={lang === 'en' ? 'Minimize' : 'Свернуть'}
           >
             <svg viewBox="0 0 12 12" aria-hidden="true">
               <path d="M2.5 6h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -44,7 +46,7 @@ export function TitleBar() {
             type="button"
             className="tl-btn -maximize"
             onClick={() => window.tosuGui.maximize()}
-            aria-label={maximized ? 'Восстановить' : 'Развернуть'}
+            aria-label={maximized ? (lang === 'en' ? 'Restore' : 'Восстановить') : (lang === 'en' ? 'Maximize' : 'Развернуть')}
           >
             {maximized ? (
               <svg viewBox="0 0 12 12" aria-hidden="true">

@@ -6,6 +6,7 @@ import { CounterSettingsModal } from '../components/CounterSettingsModal'
 import { DownloadProgressBar } from '../components/DownloadProgressBar'
 import { counterKey, type CounterDownloadState } from '../hooks/useCounterDownloads'
 import { useTosuCounters } from '../hooks/useTosuCounters'
+import { useI18n } from '../i18n/context'
 import type { TosuStatus } from '../../electron/preload'
 
 interface Props {
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, onDownload, isDownloading, onToast }: Props) {
+  const { t, lang } = useI18n()
   const previewSessionKey = `${tosuStatus?.pid ?? 'off'}-${visible ? 'on' : 'off'}`
   const previewLiveReady = Boolean(tosuStatus?.running && baseUrl)
   const [tab, setTab] = useState<'local' | 'available'>('local')
@@ -56,17 +58,20 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
 
   const handleDelete = async (name: string) => {
     if (isProtectedCounter(name)) {
-      onToast('Maps Browser нельзя удалить — только выключить in-game overlay', 'error')
+      onToast(
+        lang === 'en'
+          ? 'Maps Browser cannot be deleted — only disabled via in-game overlay'
+          : 'Maps Browser нельзя удалить — только выключить in-game overlay',
+        'error'
+      )
       return
     }
     try {
       await window.tosuGui.deleteCounter(name)
-      onToast('Счётчик удалён', 'success')
-      reloadLocal()
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err)
-      const msg = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
-      onToast(msg || 'Не удалось удалить', 'error')
+      await reloadLocal()
+      onToast(lang === 'en' ? `Deleted: ${name}` : `Удалено: ${name}`, 'success')
+    } catch {
+      onToast(lang === 'en' ? 'Delete failed' : 'Не удалось удалить', 'error')
     }
   }
 
@@ -80,16 +85,16 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
   return (
     <div className="page">
       <div className="page-header">
-        <h1 className="page-title">Счётчики</h1>
-        <p className="page-subtitle">PP-счётчики для оверлея и стрима</p>
+        <h1 className="page-title">{t('counters.title')}</h1>
+        <p className="page-subtitle">{t('counters.subtitle')}</p>
       </div>
 
       <div className="tabs-inline">
         <button className={`tab-btn ${tab === 'local' ? '-active' : ''}`} onClick={() => setTab('local')}>
-          Установленные ({local.length})
+          {t('counters.installed')} ({local.length})
         </button>
         <button className={`tab-btn ${tab === 'available' ? '-active' : ''}`} onClick={() => setTab('available')}>
-          Каталог
+          {t('counters.available')}
         </button>
       </div>
 
@@ -97,7 +102,7 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
         <div className="search-bar">
           <input
             className="glass-input"
-            placeholder="Поиск счётчиков..."
+            placeholder={lang === 'en' ? 'Search counters...' : 'Поиск счётчиков...'}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -107,16 +112,16 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
       {listLoading ? (
         <div className="empty-state">
           <Loader2 size={20} className="spin" />
-          <span>Загрузка счётчиков…</span>
+          <span>{lang === 'en' ? 'Loading counters…' : 'Загрузка счётчиков…'}</span>
         </div>
       ) : counters.length === 0 ? (
         <div className="empty-state">
           <Layers size={24} strokeWidth={1.5} style={{ opacity: 0.45 }} />
-          <p>{tab === 'local' ? 'Нет установленных счётчиков' : 'Счётчики не найдены'}</p>
+          <p>{tab === 'local' ? (lang === 'en' ? 'No installed counters' : 'Нет установленных счётчиков') : (lang === 'en' ? 'No counters found' : 'Счётчики не найдены')}</p>
           <span className="empty-state-subtitle">
             {tab === 'local'
-              ? 'Перейдите во вкладку «Каталог», чтобы установить'
-              : 'Попробуйте изменить поисковый запрос'}
+              ? (lang === 'en' ? 'Switch to "Catalog" tab to install counters' : 'Перейдите во вкладку «Каталог», чтобы установить')
+              : (lang === 'en' ? 'Try adjusting your search query' : 'Попробуйте изменить поисковый запрос')}
           </span>
         </div>
       ) : (
@@ -144,24 +149,24 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
                     </div>
                     {downloadState && <DownloadProgressBar state={downloadState} />}
                   </div>
-                  <div className="counter-actions">
+                    <div className="counter-actions">
                     {tab === 'local' ? (
                       <>
                         {c.settings.length > 0 && (
                           <button className="btn btn-ghost btn-sm" onClick={() => setSettingsCounter(c.folderName)}>
                             <Settings size={13} />
-                            Настройки
+                            {lang === 'en' ? 'Settings' : 'Настройки'}
                           </button>
                         )}
-                        <button className="btn btn-ghost btn-sm" onClick={() => window.tosuGui.openCounterFolder(c.folderName)}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => window.tosuGui.openCounterFolder(c.folderName)} title={t('counters.openFolder')}>
                           <FolderOpen size={13} />
                         </button>
                         {isProtectedCounter(c.folderName) ? (
-                          <span className="counter-meta" title="Системный счётчик — нельзя удалить">
-                            системный
+                          <span className="counter-meta" title={lang === 'en' ? 'System counter — cannot be deleted' : 'Системный счётчик — нельзя удалить'}>
+                            {lang === 'en' ? 'system' : 'системный'}
                           </span>
                         ) : (
-                          <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c.folderName)}>
+                          <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c.folderName)} title={t('common.delete')}>
                             <Trash2 size={13} />
                           </button>
                         )}
@@ -179,7 +184,7 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
                           disabled={c._downloaded || active}
                         >
                           {active ? <Loader2 size={13} className="spin" /> : <Download size={13} />}
-                          {active ? 'Загрузка...' : c._downloaded ? 'Установлен' : 'Скачать'}
+                          {active ? t('counters.downloading') : c._downloaded ? t('counters.installed') : t('counters.download')}
                         </button>
                       </>
                     )}

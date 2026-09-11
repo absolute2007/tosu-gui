@@ -42,6 +42,46 @@
   let previewId = null
   let previewAudio = null
 
+  const MUTE_OSU_KEY = 'tosu-gui-mute-osu-on-preview'
+  let muteOsuOnPreview = loadMuteOsuPref()
+
+  function loadMuteOsuPref() {
+    try {
+      const v = localStorage.getItem(MUTE_OSU_KEY)
+      if (v === '0' || v === 'false') return false
+      return true
+    } catch {
+      return true
+    }
+  }
+
+  function saveMuteOsuPref(val) {
+    muteOsuOnPreview = Boolean(val)
+    try {
+      localStorage.setItem(MUTE_OSU_KEY, muteOsuOnPreview ? '1' : '0')
+    } catch {}
+    void api('/api/maps/audio-mute', {
+      method: 'POST',
+      body: JSON.stringify({ autoMute: muteOsuOnPreview }),
+    }).catch(() => {})
+    syncMuteBtnUi()
+  }
+
+  function notifyPreviewState(active) {
+    void api('/api/maps/audio-mute', {
+      method: 'POST',
+      body: JSON.stringify({ previewActive: Boolean(active), previewKey: 'web-browser' }),
+    }).catch(() => {})
+  }
+
+  function syncMuteBtnUi() {
+    const btn = document.getElementById('btn-mute-osu')
+    if (!btn) return
+    btn.classList.toggle('-on', muteOsuOnPreview)
+    btn.setAttribute('aria-pressed', muteOsuOnPreview ? 'true' : 'false')
+    btn.textContent = muteOsuOnPreview ? '🔇 Глушить osu!' : '🔈 Звук osu!'
+  }
+
   function previewUrlFor(s) {
     if (s && s.previewUrl) return s.previewUrl
     if (s && s.id) return 'https://b.ppy.sh/preview/' + s.id + '.mp3'
@@ -49,6 +89,7 @@
   }
 
   function stopPreview() {
+    notifyPreviewState(false)
     if (previewAudio) {
       try {
         previewAudio.pause()
@@ -80,10 +121,12 @@
       previewAudio.preload = 'none'
       previewAudio.addEventListener('ended', function () {
         previewId = null
+        notifyPreviewState(false)
         render()
       })
       previewAudio.addEventListener('error', function () {
         previewId = null
+        notifyPreviewState(false)
         setLine('Не удалось воспроизвести превью')
         render()
       })
@@ -93,13 +136,16 @@
       previewAudio.src = url
       previewId = id
       render()
+      notifyPreviewState(true)
       void previewAudio.play().catch(function () {
         previewId = null
+        notifyPreviewState(false)
         setLine('Не удалось воспроизвести превью')
         render()
       })
     } catch {
       previewId = null
+      notifyPreviewState(false)
       setLine('Не удалось воспроизвести превью')
       render()
     }
@@ -602,7 +648,27 @@
     /* ignore */
   }
 
+  const btnMute = document.getElementById('btn-mute-osu')
+  if (btnMute) {
+    btnMute.addEventListener('click', function () {
+      saveMuteOsuPref(!muteOsuOnPreview)
+    })
+  }
+  syncMuteBtnUi()
+
   void (async function boot() {
+    void api('/api/maps/audio-mute')
+      .then(function (res) {
+        if (res && typeof res.autoMute === 'boolean') {
+          muteOsuOnPreview = res.autoMute
+          try {
+            localStorage.setItem(MUTE_OSU_KEY, muteOsuOnPreview ? '1' : '0')
+          } catch {}
+          syncMuteBtnUi()
+        }
+      })
+      .catch(() => {})
+
     await refreshAuth()
     await refreshLocal()
     if (loggedIn) void search(false)

@@ -124,6 +124,48 @@
     syncPlayerUi()
   }
 
+  var MUTE_OSU_KEY = 'tosu-gui-mute-osu-on-preview'
+  var muteOsuOnPreview = loadMuteOsuPref()
+
+  function loadMuteOsuPref() {
+    try {
+      var v = localStorage.getItem(MUTE_OSU_KEY)
+      if (v === '0' || v === 'false') return false
+      return true
+    } catch (e) {
+      return true
+    }
+  }
+
+  function saveMuteOsuPref(val) {
+    muteOsuOnPreview = !!val
+    try {
+      localStorage.setItem(MUTE_OSU_KEY, muteOsuOnPreview ? '1' : '0')
+    } catch (e) {}
+    void api('/api/maps/audio-mute', {
+      method: 'POST',
+      body: JSON.stringify({ autoMute: muteOsuOnPreview }),
+    }).catch(function () {})
+    syncMuteBtnUi()
+  }
+
+  function notifyPreviewState(active, key) {
+    void api('/api/maps/audio-mute', {
+      method: 'POST',
+      body: JSON.stringify({ previewActive: !!active, previewKey: key || 'mini-player' }),
+    }).catch(function () {})
+  }
+
+  function syncMuteBtnUi() {
+    if (!els || !els.muteBtn) return
+    els.muteBtn.classList.toggle('-on', muteOsuOnPreview)
+    els.muteBtn.setAttribute('aria-pressed', muteOsuOnPreview ? 'true' : 'false')
+    var ico = els.muteBtn.querySelector('.mg-mute-ico')
+    if (ico) ico.textContent = muteOsuOnPreview ? '🔇' : '🔈'
+    var label = els.muteBtn.querySelector('.mg-mute-label')
+    if (label) label.textContent = muteOsuOnPreview ? 'Глушить osu!' : 'Звук osu!'
+  }
+
   function esc(t) {
     return String(t)
       .replace(/&/g, '&amp;')
@@ -294,10 +336,14 @@
     previewAudio.addEventListener('ended', function () {
       previewId = null
       previewPaused = false
+      notifyPreviewState(false, 'mini-player')
       if (visible) {
         renderList()
         syncPlayerUi()
       }
+    })
+    previewAudio.addEventListener('error', function () {
+      notifyPreviewState(false, 'mini-player')
     })
     previewAudio.addEventListener('timeupdate', function () {
       if (visible) syncPlayerProgress()
@@ -307,6 +353,7 @@
 
   function stopPreview() {
     miniPlayerSession++
+    notifyPreviewState(false, 'mini-player')
     if (previewAudio) {
       try {
         previewAudio.pause()
@@ -341,6 +388,7 @@
         if (idx >= urls.length) {
           previewId = null
           previewPaused = false
+          notifyPreviewState(false, 'mini-player')
           setLine('Не удалось воспроизвести превью')
           renderList()
           syncPlayerUi()
@@ -351,6 +399,11 @@
           if (session === miniPlayerSession) {
             console.warn('[maps-audio] mini-player source error:', u)
             tryNext()
+          }
+        }
+        audio.onplaying = function () {
+          if (session === miniPlayerSession) {
+            notifyPreviewState(true, 'mini-player')
           }
         }
         audio.src = u
@@ -375,6 +428,7 @@
       var audio = ensureAudio()
       if (previewPaused || audio.paused) {
         previewPaused = false
+        notifyPreviewState(true, 'mini-player')
         void audio.play().catch(function () {
           stopPreview()
         })
@@ -383,6 +437,7 @@
       } else {
         audio.pause()
         previewPaused = true
+        notifyPreviewState(false, 'mini-player')
         syncPlayerUi()
         renderList()
       }
@@ -886,6 +941,7 @@
     function triggerReady() {
       if (readyFired || session !== gpAudioSession || !gp.open) return
       readyFired = true
+      notifyPreviewState(true, 'gameplay')
       gp.startPerf = performance.now() - (audio.currentTime || 0) * 1000
       gp.audioStartPerf = gp.startPerf
       gp.lastAudioSec = audio.currentTime || 0
@@ -957,6 +1013,7 @@
   }
 
   function closeGameplayPreview() {
+    notifyPreviewState(false, 'gameplay')
     stopGpLoop()
     gp.open = false
     gp.set = null
@@ -1384,6 +1441,13 @@
         saveVolume((parseInt(els.volRange.value, 10) || 0) / 100)
       })
     }
+    if (els.muteBtn) {
+      els.muteBtn.addEventListener('click', function (e) {
+        e.preventDefault()
+        e.stopPropagation()
+        saveMuteOsuPref(!muteOsuOnPreview)
+      })
+    }
     if (els.playerBar) {
       els.playerBar.addEventListener('click', function (e) {
         if (!previewAudio || !previewAudio.duration) return
@@ -1638,6 +1702,10 @@
       '<input type="range" class="mg-vol-range" id="mg-vol" min="0" max="100" value="55" />' +
       '<span class="mg-vol-label" id="mg-vol-label">55%</span>' +
       '</div>' +
+      '<button type="button" class="mg-mute-btn' + (muteOsuOnPreview ? ' -on' : '') + '" id="mg-mute-osu" title="Заглушать звук osu! во время превью" aria-pressed="' + (muteOsuOnPreview ? 'true' : 'false') + '">' +
+      '<span class="mg-mute-ico">' + (muteOsuOnPreview ? '🔇' : '🔈') + '</span>' +
+      '<span class="mg-mute-label">' + (muteOsuOnPreview ? 'Глушить osu!' : 'Звук osu!') + '</span>' +
+      '</button>' +
       '</div></div>' +
       // Gameplay preview modal
       '<div class="mg-gp-modal" id="mg-gp-modal" hidden>' +
@@ -1690,6 +1758,7 @@
       playerProgress: rootEl.querySelector('#mg-player-progress'),
       volRange: rootEl.querySelector('#mg-vol'),
       volLabel: rootEl.querySelector('#mg-vol-label'),
+      muteBtn: rootEl.querySelector('#mg-mute-osu'),
       gpModal: rootEl.querySelector('#mg-gp-modal'),
       gpBackdrop: rootEl.querySelector('#mg-gp-backdrop'),
       gpClose: rootEl.querySelector('#mg-gp-close'),
@@ -1701,6 +1770,7 @@
 
     if (els.volRange) els.volRange.value = String(Math.round(previewVolume * 100))
     if (els.volLabel) els.volLabel.textContent = Math.round(previewVolume * 100) + '%'
+    syncMuteBtnUi()
 
     els.shade.addEventListener('pointerup', function (e) {
       e.preventDefault()
@@ -1714,6 +1784,7 @@
     bindUi()
     rootEl.style.setProperty('display', 'none', 'important')
     syncPlayerUi()
+    syncMuteBtnUi()
   }
 
   function applyStyles() {
@@ -1743,7 +1814,18 @@
       }
       syncFilterUi()
       syncPlayerUi()
+      syncMuteBtnUi()
       renderList()
+
+      void api('/api/maps/audio-mute').then(function (res) {
+        if (res && typeof res.autoMute === 'boolean') {
+          muteOsuOnPreview = res.autoMute
+          try {
+            localStorage.setItem(MUTE_OSU_KEY, muteOsuOnPreview ? '1' : '0')
+          } catch (e) {}
+          syncMuteBtnUi()
+        }
+      }).catch(function () {})
 
       void refreshAuth().then(function () {
         if (loggedIn && !didInitialSearch) {
@@ -2067,6 +2149,18 @@
     '#' +
     ROOT_ID +
     ' .mg-vol-label{font-size:11px;color:rgba(255,255,255,.5);min-width:32px}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-mute-btn{flex-shrink:0;height:26px;padding:0 8px;border-radius:6px;border:.5px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:rgba(255,255,255,.68);cursor:pointer;font-size:11px;font-weight:500;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;transition:all .15s ease}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-mute-btn:hover{background:rgba(255,255,255,.12);color:#fff}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-mute-btn.-on{background:rgba(10,132,255,.2);border-color:rgba(10,132,255,.45);color:#5ac8fa}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-mute-ico{font-size:12px;line-height:1}' +
     // Gameplay modal
     '#' +
     ROOT_ID +
