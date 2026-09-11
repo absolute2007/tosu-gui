@@ -150,6 +150,8 @@ export const translations = {
       applyCursorColor: 'Применить цвет курсора',
       revertBackup: 'Вернуть исходные цвета',
       revertCursorBackup: 'Вернуть исходный курсор',
+      revertPreviousColor: 'Предыдущий цвет',
+      revertPreviousColorTooltip: 'Вернуть курсор к предыдущему выбранному цвету',
       cancelChanges: 'Отменить',
       resetAll: 'Сбросить весь скин',
       resetConfirmTitle: 'Сбросить все настройки скина?',
@@ -218,6 +220,11 @@ export const translations = {
           title: 'След курсора (Cursor Trail)',
           subtitle: 'cursortrail.png, skin.ini: CursorTrail',
           description: 'Полное отключение шлейфа за курсором (замена спрайта на 1x1 прозрачный + CursorTrail: 0). Опцию нельзя отключить в osu! stable.',
+        },
+        'continuous-cursor-trail': {
+          title: 'Непрерывный след курсора (Smooth Trail)',
+          subtitle: 'cursormiddle.png (1x1)',
+          description: 'Включает плавный длинный шлейф за курсором без пробелов между точками (механика cursormiddle в osu! stable).',
         },
         'cursor-smoke': {
           title: 'Дым курсора (Cursor Smoke)',
@@ -519,6 +526,8 @@ export const translations = {
       applyCursorColor: 'Apply cursor color',
       revertBackup: 'Revert to original colors',
       revertCursorBackup: 'Revert to original cursor',
+      revertPreviousColor: 'Previous color',
+      revertPreviousColorTooltip: 'Revert cursor to previous color change',
       cancelChanges: 'Cancel',
       resetAll: 'Reset entire skin',
       resetConfirmTitle: 'Reset all skin modifications?',
@@ -587,6 +596,11 @@ export const translations = {
           title: 'Cursor Trail',
           subtitle: 'cursortrail.png, skin.ini: CursorTrail',
           description: 'Completely removes cursor trail (transparent 1x1 sprite + CursorTrail: 0). Cannot be disabled in osu! stable.',
+        },
+        'continuous-cursor-trail': {
+          title: 'Continuous Cursor Trail',
+          subtitle: 'cursormiddle.png (1x1)',
+          description: 'Enables a smooth continuous trail ribbon behind the cursor without gaps between particles (cursormiddle mechanic in osu! stable).',
         },
         'cursor-smoke': {
           title: 'Cursor Smoke',

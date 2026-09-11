@@ -121,6 +121,17 @@ export const TWEAK_CONFIGS: TweakConfig[] = [
     previewCandidates: ['cursortrail.png', 'cursortrail@2x.png'],
   },
   {
+    id: 'continuous-cursor-trail',
+    category: 'cursor',
+    title: 'Непрерывный след курсора (Continuous Trail)',
+    subtitle: 'cursormiddle.png (1x1)',
+    description: 'Включает плавный длинный шлейф за курсором без пробелов между точками (механика osu!stable через cursormiddle.png).',
+    previewType: 'cursor',
+    filePatterns: [/^cursormiddle.*\.png$/i],
+    defaultInjectFiles: ['cursormiddle.png', 'cursormiddle@2x.png'],
+    previewCandidates: ['cursortrail.png', 'cursortrail@2x.png', 'cursor.png'],
+  },
+  {
     id: 'cursor-smoke',
     category: 'cursor',
     title: 'Дым курсора (Cursor Smoke)',
@@ -967,10 +978,15 @@ export async function resetSkinTweak(
         const srcPath = path.join(backupFilesDir, f.backupRelPath)
         if (fs.existsSync(srcPath)) {
           fs.copyFileSync(srcPath, destPath)
-          try {
-            fs.unlinkSync(srcPath)
-          } catch {
-            /* ignore */
+          const isUsedByOther = Object.entries(manifest.tweaks).some(
+            ([id, tw]) => id !== tweakId && tw.files?.some((rec) => rec.backupRelPath === f.backupRelPath)
+          )
+          if (!isUsedByOther) {
+            try {
+              fs.unlinkSync(srcPath)
+            } catch {
+              /* ignore */
+            }
           }
         }
       } else {
@@ -1006,6 +1022,17 @@ export async function resetSkinTweak(
               }
             }
           }
+        }
+      }
+    }
+
+    // If we just restored cursor-color, check if cursor-trail is suppressed!
+    if (tweakId === 'cursor-color') {
+      const trailTweak = manifest.tweaks['cursor-trail']
+      if (trailTweak) {
+        for (const f of ['cursortrail.png', 'cursortrail@2x.png']) {
+          const trailPath = path.join(skinPath, f)
+          fs.writeFileSync(trailPath, TRANSPARENT_1X1_PNG)
         }
       }
     }
@@ -1212,17 +1239,18 @@ function processSpriteRecolor(imageBuffer: Buffer, targetHue: number): Buffer {
   return PNG.sync.write(png, { deflateLevel: 9 })
 }
 
-export async function recolorSkinCursor(
+export interface CursorColorHistoryEntry {
+  hue: number
+  recolorTrail: boolean
+  appliedAt: number
+}
+
+async function applyCursorColorInternal(
   skinPath: string,
-  options: RecolorCursorOptions
+  targetHue: number,
+  recolorTrail: boolean,
+  history: CursorColorHistoryEntry[]
 ): Promise<SkinCustomizationData> {
-  if (!fs.existsSync(skinPath) || !fs.statSync(skinPath).isDirectory()) {
-    throw new Error(`Папка скина не найдена: ${skinPath}`)
-  }
-
-  const { hue, recolorTrail = true } = options
-  const targetHue = ((hue % 360) + 360) % 360
-
   let manifest = readManifest(skinPath)
   if (!manifest) {
     manifest = {
@@ -1234,21 +1262,7 @@ export async function recolorSkinCursor(
     }
   }
 
-  // Check if cursor-trail tweak is currently disabled (applied)
   const isTrailSuppressed = Boolean(manifest.tweaks['cursor-trail'])
-
-  const targetFiles: string[] = [
-    'cursor.png',
-    'cursor@2x.png',
-    'cursormiddle.png',
-    'cursormiddle@2x.png',
-  ]
-
-  // Only recolor trail files if trail is enabled both in options and NOT suppressed by cursor-trail tweak!
-  if (recolorTrail && !isTrailSuppressed) {
-    targetFiles.push('cursortrail.png', 'cursortrail@2x.png')
-  }
-
   const backupFilesDir = getBackupFilesDir(skinPath)
   if (!fs.existsSync(backupFilesDir)) {
     fs.mkdirSync(backupFilesDir, { recursive: true })
@@ -1258,38 +1272,81 @@ export async function recolorSkinCursor(
   const existingRecord = manifest.tweaks[tweakId]
   const backedUpFiles: BackupFileRecord[] = existingRecord ? [...existingRecord.files] : []
 
-  for (const relName of targetFiles) {
+  // Ensure all cursor and trail files are safely backed up
+  const allPotentialFiles = [
+    'cursor.png',
+    'cursor@2x.png',
+    'cursormiddle.png',
+    'cursormiddle@2x.png',
+    'cursortrail.png',
+    'cursortrail@2x.png',
+  ]
+
+  for (const relName of allPotentialFiles) {
     const fullPath = path.join(skinPath, relName)
     const backupTarget = path.join(backupFilesDir, relName)
     const backupExists = fs.existsSync(backupTarget)
     const fullExists = fs.existsSync(fullPath)
 
-    if (!fullExists && !backupExists) continue
-
-    // If trail is currently suppressed by cursor-trail tweak, never overwrite it!
-    if (isTrailSuppressed && relName.startsWith('cursortrail')) continue
-
-    let sourceBuffer: Buffer
-    if (backupExists) {
-      sourceBuffer = fs.readFileSync(backupTarget)
-    } else {
-      sourceBuffer = fs.readFileSync(fullPath)
+    if (fullExists && !backupExists) {
       fs.copyFileSync(fullPath, backupTarget)
+      if (!backedUpFiles.some((f) => f.relPath === relName)) {
+        backedUpFiles.push({
+          relPath: relName,
+          existedBefore: true,
+          backupRelPath: relName,
+        })
+      }
+    } else if (backupExists && !backedUpFiles.some((f) => f.relPath === relName)) {
       backedUpFiles.push({
         relPath: relName,
         existedBefore: true,
         backupRelPath: relName,
       })
     }
+  }
 
-    // Skip blank 1x1 pngs
-    if (sourceBuffer.length <= 150) continue
+  // Target files to recolor
+  const filesToRecolor = [
+    'cursor.png',
+    'cursor@2x.png',
+    'cursormiddle.png',
+    'cursormiddle@2x.png',
+  ]
+  if (recolorTrail && !isTrailSuppressed) {
+    filesToRecolor.push('cursortrail.png', 'cursortrail@2x.png')
+  }
+
+  for (const relName of filesToRecolor) {
+    const fullPath = path.join(skinPath, relName)
+    const backupTarget = path.join(backupFilesDir, relName)
+    const backupExists = fs.existsSync(backupTarget)
+    const fullExists = fs.existsSync(fullPath)
+
+    if (!fullExists && !backupExists) continue
+    if (isTrailSuppressed && relName.startsWith('cursortrail')) continue
+
+    const sourceBuffer = backupExists ? fs.readFileSync(backupTarget) : fs.readFileSync(fullPath)
+    if (sourceBuffer.length <= 150) continue // Skip 1x1 blank
 
     try {
       const recolored = processSpriteRecolor(sourceBuffer, targetHue)
       fs.writeFileSync(fullPath, recolored)
     } catch (err) {
       console.error(`Ошибка перекрашивания ${relName}:`, err)
+    }
+  }
+
+  // If trail recoloring is turned off, restore cursortrail from backup if it was previously recolored
+  if (!recolorTrail && !isTrailSuppressed) {
+    for (const relName of ['cursortrail.png', 'cursortrail@2x.png']) {
+      const backupTarget = path.join(backupFilesDir, relName)
+      const fullPath = path.join(skinPath, relName)
+      if (fs.existsSync(backupTarget)) {
+        try {
+          fs.copyFileSync(backupTarget, fullPath)
+        } catch {}
+      }
     }
   }
 
@@ -1300,12 +1357,68 @@ export async function recolorSkinCursor(
     meta: {
       hue: targetHue,
       recolorTrail,
+      history,
     },
   }
   manifest.updatedAt = Date.now()
   writeManifest(skinPath, manifest)
 
   return getSkinCustomizationData(skinPath)
+}
+
+export async function recolorSkinCursor(
+  skinPath: string,
+  options: RecolorCursorOptions
+): Promise<SkinCustomizationData> {
+  if (!fs.existsSync(skinPath) || !fs.statSync(skinPath).isDirectory()) {
+    throw new Error(`Папка скина не найдена: ${skinPath}`)
+  }
+
+  const { hue, recolorTrail = true } = options
+  const targetHue = ((hue % 360) + 360) % 360
+
+  const manifest = readManifest(skinPath)
+  const existingRecord = manifest?.tweaks?.['cursor-color']
+  const history: CursorColorHistoryEntry[] = Array.isArray(existingRecord?.meta?.history)
+    ? [...existingRecord.meta.history]
+    : []
+
+  if (existingRecord?.meta && typeof existingRecord.meta.hue === 'number') {
+    if (existingRecord.meta.hue !== targetHue || existingRecord.meta.recolorTrail !== recolorTrail) {
+      history.push({
+        hue: existingRecord.meta.hue,
+        recolorTrail: existingRecord.meta.recolorTrail ?? true,
+        appliedAt: existingRecord.appliedAt || Date.now(),
+      })
+      if (history.length > 20) history.shift()
+    }
+  }
+
+  return applyCursorColorInternal(skinPath, targetHue, recolorTrail, history)
+}
+
+export async function revertPreviousCursorColor(skinPath: string): Promise<SkinCustomizationData> {
+  if (!fs.existsSync(skinPath) || !fs.statSync(skinPath).isDirectory()) {
+    throw new Error(`Папка скина не найдена: ${skinPath}`)
+  }
+
+  const manifest = readManifest(skinPath)
+  const tweak = manifest?.tweaks?.['cursor-color']
+  if (!manifest || !tweak) {
+    return getSkinCustomizationData(skinPath)
+  }
+
+  const history: CursorColorHistoryEntry[] = Array.isArray(tweak.meta?.history)
+    ? [...tweak.meta.history]
+    : []
+
+  if (history.length > 0) {
+    const previous = history.pop()!
+    return applyCursorColorInternal(skinPath, previous.hue, previous.recolorTrail, history)
+  } else {
+    // If no previous color in history, revert back to original unmodded skin
+    return resetSkinTweak(skinPath, 'cursor-color')
+  }
 }
 
 export async function setSkinComboColors(

@@ -3,7 +3,7 @@ import type { Tray } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { TosuProcess } from './tosu-process'
-import { TosuApi } from './tosu-api'
+import { TosuApi, savePersistentTosuEnv } from './tosu-api'
 import { readGuiSettings, writeGuiSettings } from './gui-settings'
 import { setOverlayAntialiasing } from './overlay-style'
 import { TosuSocketBridge } from './tosu-socket'
@@ -62,6 +62,7 @@ import {
   resetSkinTweak,
   resetAllSkinTweaks,
   recolorSkinCursor,
+  revertPreviousCursorColor,
   setSkinComboColors,
 } from './skins-customizer'
 import { osuAudio } from './osu-audio'
@@ -858,6 +859,13 @@ ipcMain.handle(
   }
 )
 
+ipcMain.handle('skins:customizer:revert-previous-cursor-color', async (_e, skinPath: string) => {
+  if (typeof skinPath !== 'string' || !skinPath.trim()) {
+    throw new Error('Укажите путь к скину')
+  }
+  return revertPreviousCursorColor(skinPath.trim())
+})
+
 ipcMain.handle(
   'skins:customizer:set-combo-colors',
   async (_e, payload: { skinPath: string; colors: string[] }) => {
@@ -915,6 +923,39 @@ ipcMain.handle('app:install-update', async () => {
   await downloadAndInstallAppUpdate(sendProgress, async () => {
     isQuitting = true
     tosuSocket.disconnect()
+
+    try {
+      const envPath = tosuProcess.getEnvPath()
+      if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, 'utf8')
+        const currentSaved: Record<string, string> = {}
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim()
+          if (!trimmed || trimmed.startsWith('#')) continue
+          const m = trimmed.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/)
+          if (m) currentSaved[m[1]] = m[2].trim()
+        }
+        if (Object.keys(currentSaved).length > 0) {
+          savePersistentTosuEnv(currentSaved)
+        }
+      }
+
+      const settingsDir = path.join(tosuProcess.getTosuDir(), 'settings')
+      const backupDir = path.join(app.getPath('userData'), 'tosu-counter-settings-backup')
+      if (fs.existsSync(settingsDir)) {
+        fs.mkdirSync(backupDir, { recursive: true })
+        for (const f of fs.readdirSync(settingsDir)) {
+          const src = path.join(settingsDir, f)
+          const dst = path.join(backupDir, f)
+          if (fs.statSync(src).isFile()) {
+            fs.copyFileSync(src, dst)
+          }
+        }
+      }
+    } catch (backupErr) {
+      console.warn('[app-updater] failed to back up tosu settings before update:', backupErr)
+    }
+
     try {
       if (tosuProcess.isRunning() || tosuProcess.isBusy()) {
         await tosuProcess.stopForUpdate()

@@ -126,6 +126,41 @@ export class TosuProcess {
       content = fs.readFileSync(envPath, 'utf8')
     }
 
+    const persistentEnvFile = path.join(app.getPath('userData'), 'saved-tosu-env.json')
+    let savedOverrides: Record<string, string> = {}
+
+    if (fs.existsSync(persistentEnvFile)) {
+      try {
+        savedOverrides = JSON.parse(fs.readFileSync(persistentEnvFile, 'utf8')) as Record<string, string>
+      } catch {}
+    } else if (content) {
+      // First run or backup missing: back up current tosu.env values immediately
+      try {
+        const initialSaved: Record<string, string> = {}
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim()
+          if (!trimmed || trimmed.startsWith('#')) continue
+          const m = trimmed.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/)
+          if (m) initialSaved[m[1]] = m[2].trim()
+        }
+        if (Object.keys(initialSaved).length > 0) {
+          fs.mkdirSync(path.dirname(persistentEnvFile), { recursive: true })
+          fs.writeFileSync(persistentEnvFile, JSON.stringify(initialSaved, null, 2), 'utf8')
+        }
+      } catch {}
+    }
+
+    // Apply saved overrides (CALCULATE_PP, READ_MANIA_SCROLL_SPEED, POLL_RATE, etc.)
+    for (const [key, value] of Object.entries(savedOverrides)) {
+      if (key === 'SERVER_PORT' || key === 'OPEN_DASHBOARD_ON_STARTUP' || key === 'ENABLE_AUTOUPDATE') continue
+      const regex = new RegExp(`^${key}=.*$`, 'm')
+      if (regex.test(content)) {
+        content = content.replace(regex, `${key}=${value}`)
+      } else {
+        content += `${content.endsWith('\n') || content === '' ? '' : '\n'}${key}=${value}\n`
+      }
+    }
+
     const defaults: Record<string, string> = {
       OPEN_DASHBOARD_ON_STARTUP: 'false',
       SERVER_PORT: String(this.port),
@@ -148,6 +183,22 @@ export class TosuProcess {
     })
 
     fs.writeFileSync(envPath, content, 'utf8')
+
+    // Restore any backed up counter settings (e.g. __ingame__.values.json) if missing
+    try {
+      const counterBackupDir = path.join(app.getPath('userData'), 'tosu-counter-settings-backup')
+      const counterDestDir = path.join(tosuDir, 'settings')
+      if (fs.existsSync(counterBackupDir)) {
+        fs.mkdirSync(counterDestDir, { recursive: true })
+        for (const f of fs.readdirSync(counterBackupDir)) {
+          const src = path.join(counterBackupDir, f)
+          const dst = path.join(counterDestDir, f)
+          if (!fs.existsSync(dst) && fs.statSync(src).isFile()) {
+            fs.copyFileSync(src, dst)
+          }
+        }
+      }
+    } catch {}
   }
 
   private isProcessImageRunning(imageName: string) {

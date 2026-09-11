@@ -2,6 +2,7 @@ import fs from 'fs'
 import http from 'http'
 import https from 'https'
 import path from 'path'
+import { app } from 'electron'
 
 export interface CounterAsset {
   type: 'image' | 'gif' | string
@@ -64,6 +65,37 @@ const DEFAULT_SETTINGS: TosuAppSettings = {
   SERVER_PORT: 24050,
 }
 
+function getPersistentEnvFilePath(): string {
+  try {
+    return path.join(app.getPath('userData'), 'saved-tosu-env.json')
+  } catch {
+    return ''
+  }
+}
+
+export function readPersistentTosuEnv(): Record<string, string> {
+  const p = getPersistentEnvFilePath()
+  if (!p || !fs.existsSync(p)) return {}
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8')) as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+export function savePersistentTosuEnv(settings: Record<string, string>): void {
+  const p = getPersistentEnvFilePath()
+  if (!p) return
+  try {
+    const existing = readPersistentTosuEnv()
+    const merged = { ...existing, ...settings }
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, JSON.stringify(merged, null, 2), 'utf8')
+  } catch {
+    /* ignore */
+  }
+}
+
 export class TosuApi {
   private baseUrl = 'http://127.0.0.1:24050'
   private envPath: string | null = null
@@ -77,12 +109,12 @@ export class TosuApi {
   }
 
   private readRawEnv(): Record<string, string> {
-    if (!this.envPath) return {}
+    const persistent = readPersistentTosuEnv()
+    if (!this.envPath) return { ...persistent }
     try {
-      const fs = require('fs') as typeof import('fs')
-      if (!fs.existsSync(this.envPath)) return {}
+      if (!fs.existsSync(this.envPath)) return { ...persistent }
       const content = fs.readFileSync(this.envPath, 'utf8')
-      const overrides: Record<string, string> = {}
+      const overrides: Record<string, string> = { ...persistent }
       for (const line of content.split('\n')) {
         const trimmed = line.trim()
         if (!trimmed || trimmed.startsWith('#')) continue
@@ -91,7 +123,7 @@ export class TosuApi {
       }
       return overrides
     } catch {
-      return {}
+      return { ...persistent }
     }
   }
 
@@ -389,10 +421,10 @@ export class TosuApi {
   }
 
   private writeEnvFile(updates: Record<string, string>) {
+    savePersistentTosuEnv(updates)
     if (!this.envPath) {
       throw new Error('Путь к tosu.env не настроен')
     }
-    const fs = require('fs') as typeof import('fs')
     let content = ''
     if (fs.existsSync(this.envPath)) {
       content = fs.readFileSync(this.envPath, 'utf8')

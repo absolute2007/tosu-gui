@@ -69,6 +69,17 @@
   var localIds = new Set()
   var loggedIn = false
   var username = ''
+  var MAPS_AUTH_KEY = 'tosu_maps_auth'
+  try {
+    var cachedAuth = localStorage.getItem(MAPS_AUTH_KEY)
+    if (cachedAuth) {
+      var parsedAuth = JSON.parse(cachedAuth)
+      if (parsedAuth && parsedAuth.loggedIn) {
+        loggedIn = true
+        username = parsedAuth.username || ''
+      }
+    }
+  } catch (e) {}
   var downloads = {}
   var debounceTimer = null
   var apiOk = false
@@ -697,6 +708,9 @@
     if (!(await checkApi())) {
       loggedIn = false
       username = ''
+      try {
+        localStorage.removeItem(MAPS_AUTH_KEY)
+      } catch (e) {}
       updateAuthUi()
       return
     }
@@ -704,9 +718,18 @@
       var a = await api('/api/maps/auth')
       loggedIn = !!a.loggedIn
       username = a.username || ''
+      try {
+        if (loggedIn) {
+          localStorage.setItem(MAPS_AUTH_KEY, JSON.stringify({ loggedIn: loggedIn, username: username }))
+        } else {
+          localStorage.removeItem(MAPS_AUTH_KEY)
+        }
+      } catch (e) {}
     } catch (e) {
-      loggedIn = false
-      username = ''
+      if (!loggedIn) {
+        loggedIn = false
+        username = ''
+      }
     }
     updateAuthUi()
   }
