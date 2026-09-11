@@ -480,12 +480,16 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
             const isTrailDisabled = Boolean(
               toggleTweaks.find((t) => t.id === 'cursor-trail')?.applied
             )
+            const isContinuousTrail = Boolean(
+              toggleTweaks.find((t) => t.id === 'continuous-cursor-trail')?.applied
+            )
             return filteredTweaks.map((tweak) => (
               <TweakCard
                 key={tweak.id}
                 tweak={tweak}
                 isBusy={busyTweakId === tweak.id}
                 isTrailDisabled={isTrailDisabled}
+                isContinuousTrail={isContinuousTrail}
                 onToggle={() => void handleToggleTweak(tweak)}
                 onReset={() => void handleResetTweak(tweak)}
               />
@@ -679,6 +683,7 @@ interface TweakCardProps {
   tweak: SkinTweakInfo
   isBusy: boolean
   isTrailDisabled?: boolean
+  isContinuousTrail?: boolean
   onToggle: () => void
   onReset: () => void
 }
@@ -736,6 +741,7 @@ function TweakCard({
   tweak,
   isBusy,
   isTrailDisabled,
+  isContinuousTrail,
   onToggle,
   onReset,
 }: TweakCardProps) {
@@ -748,27 +754,40 @@ function TweakCard({
   }
 
   const localizedTitle = t(`skinCustomizer.tweaks.${tweak.id}.title`)
-  const title = localizedTitle !== `skinCustomizer.tweaks.${tweak.id}.title` ? localizedTitle : tweak.title
-
-  const localizedDesc = t(`skinCustomizer.tweaks.${tweak.id}.description`)
-  const description = localizedDesc !== `skinCustomizer.tweaks.${tweak.id}.description` ? localizedDesc : tweak.description
+  const title = localizedTitle || tweak.title
+  const desc = t(`skinCustomizer.tweaks.${tweak.id}.desc`) || tweak.description
 
   return (
-    <div className={`customizer-card ${tweak.applied ? '-modified' : ''}`}>
-      {/* Card Header */}
+    <div
+      className={`customizer-card ${tweak.applied ? '-applied' : ''} ${
+        isBusy ? '-busy' : ''
+      }`}
+    >
+      {/* Top Header */}
       <div className="customizer-card-header">
-        <span className="customizer-card-category">
-          {categoryLabels[tweak.category]}
-        </span>
-        <div className="customizer-card-actions">
+        <div className="customizer-card-titles">
+          <div className="customizer-card-title-row">
+            <span className="customizer-card-title">{title}</span>
+            <span className="customizer-card-badge">
+              {categoryLabels[tweak.category] || tweak.category}
+            </span>
+          </div>
+          {tweak.subtitle && (
+            <span className="customizer-card-subtitle">{tweak.subtitle}</span>
+          )}
+        </div>
+
+        {/* Toggle Switch */}
+        <div className="customizer-card-switch">
           {tweak.canReset && (
             <button
+              type="button"
               className="customizer-icon-btn"
               onClick={onReset}
               disabled={isBusy}
               title={t('skinCustomizer.revertBackupTooltip')}
             >
-              <RotateCcw size={14} />
+              <RotateCcw size={13} />
             </button>
           )}
           <label className="customizer-switch">
@@ -791,7 +810,7 @@ function TweakCard({
             cursorUrl={tweak.previewCursorImage}
             trailUrl={tweak.previewImage}
             trailDisabled={Boolean(tweak.id === 'cursor-trail' ? tweak.applied : isTrailDisabled)}
-            continuousTrail={Boolean(tweak.id === 'continuous-cursor-trail' ? tweak.applied : false)}
+            continuousTrail={Boolean(tweak.id === 'continuous-cursor-trail' ? tweak.applied : isContinuousTrail)}
           />
         ) : tweak.previewType === 'audio' ? (
           <AudioTweakPreview
@@ -819,7 +838,7 @@ function TweakCard({
         <span className="customizer-card-files" title={tweak.subtitle}>
           {tweak.subtitle}
         </span>
-        <p className="customizer-card-desc">{description}</p>
+        <p className="customizer-card-desc">{desc}</p>
       </div>
 
       {/* Card Footer */}
@@ -1331,6 +1350,7 @@ function CursorColorStudio({
   const [selectedHue, setSelectedHue] = useState<number>(initialHue)
   const [recolorTrail, setRecolorTrail] = useState<boolean>(initialRecolorTrail)
   const [hasColorChanged, setHasColorChanged] = useState<boolean>(false)
+  const [resetCount, setResetCount] = useState<number>(0)
 
   const hasHistory = Array.isArray(tweak.meta?.history) && tweak.meta.history.length > 0
   const canRevertPrevious = tweak.applied && (hasHistory || tweak.canReset)
@@ -1366,11 +1386,13 @@ function CursorColorStudio({
     setHasColorChanged(false)
     setSelectedHue(215)
     setRecolorTrail(true)
+    setResetCount((c) => c + 1)
     onReset()
   }
 
   const handleRevertPrevious = () => {
     setHasColorChanged(false)
+    setResetCount((c) => c + 1)
     onRevertPrevious?.()
   }
 
@@ -1384,6 +1406,11 @@ function CursorColorStudio({
     }
     setHasColorChanged(false)
   }
+
+  const effectiveCursorHue = hasColorChanged
+    ? selectedHue
+    : (tweak.applied && typeof tweak.meta?.hue === 'number' ? tweak.meta.hue : undefined)
+  const effectiveTrailHue = recolorTrail ? effectiveCursorHue : undefined
 
   return (
     <div className="color-studio-pane">
@@ -1433,12 +1460,13 @@ function CursorColorStudio({
         <div className="color-studio-preview-col">
           <div className="color-studio-preview-box">
             <CursorInteractivePreview
-              key={`studio-cursor-preview-${tweak.applied ? 'applied' : 'clean'}-${tweak.meta?.hue ?? 'orig'}-${hasColorChanged ? selectedHue : 'unchanged'}-${recolorTrail ? 'trail-sync' : 'trail-keep'}-${isContinuousTrail ? 'continuous' : 'standard'}-${tweak.previewCursorImage?.length || 0}-${tweak.previewImage?.length || 0}`}
+              key={`studio-cursor-preview-${resetCount}-${tweak.applied ? 'applied' : 'clean'}-${tweak.meta?.hue ?? 'orig'}-${hasColorChanged ? selectedHue : 'unchanged'}-${recolorTrail ? 'trail-sync' : 'trail-keep'}-${isContinuousTrail ? 'continuous' : 'standard'}-${tweak.previewCursorImage?.length || 0}-${tweak.previewImage?.length || 0}`}
               cursorUrl={tweak.previewCursorImage}
               trailUrl={tweak.previewImage}
-              trailDisabled={Boolean(isTrailDisabled || !recolorTrail)}
+              trailDisabled={Boolean(isTrailDisabled)}
               continuousTrail={isContinuousTrail}
-              hueShift={hasColorChanged ? selectedHue : (tweak.applied && typeof tweak.meta?.hue === 'number' ? tweak.meta.hue : undefined)}
+              hueShift={effectiveCursorHue}
+              trailHueShift={effectiveTrailHue}
             />
           </div>
 
@@ -1990,12 +2018,14 @@ function CursorInteractivePreview({
   trailDisabled,
   continuousTrail,
   hueShift,
+  trailHueShift,
 }: {
   cursorUrl?: string | null
   trailUrl?: string | null
   trailDisabled: boolean
   continuousTrail?: boolean
   hueShift?: number
+  trailHueShift?: number
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -2007,6 +2037,8 @@ function CursorInteractivePreview({
   const trailImgRef = useRef<HTMLImageElement | null>(null)
   const tintedCursorRef = useRef<HTMLCanvasElement | null>(null)
   const tintedTrailRef = useRef<HTMLCanvasElement | null>(null)
+
+  const effectiveTrailHue = trailHueShift !== undefined ? trailHueShift : hueShift
 
   const updateTintedCursor = (img: HTMLImageElement | null, hue?: number) => {
     if (!img || hue === undefined) {
@@ -2050,7 +2082,7 @@ function CursorInteractivePreview({
     img.src = trailUrl
     img.onload = () => {
       trailImgRef.current = img
-      updateTintedTrail(img, hueShift)
+      updateTintedTrail(img, effectiveTrailHue)
     }
   }, [trailUrl])
 
@@ -2058,10 +2090,13 @@ function CursorInteractivePreview({
     if (cursorImgRef.current) {
       updateTintedCursor(cursorImgRef.current, hueShift)
     }
-    if (trailImgRef.current) {
-      updateTintedTrail(trailImgRef.current, hueShift)
-    }
   }, [hueShift])
+
+  useEffect(() => {
+    if (trailImgRef.current) {
+      updateTintedTrail(trailImgRef.current, effectiveTrailHue)
+    }
+  }, [effectiveTrailHue])
 
   // Responsive canvas size
   useEffect(() => {
@@ -2139,7 +2174,7 @@ function CursorInteractivePreview({
 
       // Render Trail Particles (if enabled)
       if (!trailDisabled && particlesRef.current.length > 0) {
-        const trailDrawable = (hueShift !== undefined && tintedTrailRef.current)
+        const trailDrawable = (effectiveTrailHue !== undefined && tintedTrailRef.current)
           ? tintedTrailRef.current
           : trailImgRef.current
 
@@ -2213,7 +2248,7 @@ function CursorInteractivePreview({
 
     animId = requestAnimationFrame(render)
     return () => cancelAnimationFrame(animId)
-  }, [trailDisabled, hueShift, continuousTrail])
+  }, [trailDisabled, hueShift, effectiveTrailHue, continuousTrail])
 
   const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
     isHoveredRef.current = true

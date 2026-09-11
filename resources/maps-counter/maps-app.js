@@ -545,13 +545,11 @@
 
   function updateAuthUi() {
     if (!els.authLabel || !els.login) return
-    if (!apiOk) {
-      els.authLabel.textContent = 'GUI offline'
-      els.login.hidden = true
-      return
-    }
     if (loggedIn) {
       els.authLabel.textContent = 'Вы вошли как ' + (username || 'osu!')
+      els.login.hidden = true
+    } else if (!apiOk) {
+      els.authLabel.textContent = 'GUI offline'
       els.login.hidden = true
     } else {
       els.authLabel.textContent = 'Не вошли'
@@ -706,30 +704,24 @@
 
   async function refreshAuth() {
     if (!(await checkApi())) {
-      loggedIn = false
-      username = ''
-      try {
-        localStorage.removeItem(MAPS_AUTH_KEY)
-      } catch (e) {}
       updateAuthUi()
       return
     }
     try {
       var a = await api('/api/maps/auth')
-      loggedIn = !!a.loggedIn
-      username = a.username || ''
-      try {
-        if (loggedIn) {
-          localStorage.setItem(MAPS_AUTH_KEY, JSON.stringify({ loggedIn: loggedIn, username: username }))
-        } else {
-          localStorage.removeItem(MAPS_AUTH_KEY)
-        }
-      } catch (e) {}
-    } catch (e) {
-      if (!loggedIn) {
-        loggedIn = false
-        username = ''
+      if (a && typeof a.loggedIn === 'boolean') {
+        loggedIn = a.loggedIn
+        username = a.username || ''
+        try {
+          if (loggedIn) {
+            localStorage.setItem(MAPS_AUTH_KEY, JSON.stringify({ loggedIn: loggedIn, username: username }))
+          } else {
+            localStorage.removeItem(MAPS_AUTH_KEY)
+          }
+        } catch (e) {}
       }
+    } catch (e) {
+      // keep cached auth on fetch error
     }
     updateAuthUi()
   }
@@ -1806,6 +1798,7 @@
 
     bindUi()
     rootEl.style.setProperty('display', 'none', 'important')
+    updateAuthUi()
     syncPlayerUi()
     syncMuteBtnUi()
   }
@@ -1835,6 +1828,7 @@
         rootEl.style.setProperty('pointer-events', 'auto', 'important')
         rootEl.removeAttribute('aria-hidden')
       }
+      updateAuthUi()
       syncFilterUi()
       syncPlayerUi()
       syncMuteBtnUi()

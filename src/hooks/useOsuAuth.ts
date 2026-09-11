@@ -40,13 +40,11 @@ export function useOsuAuth(onToast?: (msg: string, type: 'success' | 'error') =>
       syncAccountState(info)
       return info
     } catch {
-      const fallback: OsuAccountInfo = { loggedIn: false, userId: null, username: null, avatarUrl: null }
-      syncAccountState(fallback)
-      return fallback
+      return account
     } finally {
       setAuthReady(true)
     }
-  }, [syncAccountState])
+  }, [syncAccountState, account])
 
   useEffect(() => {
     void refreshAuth()

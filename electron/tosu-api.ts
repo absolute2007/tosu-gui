@@ -114,14 +114,14 @@ export class TosuApi {
     try {
       if (!fs.existsSync(this.envPath)) return { ...persistent }
       const content = fs.readFileSync(this.envPath, 'utf8')
-      const overrides: Record<string, string> = { ...persistent }
+      const fileValues: Record<string, string> = {}
       for (const line of content.split('\n')) {
         const trimmed = line.trim()
         if (!trimmed || trimmed.startsWith('#')) continue
         const m = trimmed.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/)
-        if (m) overrides[m[1]] = m[2].trim()
+        if (m) fileValues[m[1]] = m[2].trim()
       }
-      return overrides
+      return { ...fileValues, ...persistent }
     } catch {
       return { ...persistent }
     }

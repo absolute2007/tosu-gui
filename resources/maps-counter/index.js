@@ -206,14 +206,12 @@
   }
 
   function updateAuthUi() {
-    if (!apiOk) {
-      el.authLabel.textContent = 'GUI offline'
-      el.authLabel.hidden = false
-      el.login.hidden = true
-      return
-    }
     if (loggedIn) {
       el.authLabel.textContent = 'Вы вошли как ' + (username || 'osu!')
+      el.authLabel.hidden = false
+      el.login.hidden = true
+    } else if (!apiOk) {
+      el.authLabel.textContent = 'GUI offline'
       el.authLabel.hidden = false
       el.login.hidden = true
     } else {
@@ -249,30 +247,24 @@
 
   async function refreshAuth() {
     if (!(await checkApi())) {
-      loggedIn = false
-      username = ''
-      try {
-        localStorage.removeItem(MAPS_AUTH_KEY)
-      } catch {}
       updateAuthUi()
       return
     }
     try {
       const a = await api('/api/maps/auth')
-      loggedIn = !!a.loggedIn
-      username = a.username || ''
-      try {
-        if (loggedIn) {
-          localStorage.setItem(MAPS_AUTH_KEY, JSON.stringify({ loggedIn, username }))
-        } else {
-          localStorage.removeItem(MAPS_AUTH_KEY)
-        }
-      } catch {}
-    } catch {
-      if (!loggedIn) {
-        loggedIn = false
-        username = ''
+      if (a && typeof a.loggedIn === 'boolean') {
+        loggedIn = a.loggedIn
+        username = a.username || ''
+        try {
+          if (loggedIn) {
+            localStorage.setItem(MAPS_AUTH_KEY, JSON.stringify({ loggedIn, username }))
+          } else {
+            localStorage.removeItem(MAPS_AUTH_KEY)
+          }
+        } catch {}
       }
+    } catch {
+      // keep cached auth on fetch error
     }
     updateAuthUi()
   }
@@ -678,6 +670,7 @@
     })
   }
   syncMuteBtnUi()
+  updateAuthUi()
 
   void (async function boot() {
     void api('/api/maps/audio-mute')
