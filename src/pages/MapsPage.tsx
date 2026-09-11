@@ -45,6 +45,10 @@ interface Props {
   overlay?: boolean
   onToast: (msg: string, type: 'success' | 'error') => void
   onOpenSettings?: () => void
+  account?: OsuAccountInfo | null
+  authBusy?: boolean
+  onLogin?: () => Promise<OsuAccountInfo>
+  onLogout?: () => Promise<OsuAccountInfo>
 }
 
 const PAGE_SIZE = 24
@@ -305,7 +309,16 @@ function loadStoredMuteOsu(): boolean {
   }
 }
 
-export function MapsPage({ visible = true, overlay = false, onToast, onOpenSettings }: Props) {
+export function MapsPage({
+  visible = true,
+  overlay = false,
+  onToast,
+  onOpenSettings,
+  account: propAccount,
+  authBusy: propAuthBusy,
+  onLogin: propOnLogin,
+  onLogout: propOnLogout,
+}: Props) {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [mode, setMode] = useState<MapModeFilter>('any')
@@ -322,10 +335,24 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   const [songsPath, setSongsPath] = useState<string | null>(null)
   const [localIds, setLocalIds] = useState<Set<number>>(() => new Set())
   const [downloads, setDownloads] = useState<Record<number, MapDownloadProgress>>({})
-  const [account, setAccount] = useState<OsuAccountInfo | null>(null)
+  const [internalAccount, setInternalAccount] = useState<OsuAccountInfo | null>(() => {
+    try {
+      const raw = localStorage.getItem('tosu_cached_osu_account')
+      if (raw) {
+        const parsed = JSON.parse(raw) as OsuAccountInfo
+        if (parsed && typeof parsed.loggedIn === 'boolean') {
+          return parsed
+        }
+      }
+    } catch {}
+    return null
+  })
   /** false until first auth status check finishes — avoids "not logged in" flash */
   const [authReady, setAuthReady] = useState(false)
-  const [authBusy, setAuthBusy] = useState(false)
+  const [internalAuthBusy, setInternalAuthBusy] = useState(false)
+
+  const account = propAccount !== undefined ? propAccount : internalAccount
+  const authBusy = propAuthBusy !== undefined ? propAuthBusy : internalAuthBusy
   const [rateLimitedUntil, setRateLimitedUntil] = useState(0)
   const [previewId, setPreviewId] = useState<number | null>(null)
   const [previewPaused, setPreviewPaused] = useState(false)
@@ -711,15 +738,20 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   const refreshAuth = useCallback(async () => {
     try {
       const info = await window.tosuGui.getOsuAuthStatus()
-      setAccount(info)
+      if (propAccount === undefined) {
+        setInternalAccount(info)
+        try {
+          if (info.loggedIn) localStorage.setItem('tosu_cached_osu_account', JSON.stringify(info))
+          else localStorage.removeItem('tosu_cached_osu_account')
+        } catch {}
+      }
       return info
     } catch {
-      setAccount({ loggedIn: false, userId: null, username: null, avatarUrl: null })
       return null
     } finally {
       setAuthReady(true)
     }
-  }, [])
+  }, [propAccount])
 
   const refreshLocal = useCallback(async () => {
     try {
@@ -951,10 +983,22 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   }, [rateLimitedUntil])
 
   const handleLogin = async () => {
-    setAuthBusy(true)
+    if (propOnLogin) {
+      try {
+        await propOnLogin()
+      } catch {
+        /* handled by parent */
+      }
+      return
+    }
+    setInternalAuthBusy(true)
     try {
       const info = await window.tosuGui.loginOsu()
-      setAccount(info)
+      setInternalAccount(info)
+      try {
+        if (info.loggedIn) localStorage.setItem('tosu_cached_osu_account', JSON.stringify(info))
+        else localStorage.removeItem('tosu_cached_osu_account')
+      } catch {}
       if (info.loggedIn) {
         onToast(info.username ? `Вошли как ${info.username}` : 'Вход выполнен', 'success')
       } else {
@@ -963,25 +1007,36 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
     } catch (err) {
       onToast(cleanIpcError(err) || 'Ошибка входа', 'error')
     } finally {
-      setAuthBusy(false)
+      setInternalAuthBusy(false)
     }
   }
 
   const handleLogout = async () => {
-    setAuthBusy(true)
-    try {
-      const info = await window.tosuGui.logoutOsu()
-      setAccount(info)
-      setSets([])
-      setCursor(null)
-      cursorRef.current = null
-      setHasMore(false)
-      onToast('Вышли из osu!', 'success')
-    } catch {
-      onToast('Не удалось выйти', 'error')
-    } finally {
-      setAuthBusy(false)
+    if (propOnLogout) {
+      try {
+        await propOnLogout()
+      } catch {
+        /* handled by parent */
+      }
+    } else {
+      setInternalAuthBusy(true)
+      try {
+        const info = await window.tosuGui.logoutOsu()
+        setInternalAccount(info)
+        try {
+          localStorage.removeItem('tosu_cached_osu_account')
+        } catch {}
+        onToast('Вышли из osu!', 'success')
+      } catch {
+        onToast('Не удалось выйти', 'error')
+      } finally {
+        setInternalAuthBusy(false)
+      }
     }
+    setSets([])
+    setCursor(null)
+    cursorRef.current = null
+    setHasMore(false)
   }
 
   const handlePickSongs = async () => {

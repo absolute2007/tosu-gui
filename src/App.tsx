@@ -196,6 +196,10 @@ export default function App() {
               visible={page === 'maps'}
               onToast={showToast}
               onOpenSettings={() => setPage('settings')}
+              account={osuAuth.account}
+              authBusy={osuAuth.authBusy}
+              onLogin={osuAuth.login}
+              onLogout={osuAuth.logout}
             />
           </div>
           {guiSettings.skinsBrowserEnabled ? (

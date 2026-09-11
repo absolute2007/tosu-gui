@@ -685,33 +685,33 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
 
   const cursorCandidates = ['cursor.png', 'cursor@2x.png']
   for (const c of cursorCandidates) {
-    const inSkin = path.join(skinPath, c)
-    if (fs.existsSync(inSkin)) {
-      previewCursorImage = getFileAsBase64Url(inSkin, false)
-      if (previewCursorImage) break
-    }
     const inBackup = path.join(backupFilesDir, c)
     if (fs.existsSync(inBackup)) {
       previewCursorImage = getFileAsBase64Url(inBackup, false)
+      if (previewCursorImage) break
+    }
+    const inSkin = path.join(skinPath, c)
+    if (fs.existsSync(inSkin)) {
+      previewCursorImage = getFileAsBase64Url(inSkin, false)
       if (previewCursorImage) break
     }
   }
 
   const trailCandidates = ['cursortrail.png', 'cursortrail@2x.png']
   for (const c of trailCandidates) {
-    const inSkin = path.join(skinPath, c)
-    if (fs.existsSync(inSkin)) {
-      const s = fs.statSync(inSkin).size
-      if (s > 150) {
-        previewTrailImage = getFileAsBase64Url(inSkin, false)
-        if (previewTrailImage) break
-      }
-    }
     const inBackup = path.join(backupFilesDir, c)
     if (fs.existsSync(inBackup)) {
       const s = fs.statSync(inBackup).size
       if (s > 150) {
         previewTrailImage = getFileAsBase64Url(inBackup, false)
+        if (previewTrailImage) break
+      }
+    }
+    const inSkin = path.join(skinPath, c)
+    if (fs.existsSync(inSkin)) {
+      const s = fs.statSync(inSkin).size
+      if (s > 150) {
+        previewTrailImage = getFileAsBase64Url(inSkin, false)
         if (previewTrailImage) break
       }
     }
@@ -1026,8 +1026,18 @@ export async function resetSkinTweak(
       }
     }
 
-    // If we just restored cursor-color, check if cursor-trail is suppressed!
+    // If we just restored cursor-color, ensure cursortrail is safely restored from backup
     if (tweakId === 'cursor-color') {
+      for (const f of ['cursortrail.png', 'cursortrail@2x.png']) {
+        const backupPath = path.join(backupFilesDir, f)
+        const destPath = path.join(skinPath, f)
+        if (fs.existsSync(backupPath)) {
+          try {
+            fs.copyFileSync(backupPath, destPath)
+            fs.unlinkSync(backupPath)
+          } catch {}
+        }
+      }
       const trailTweak = manifest.tweaks['cursor-trail']
       if (trailTweak) {
         for (const f of ['cursortrail.png', 'cursortrail@2x.png']) {
