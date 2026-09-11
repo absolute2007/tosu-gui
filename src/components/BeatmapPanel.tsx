@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import type { BeatmapPlayerScore, GameState } from '../hooks/useTosuSocket'
+import { useI18n } from '../i18n/context'
 import './BeatmapPanel.css'
 
 interface Props {
@@ -27,12 +28,12 @@ function formatAcc(n: number): string {
   return `${n % 1 === 0 ? n.toFixed(0) : n.toFixed(2)}%`
 }
 
-function playerStatusLabel(score: BeatmapPlayerScore, loading: boolean): string {
-  if (loading && !score.played) return 'Проверка…'
-  if (!score.played) return 'Не пройдена'
-  if (score.failed) return 'Фейл'
+function playerStatusLabel(score: BeatmapPlayerScore, loading: boolean, t: (k: any) => string): string {
+  if (loading && !score.played) return t('beatmapPanel.checkingScore')
+  if (!score.played) return t('beatmapPanel.notPassed')
+  if (score.failed) return t('beatmapPanel.failed')
 
-  const parts: string[] = ['Пройдена']
+  const parts: string[] = [t('beatmapPanel.passed')]
   // Only real global rank (from online top list), never in-game board slot
   if (score.position != null && score.position > 0) parts.push(`#${score.position}`)
   if (score.grade) parts.push(score.grade)
@@ -109,6 +110,7 @@ function EmptyArt({ kind }: { kind: EmptyKind }) {
 }
 
 function BeatmapPanelInner({ game }: Props) {
+  const { t } = useI18n()
   const coverKey = `${game.beatmapSetId}|${game.beatmapId}|${game.beatmapChecksum}|${game.coverUrl}`
   /** Identity of the selected difficulty — must change when switching versions in a set */
   const difficultyKey = `${game.beatmapId}|${game.beatmapChecksum}|${game.mode}`
@@ -226,19 +228,19 @@ function BeatmapPanelInner({ game }: Props) {
       : '-pass'
 
   return (
-    <aside className="beatmap-panel" aria-label="Текущая карта">
-      <div className="beatmap-panel-header">Карта</div>
+    <aside className="beatmap-panel" aria-label={t('beatmapPanel.header')}>
+      <div className="beatmap-panel-header">{t('beatmapPanel.header')}</div>
 
       {!showMap ? (
         <div className="beatmap-panel-empty">
           <EmptyArt kind={kind} />
-          <div className="beatmap-panel-empty-title">Карта не выбрана</div>
+          <div className="beatmap-panel-empty-title">{t('beatmapPanel.noMapSelected')}</div>
           <div className="beatmap-panel-empty-desc">
             {kind === 'no-map'
-              ? 'Выберите карту в osu!'
+              ? t('beatmapPanel.selectMapHint')
               : kind === 'no-osu'
-                ? 'Запустите osu!, чтобы видеть карту'
-                : 'Нет связи с tosu'}
+                ? t('beatmapPanel.launchOsuHint')
+                : t('beatmapPanel.noTosuConnHint')}
           </div>
         </div>
       ) : (
@@ -286,27 +288,27 @@ function BeatmapPanelInner({ game }: Props) {
 
           <div className="beatmap-extras">
             <div className="beatmap-extra-row">
-              <span className="beatmap-extra-label">Режим</span>
+              <span className="beatmap-extra-label">{t('beatmapPanel.mode')}</span>
               <span className="beatmap-extra-value">{game.mode}</span>
             </div>
             {game.mods ? (
               <div className="beatmap-extra-row">
-                <span className="beatmap-extra-label">Моды</span>
+                <span className="beatmap-extra-label">{t('beatmapPanel.mods')}</span>
                 <span className="beatmap-extra-value">{game.mods}</span>
               </div>
             ) : null}
             {game.beatmapId > 0 ? (
               <div className="beatmap-extra-row">
-                <span className="beatmap-extra-label">Beatmap</span>
+                <span className="beatmap-extra-label">{t('beatmapPanel.beatmapId')}</span>
                 <span className="beatmap-extra-value">#{game.beatmapId}</span>
               </div>
             ) : null}
           </div>
 
           <div className={`beatmap-player-status ${statusClass}`}>
-            <div className="beatmap-player-status-label">Ваш результат</div>
+            <div className="beatmap-player-status-label">{t('beatmapPanel.yourScore')}</div>
             <div className="beatmap-player-status-value">
-              {playerStatusLabel(resolvedScore, scoreLoading)}
+              {playerStatusLabel(resolvedScore, scoreLoading, t)}
             </div>
             {resolvedScore.played && !resolvedScore.failed && resolvedScore.score > 0 ? (
               <div className="beatmap-player-status-detail">

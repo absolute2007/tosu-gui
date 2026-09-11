@@ -51,15 +51,26 @@ export function I18nProvider({
   )
 
   const t = useCallback(
-    (key: TranslationKey, params?: Record<string, string | number>): string => {
-      const parts = key.split('.') as [keyof typeof translations.ru, string]
-      const category = parts[0]
-      const subKey = parts[1]
+    (key: string, params?: Record<string, string | number>): string => {
+      const parts = key.split('.')
+      const langDict = translations[lang] as any
+      const fallbackDict = translations.ru as any
 
-      const langDict = translations[lang] as Record<string, Record<string, string>> | undefined
-      const fallbackDict = translations.ru as Record<string, Record<string, string>>
+      let curr: any = langDict
+      for (const p of parts) {
+        curr = curr?.[p]
+        if (curr === undefined) break
+      }
 
-      let template = langDict?.[category]?.[subKey] ?? fallbackDict?.[category]?.[subKey] ?? key
+      if (curr === undefined || typeof curr !== 'string') {
+        curr = fallbackDict
+        for (const p of parts) {
+          curr = curr?.[p]
+          if (curr === undefined) break
+        }
+      }
+
+      let template = typeof curr === 'string' ? curr : key
 
       if (params) {
         for (const [k, v] of Object.entries(params)) {

@@ -200,10 +200,11 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
         <CounterSettingsModal
           name={settingsCounter}
           onClose={() => setSettingsCounter(null)}
-          onSaved={() => { onToast('Настройки сохранены', 'success'); setSettingsCounter(null) }}
-          onError={() => onToast('Ошибка сохранения', 'error')}
+          onSaved={() => { onToast(lang === 'en' ? 'Settings saved' : 'Настройки сохранены', 'success'); setSettingsCounter(null) }}
+          onError={() => onToast(lang === 'en' ? 'Error saving settings' : 'Ошибка сохранения', 'error')}
         />
       )}
     </div>
   )
+
 }

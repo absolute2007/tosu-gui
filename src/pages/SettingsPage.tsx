@@ -57,43 +57,43 @@ export function SettingsPage({
   onSave,
 }: Props) {
   const { t, lang, setLang } = useI18n()
-  const songsLabel = songsPath || songsPathResolved || (lang === 'en' ? 'not found (choose manually)' : 'не найдена (выберите вручную)')
-  const skinsLabel = skinsPath || skinsPathResolved || (lang === 'en' ? 'not found (choose manually)' : 'не найдена (выберите вручную)')
+  const songsLabel = songsPath || songsPathResolved || t('settings.notFoundManual')
+  const skinsLabel = skinsPath || skinsPathResolved || t('settings.notFoundManual')
 
   return (
     <div className="page">
       <div className="page-header">
         <h1 className="page-title">{t('settings.title')}</h1>
-        <p className="page-subtitle">{lang === 'en' ? 'tosu configuration and polling rates' : 'Параметры tosu и опроса данных'}</p>
+        <p className="page-subtitle">{t('settings.subtitle')}</p>
       </div>
 
       <div className="glass-card">
-        <div className="card-header">Карты</div>
+        <div className="card-header">{t('settings.sectionMaps')}</div>
         <div className="card-body">
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Папка Songs</div>
+              <div className="setting-label">{t('settings.songsFolder')}</div>
               <div className="setting-desc" title={songsPathResolved || songsPath || undefined}>
-                Куда скачивать .osz. Сейчас: {songsLabel}
+                {t('settings.songsFolderDesc', { path: songsLabel })}
               </div>
             </div>
             <div className="setting-control" style={{ gap: 6 }}>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onPickSongsPath()}>
                 <FolderOpen size={14} strokeWidth={1.8} />
-                Выбрать
+                {t('common.select')}
               </button>
               {songsPath ? (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onClearSongsPath()}>
-                  Авто
+                  {t('common.auto')}
                 </button>
               ) : null}
             </div>
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Карты в игре</div>
+              <div className="setting-label">{t('settings.inGameMaps')}</div>
               <div className="setting-desc">
-                Хоткей панели карт поверх osu! (нужен in-game overlay). По умолчанию Control+Shift+M.
+                {t('settings.inGameMapsDesc')}
               </div>
             </div>
             <div className="setting-control">
@@ -104,13 +104,13 @@ export function SettingsPage({
       </div>
 
       <div className="glass-card">
-        <div className="card-header">Скины</div>
+        <div className="card-header">{t('settings.sectionSkins')}</div>
         <div className="card-body">
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Раздел «Скины»</div>
+              <div className="setting-label">{t('settings.skinsSection')}</div>
               <div className="setting-desc">
-                Показывать страницу каталога в боковом меню (можно отключить, если osuck недоступен)
+                {t('settings.skinsSectionDesc')}
               </div>
             </div>
             <div className="setting-control">
@@ -119,19 +119,19 @@ export function SettingsPage({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Папка Skins</div>
+              <div className="setting-label">{t('settings.skinsFolder')}</div>
               <div className="setting-desc" title={skinsPathResolved || skinsPath || undefined}>
-                Куда ставить .osk. Сейчас: {skinsLabel}
+                {t('settings.skinsFolderDesc', { path: skinsLabel })}
               </div>
             </div>
             <div className="setting-control" style={{ gap: 6 }}>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onPickSkinsPath()}>
                 <FolderOpen size={14} strokeWidth={1.8} />
-                Выбрать
+                {t('common.select')}
               </button>
               {skinsPath ? (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => void onClearSkinsPath()}>
-                  Авто
+                  {t('common.auto')}
                 </button>
               ) : null}
             </div>
@@ -140,13 +140,13 @@ export function SettingsPage({
       </div>
 
       <div className="glass-card">
-        <div className="card-header">Обновления</div>
+        <div className="card-header">{t('settings.sectionUpdates')}</div>
         <div className="card-body">
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Обновления tosu GUI</div>
+              <div className="setting-label">{t('settings.updatesTitle')}</div>
               <div className="setting-desc">
-                Проверять новые версии этой программы на GitHub и предлагать установить
+                {t('settings.updatesDesc')}
               </div>
             </div>
             <div className="setting-control">
@@ -189,7 +189,7 @@ export function SettingsPage({
             <div className="setting-info">
               <div className="setting-label">{t('settings.closeToTray')}</div>
               <div className="setting-desc">
-                Если включено — крестик скрывает окно в системный трей. Если выключено — программа полностью закрывается
+                {t('settings.closeToTrayDesc')}
               </div>
             </div>
             <div className="setting-control">
@@ -211,12 +211,12 @@ export function SettingsPage({
       </div>
 
       <div className="glass-card">
-        <div className="card-header">Данные</div>
+        <div className="card-header">{t('settings.sectionData')}</div>
         <div className="card-body">
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Расчёт PP в реальном времени</div>
-              <div className="setting-desc">Отключите для турниров или если PP не нужен</div>
+              <div className="setting-label">{t('settings.calcPp')}</div>
+              <div className="setting-desc">{t('settings.calcPpDesc')}</div>
             </div>
             <div className="setting-control">
               <Toggle checked={settings.CALCULATE_PP} onChange={(v) => onUpdate('CALCULATE_PP', v)} />
@@ -224,8 +224,8 @@ export function SettingsPage({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Mania scroll speed</div>
-              <div className="setting-desc">Читать scrollSpeed из памяти игры</div>
+              <div className="setting-label">{t('settings.maniaScroll')}</div>
+              <div className="setting-desc">{t('settings.maniaScrollDesc')}</div>
             </div>
             <div className="setting-control">
               <Toggle checked={settings.READ_MANIA_SCROLL_SPEED} onChange={(v) => onUpdate('READ_MANIA_SCROLL_SPEED', v)} />
@@ -233,8 +233,8 @@ export function SettingsPage({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Данные клавиш</div>
-              <div className="setting-desc">K1/K2/M1/M2 для оверлеев клавиш</div>
+              <div className="setting-label">{t('settings.keyData')}</div>
+              <div className="setting-desc">{t('settings.keyDataDesc')}</div>
             </div>
             <div className="setting-control">
               <Toggle checked={settings.ENABLE_KEY_OVERLAY} onChange={(v) => onUpdate('ENABLE_KEY_OVERLAY', v)} />
@@ -242,8 +242,8 @@ export function SettingsPage({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Частота опроса</div>
-              <div className="setting-desc">Интервал общих данных (мс)</div>
+              <div className="setting-label">{t('settings.pollRate')}</div>
+              <div className="setting-desc">{t('settings.pollRateDesc')}</div>
             </div>
             <div className="setting-control">
               <NumberInput
@@ -257,8 +257,8 @@ export function SettingsPage({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Точный опрос</div>
-              <div className="setting-desc">HitError, KeyOverlay (мс). 0 = выкл</div>
+              <div className="setting-label">{t('settings.precisePollRate')}</div>
+              <div className="setting-desc">{t('settings.precisePollRateDesc')}</div>
             </div>
             <div className="setting-control">
               <NumberInput
@@ -276,7 +276,7 @@ export function SettingsPage({
       {dirty && (
         <div className="save-bar">
           <button className="btn btn-primary" onClick={onSave} disabled={saving}>
-            {saving ? 'Сохранение...' : 'Сохранить'}
+            {saving ? t('settings.saving') : t('settings.save')}
           </button>
         </div>
       )}
