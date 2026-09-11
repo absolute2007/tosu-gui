@@ -85,36 +85,6 @@ function findExe(dir) {
   return null
 }
 
-const LOCAL_SEARCH_PATHS = [
-  path.join(process.env.USERPROFILE || '', 'Desktop', 'Folders', 'Tosu'),
-  path.join(process.env.USERPROFILE || '', 'Documents', 'dev-projects', 'osu-auto', 'tosu_bin'),
-]
-
-function tryCopyLocal() {
-  for (const dir of LOCAL_SEARCH_PATHS) {
-    const exe = path.join(dir, EXE_NAME)
-    if (!fs.existsSync(exe)) continue
-
-    fs.mkdirSync(RESOURCES_DIR, { recursive: true })
-    fs.copyFileSync(exe, TARGET)
-
-    for (const extra of ['tosu.env', 'static', 'settings', 'game-overlay']) {
-      const src = path.join(dir, extra)
-      const dst = path.join(RESOURCES_DIR, extra)
-      if (fs.existsSync(src)) {
-        if (fs.statSync(src).isDirectory()) {
-          fs.cpSync(src, dst, { recursive: true })
-        } else {
-          fs.copyFileSync(src, dst)
-        }
-      }
-    }
-
-    console.log(`Copied tosu from ${dir}`)
-    return true
-  }
-  return false
-}
 
 async function installOverlayAsset(release, version) {
   if (!isWin) {
@@ -183,31 +153,26 @@ async function installOverlayAsset(release, version) {
 }
 
 async function main() {
-  const force = process.argv.includes('--force')
-  if (fs.existsSync(TARGET) && !force) {
-    console.log(`tosu binary already exists: ${TARGET}`)
-    // Still try to ensure overlay is present for current version file
-    const versionPath = path.join(RESOURCES_DIR, 'version')
-    if (fs.existsSync(versionPath)) {
-      try {
-        const release = await getLatestRelease()
-        const version = fs.readFileSync(versionPath, 'utf8').trim()
-        await installOverlayAsset(release, version)
-      } catch (err) {
-        console.warn('Overlay check skipped:', err.message)
-      }
-    }
-    return
-  }
-
-  if (!force && tryCopyLocal()) return
-
   fs.mkdirSync(RESOURCES_DIR, { recursive: true })
 
   console.log('Fetching latest tosu release...')
   const release = await getLatestRelease()
   const tag = release.tag_name
   const version = tag.replace(/^v/i, '')
+
+  const force = process.argv.includes('--force')
+  const versionPath = path.join(RESOURCES_DIR, 'version')
+  const installedVersion = fs.existsSync(versionPath) ? fs.readFileSync(versionPath, 'utf8').trim() : ''
+
+  if (fs.existsSync(TARGET) && installedVersion === version && !force) {
+    console.log(`tosu binary is up to date (${version}): ${TARGET}`)
+    await installOverlayAsset(release, version)
+    return
+  }
+
+  if (installedVersion && installedVersion !== version) {
+    console.log(`Updating tosu: ${installedVersion} -> ${version}`)
+  }
 
   const assetName = isWin ? `tosu-windows-${tag}.zip` : `tosu-linux-${tag}.zip`
   const asset = release.assets.find((a) => a.name === assetName)

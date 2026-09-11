@@ -20,6 +20,7 @@ import {
 } from './beatmap-maps'
 import { fetchOsuAccount, loginWithOsuWindow } from './osu-session'
 import { readGuiSettings } from './gui-settings'
+import { osuAudio } from './osu-audio'
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -155,7 +156,34 @@ async function handleApi(
       /** tosu layout editor hotkey (not for maps) */
       overlayKeybind: layoutKeybind,
       port: MAPS_HTTP_PORT,
+      muteOsuOnPreview: osuAudio.getState().autoMute,
     })
+    return
+  }
+
+  if (pathName === '/api/maps/audio-mute' && req.method === 'GET') {
+    sendJson(res, 200, osuAudio.getState())
+    return
+  }
+
+  if (pathName === '/api/maps/audio-mute' && req.method === 'POST') {
+    try {
+      const raw = await readBody(req)
+      const body = raw ? (JSON.parse(raw) as { autoMute?: boolean; previewActive?: boolean; previewKey?: string }) : {}
+      if (typeof body.autoMute === 'boolean') {
+        const state = await osuAudio.setAutoMute(body.autoMute)
+        sendJson(res, 200, state)
+        return
+      }
+      if (typeof body.previewActive === 'boolean') {
+        const state = await osuAudio.setPreviewActive(body.previewActive, body.previewKey || 'overlay')
+        sendJson(res, 200, state)
+        return
+      }
+      sendJson(res, 200, osuAudio.getState())
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) })
+    }
     return
   }
 

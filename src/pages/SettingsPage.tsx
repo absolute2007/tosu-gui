@@ -2,6 +2,7 @@ import { FolderOpen } from 'lucide-react'
 import { KeybindInput } from '../components/KeybindInput'
 import { NumberInput } from '../components/NumberInput'
 import { Toggle } from '../components/Toggle'
+import { useI18n } from '../i18n/context'
 import type { TosuAppSettings } from '../../electron/tosu-api'
 
 interface Props {
@@ -55,14 +56,15 @@ export function SettingsPage({
   onUpdate,
   onSave,
 }: Props) {
-  const songsLabel = songsPath || songsPathResolved || 'не найдена (выберите вручную)'
-  const skinsLabel = skinsPath || skinsPathResolved || 'не найдена (выберите вручную)'
+  const { t, lang, setLang } = useI18n()
+  const songsLabel = songsPath || songsPathResolved || (lang === 'en' ? 'not found (choose manually)' : 'не найдена (выберите вручную)')
+  const skinsLabel = skinsPath || skinsPathResolved || (lang === 'en' ? 'not found (choose manually)' : 'не найдена (выберите вручную)')
 
   return (
     <div className="page">
       <div className="page-header">
-        <h1 className="page-title">Настройки</h1>
-        <p className="page-subtitle">Параметры tosu и опроса данных</p>
+        <h1 className="page-title">{t('settings.title')}</h1>
+        <p className="page-subtitle">{lang === 'en' ? 'tosu configuration and polling rates' : 'Параметры tosu и опроса данных'}</p>
       </div>
 
       <div className="glass-card">
@@ -155,11 +157,37 @@ export function SettingsPage({
       </div>
 
       <div className="glass-card">
-        <div className="card-header">Общие</div>
+        <div className="card-header">{t('settings.general')}</div>
         <div className="card-body">
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Сворачивать в трей</div>
+              <div className="setting-label">{t('settings.language')}</div>
+              <div className="setting-desc">
+                {t('settings.languageDesc')}
+              </div>
+            </div>
+            <div className="setting-control">
+              <div className="tabs-inline">
+                <button
+                  type="button"
+                  className={`tab-btn ${lang === 'ru' ? '-active' : ''}`}
+                  onClick={() => setLang('ru')}
+                >
+                  Русский (RU)
+                </button>
+                <button
+                  type="button"
+                  className={`tab-btn ${lang === 'en' ? '-active' : ''}`}
+                  onClick={() => setLang('en')}
+                >
+                  English (EN)
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="setting-row">
+            <div className="setting-info">
+              <div className="setting-label">{t('settings.closeToTray')}</div>
               <div className="setting-desc">
                 Если включено — крестик скрывает окно в системный трей. Если выключено — программа полностью закрывается
               </div>
@@ -170,9 +198,9 @@ export function SettingsPage({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">Панель текущей карты</div>
+              <div className="setting-label">{t('settings.showBeatmapPanel')}</div>
               <div className="setting-desc">
-                Правая панель с обложкой и данными карты. Если выключено — панель скрыта и данные для неё не обрабатываются
+                {t('settings.showBeatmapPanelDesc')}
               </div>
             </div>
             <div className="setting-control">

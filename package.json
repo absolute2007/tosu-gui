@@ -1,27 +1,31 @@
 {
   "name": "tosu-gui",
   "productName": "tosu GUI",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "Desktop GUI for tosu — osu! memory reader with in-game overlay",
   "main": "dist-electron/main.js",
   "scripts": {
+    "tsc": "tsc --noEmit",
     "dev": "vite",
     "start": "node scripts/start.js",
-    "build": "tsc && vite build && electron-builder",
+    "build": "node scripts/build-audio-tool.js && tsc && vite build && electron-builder",
     "preview": "vite preview",
     "generate-icon": "node scripts/generate-icon.js",
-    "postinstall": "node scripts/copy-fonts.js && node scripts/generate-icon.js && (node scripts/download-tosu.js || echo tosu download skipped - place tosu.exe in resources/tosu/) && node scripts/patch-ingame-overlay.js",
+    "build-audio-tool": "node scripts/build-audio-tool.js",
+    "postinstall": "node scripts/copy-fonts.js && node scripts/generate-icon.js && node scripts/build-audio-tool.js && (node scripts/download-tosu.js || echo tosu download skipped - place tosu.exe in resources/tosu/) && node scripts/patch-ingame-overlay.js",
     "patch-overlay": "node scripts/patch-ingame-overlay.js",
     "download-tosu": "node scripts/download-tosu.js"
   },
   "dependencies": {
     "@electron/asar": "^3.4.1",
     "lucide-react": "^0.511.0",
+    "pngjs": "^7.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@types/ws": "^8.18.1",
@@ -64,6 +68,13 @@
       {
         "from": "resources/maps-counter",
         "to": "maps-counter",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/bin",
+        "to": "bin",
         "filter": [
           "**/*"
         ]

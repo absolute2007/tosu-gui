@@ -8,6 +8,7 @@ import { StatusPage } from './pages/StatusPage'
 import { CountersPage } from './pages/CountersPage'
 import { MapsPage } from './pages/MapsPage'
 import { SkinsPage } from './pages/SkinsPage'
+import { SkinCustomizerPage } from './pages/SkinCustomizerPage'
 import { OverlayPage } from './pages/OverlayPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { useTosuSocket } from './hooks/useTosuSocket'
@@ -15,11 +16,13 @@ import { useCounterDownloads } from './hooks/useCounterDownloads'
 import { useTosuSettings } from './hooks/useTosuSettings'
 import { useAppUpdate } from './hooks/useAppUpdate'
 import { useGuiSettings } from './hooks/useGuiSettings'
+import { useOsuAuth } from './hooks/useOsuAuth'
 import { UpdateBanner } from './components/UpdateBanner'
 import type { TosuStatus } from '../electron/preload'
 import './styles/app.css'
 
-export type Page = 'status' | 'counters' | 'maps' | 'skins' | 'overlay' | 'settings'
+export type Page = 'status' | 'counters' | 'maps' | 'skins' | 'skin-customizer' | 'overlay' | 'settings'
+
 
 interface ToastState {
   message: string
@@ -47,12 +50,14 @@ export default function App() {
   const counterDownloads = useCounterDownloads(showToast)
   const appUpdate = useAppUpdate(showToast)
   const guiSettings = useGuiSettings()
+  const osuAuth = useOsuAuth(showToast)
 
   useEffect(() => {
-    if (!guiSettings.skinsBrowserEnabled && page === 'skins') {
+    if (!guiSettings.skinsBrowserEnabled && (page === 'skins' || page === 'skin-customizer')) {
       setPage('status')
     }
   }, [guiSettings.skinsBrowserEnabled, page])
+
 
   // Panel data (cover URL, leaderboard PB) is only parsed when the panel is enabled
   const game = useTosuSocket(tosuStatus?.baseUrl ?? '', {
@@ -141,6 +146,10 @@ export default function App() {
           onChange={setPage}
           osuConnected={game.connected}
           showSkins={guiSettings.skinsBrowserEnabled}
+          account={osuAuth.account}
+          authBusy={osuAuth.authBusy}
+          onLogin={osuAuth.login}
+          onLogout={osuAuth.logout}
         />
         <main className="app-content">
           {appUpdate.visible && appUpdate.updateInfo?.updateAvailable && (
@@ -198,6 +207,16 @@ export default function App() {
               />
             </div>
           ) : null}
+          {guiSettings.skinsBrowserEnabled ? (
+            <div className="page-slot" hidden={page !== 'skin-customizer'}>
+              <SkinCustomizerPage
+                visible={page === 'skin-customizer'}
+                onToast={showToast}
+                onOpenSettings={() => setPage('settings')}
+              />
+            </div>
+          ) : null}
+
           {page === 'overlay' && tosuSettings.settings && (
             <OverlayPage
               baseUrl={tosuStatus?.baseUrl ?? ''}

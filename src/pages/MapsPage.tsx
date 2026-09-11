@@ -15,6 +15,7 @@ import {
   Play,
   Search,
   Volume2,
+  VolumeX,
   X,
 } from 'lucide-react'
 import type {
@@ -274,6 +275,7 @@ const MapRow = memo(function MapRow({
 })
 
 const VOL_KEY = 'tosu-gui-preview-volume'
+const MUTE_OSU_KEY = 'tosu-gui-mute-osu-on-preview'
 
 function loadStoredVolume(): number {
   try {
@@ -282,6 +284,16 @@ function loadStoredVolume(): number {
     return Math.min(1, Math.max(0, v))
   } catch {
     return 0.55
+  }
+}
+
+function loadStoredMuteOsu(): boolean {
+  try {
+    const v = localStorage.getItem(MUTE_OSU_KEY)
+    if (v === '0' || v === 'false') return false
+    return true
+  } catch {
+    return true
   }
 }
 
@@ -311,11 +323,44 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   const [previewPaused, setPreviewPaused] = useState(false)
   const [previewProgress, setPreviewProgress] = useState(0)
   const [volume, setVolume] = useState(loadStoredVolume)
+  const [muteOsu, setMuteOsu] = useState(loadStoredMuteOsu)
   const [gpOpen, setGpOpen] = useState(false)
   const [gpSet, setGpSet] = useState<MapSetSummary | null>(null)
   const [gpBeatmapId, setGpBeatmapId] = useState(0)
   const [gpStatus, setGpStatus] = useState('')
   const [gpLoading, setGpLoading] = useState(false)
+
+  const notifyPreview = useCallback((active: boolean, key = 'gui-player') => {
+    if (window.tosuGui?.setOsuPreviewActive) {
+      void window.tosuGui.setOsuPreviewActive(active, key)
+    }
+  }, [])
+
+  const toggleMuteOsu = useCallback(() => {
+    setMuteOsu((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(MUTE_OSU_KEY, next ? '1' : '0')
+      } catch {}
+      if (window.tosuGui?.setOsuAutoMute) {
+        void window.tosuGui.setOsuAutoMute(next)
+      }
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    if (window.tosuGui?.getOsuAudioState) {
+      void window.tosuGui.getOsuAudioState().then((st) => {
+        if (st && typeof st.autoMute === 'boolean') {
+          setMuteOsu(st.autoMute)
+          try {
+            localStorage.setItem(MUTE_OSU_KEY, st.autoMute ? '1' : '0')
+          } catch {}
+        }
+      })
+    }
+  }, [])
 
   const searchSeq = useRef(0)
   const inFlightRef = useRef(false)
@@ -347,6 +392,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   }, [sets])
 
   const stopPreview = useCallback(() => {
+    notifyPreview(false, 'gui-player')
     const audio = audioRef.current
     if (audio) {
       audio.pause()
@@ -356,7 +402,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
     setPreviewId(null)
     setPreviewPaused(false)
     setPreviewProgress(0)
-  }, [])
+  }, [notifyPreview])
 
   const playSet = useCallback(
     (mapSet: MapSetSummary) => {
@@ -367,6 +413,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         audio = new Audio()
         audio.preload = 'auto'
         audio.addEventListener('ended', () => {
+          notifyPreview(false, 'gui-player')
           setPreviewId(null)
           setPreviewPaused(false)
           setPreviewProgress(0)
@@ -383,14 +430,19 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         const vol = volumeRef.current > 0 ? volumeRef.current : 0.65
         audio.volume = vol
         audio.onerror = () => {
+          notifyPreview(false, 'gui-player')
           if (audio && audio.src !== fallbackUrl) {
             audio.src = fallbackUrl
-            void audio.play().catch(() => {
+            void audio.play().then(() => {
+              notifyPreview(true, 'gui-player')
+            }).catch(() => {
+              notifyPreview(false, 'gui-player')
               setPreviewId(null)
               setPreviewPaused(false)
               onToast('Не удалось воспроизвести превью', 'error')
             })
           } else {
+            notifyPreview(false, 'gui-player')
             setPreviewId(null)
             setPreviewPaused(false)
             onToast('Не удалось воспроизвести превью', 'error')
@@ -400,22 +452,30 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         setPreviewId(mapSet.id)
         setPreviewPaused(false)
         setPreviewProgress(0)
-        void audio.play().catch(() => {
+        void audio.play().then(() => {
+          notifyPreview(true, 'gui-player')
+        }).catch(() => {
           if (audio && audio.src !== fallbackUrl) {
             audio.src = fallbackUrl
-            void audio.play().catch(() => {
+            void audio.play().then(() => {
+              notifyPreview(true, 'gui-player')
+            }).catch(() => {
+              notifyPreview(false, 'gui-player')
               setPreviewId(null)
               setPreviewPaused(false)
               onToast('Не удалось воспроизвести превью', 'error')
             })
+          } else {
+            notifyPreview(false, 'gui-player')
           }
         })
       } catch {
+        notifyPreview(false, 'gui-player')
         setPreviewId(null)
         onToast('Не удалось воспроизвести превью', 'error')
       }
     },
-    [onToast]
+    [onToast, notifyPreview]
   )
 
   const togglePreview = useCallback(
@@ -425,16 +485,18 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         if (!audio) return
         if (previewPaused || audio.paused) {
           setPreviewPaused(false)
+          notifyPreview(true, 'gui-player')
           void audio.play().catch(() => stopPreview())
         } else {
           audio.pause()
           setPreviewPaused(true)
+          notifyPreview(false, 'gui-player')
         }
         return
       }
       playSet(mapSet)
     },
-    [previewId, previewPaused, playSet, stopPreview]
+    [previewId, previewPaused, playSet, stopPreview, notifyPreview]
   )
 
   const playAdjacent = useCallback(
@@ -460,6 +522,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
   }, [])
 
   const stopGameplay = useCallback(() => {
+    notifyPreview(false, 'gui-gameplay')
     if (gpRafRef.current) {
       cancelAnimationFrame(gpRafRef.current)
       gpRafRef.current = 0
@@ -475,7 +538,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
       gpAudioRef.current = null
     }
     gpDataRef.current = null
-  }, [])
+  }, [notifyPreview])
 
   const closeGameplay = useCallback(() => {
     stopGameplay()
@@ -564,6 +627,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         gpStartRef.current = now
         gpAudioSyncRef.current = { audioStartPerf: now, lastAudioSec: 0 }
         audio.addEventListener('playing', () => {
+          notifyPreview(true, 'gui-gameplay')
           const pNow = performance.now()
           const cur = audio.currentTime || 0
           gpStartRef.current = pNow - cur * 1000
@@ -576,7 +640,7 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
         setGpStatus(err instanceof Error ? err.message : 'Ошибка загрузки карты')
       }
     },
-    [stopGameplay, drawGameplay]
+    [stopGameplay, drawGameplay, notifyPreview]
   )
 
   const openGameplayPreview = useCallback(
@@ -1366,6 +1430,16 @@ export function MapsPage({ visible = true, overlay = false, onToast, onOpenSetti
             </button>
           </div>
           <div className="maps-miniplayer-vol">
+            <button
+              type="button"
+              className={`btn btn-sm maps-mute-toggle ${muteOsu ? '-on' : 'btn-ghost'}`}
+              onClick={toggleMuteOsu}
+              title={muteOsu ? 'Заглушать osu! при превью (включено)' : 'Заглушать osu! при превью (выключено)'}
+              aria-pressed={muteOsu}
+            >
+              {muteOsu ? <VolumeX size={14} strokeWidth={1.8} /> : <Volume2 size={14} strokeWidth={1.8} />}
+              <span>Глушить osu!</span>
+            </button>
             <Volume2 size={14} strokeWidth={1.8} />
             <input
               type="range"

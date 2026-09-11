@@ -5,6 +5,7 @@ import { KeybindInput } from '../components/KeybindInput'
 import { NumberInput } from '../components/NumberInput'
 import { Toggle } from '../components/Toggle'
 import { CounterSettingsModal } from '../components/CounterSettingsModal'
+import { useI18n } from '../i18n/context'
 import type { TosuAppSettings } from '../../electron/tosu-api'
 import type { TosuStatus } from '../../electron/preload'
 import { useTosuCounters } from '../hooks/useTosuCounters'
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUpdate, onSave, onSaveSnapshot, onToast }: Props) {
+  const { t, lang } = useI18n()
   const { counters, reload: reloadCounters } = useTosuCounters(tosuStatus)
   const [settingsCounter, setSettingsCounter] = useState<string | null>(null)
 
@@ -29,7 +31,9 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
     const next = { ...settings, ENABLE_INGAME_OVERLAY: true }
     const ok = await onSaveSnapshot(
       next,
-      'Оверлей включён. Запустите osu! и нажмите горячую клавишу для настройки позиций.'
+      lang === 'en'
+        ? 'Overlay enabled. Launch osu! and press hotkey to position counters.'
+        : 'Оверлей включён. Запустите osu! и нажмите горячую клавишу для настройки позиций.'
     )
     if (ok) await reloadCounters()
   }
@@ -39,8 +43,8 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
   return (
     <div className="page">
       <div className="page-header">
-        <h1 className="page-title">Внутриигровой оверлей</h1>
-        <p className="page-subtitle">PP-счётчики поверх osu!</p>
+        <h1 className="page-title">{t('overlay.title')}</h1>
+        <p className="page-subtitle">{t('overlay.subtitle')}</p>
       </div>
 
       <div className="glass-card overlay-status-card">
@@ -49,18 +53,18 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
             <span className={`status-dot ${overlayActive ? '-online' : '-offline'}`} />
             <div>
               <div className="setting-label">
-                {overlayActive ? 'Оверлей включён' : 'Оверлей выключен'}
+                {overlayActive ? (lang === 'en' ? 'Overlay enabled' : 'Оверлей включён') : (lang === 'en' ? 'Overlay disabled' : 'Оверлей выключен')}
               </div>
               <div className="setting-desc">
                 {overlayActive
-                  ? 'Счётчики будут отображаться при запуске osu!'
-                  : 'Включите оверлей, чтобы видеть счётчики в игре'}
+                  ? (lang === 'en' ? 'Counters will display when osu! is launched' : 'Счётчики будут отображаться при запуске osu!')
+                  : (lang === 'en' ? 'Enable overlay to see counters in game' : 'Включите оверлей, чтобы видеть счётчики в игре')}
               </div>
             </div>
           </div>
           {!overlayActive && (
             <button className="btn btn-primary" onClick={quickEnable} disabled={saving || counters.length === 0}>
-              Включить оверлей
+              {lang === 'en' ? 'Enable Overlay' : 'Включить оверлей'}
             </button>
           )}
         </div>

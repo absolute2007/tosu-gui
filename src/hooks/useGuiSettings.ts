@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 export function useGuiSettings() {
+  const [language, setLanguage] = useState<'ru' | 'en'>('ru')
   const [closeToTray, setCloseToTray] = useState(false)
   const [showBeatmapPanel, setShowBeatmapPanel] = useState(true)
   const [songsPath, setSongsPath] = useState('')
@@ -14,6 +15,9 @@ export function useGuiSettings() {
   const load = useCallback(async () => {
     try {
       const settings = await window.tosuGui.getGuiSettings()
+      if (settings.language === 'ru' || settings.language === 'en') {
+        setLanguage(settings.language)
+      }
       setCloseToTray(settings.closeToTray)
       setShowBeatmapPanel(settings.showBeatmapPanel !== false)
       setSongsPath(settings.songsPath || '')
@@ -87,8 +91,15 @@ export function useGuiSettings() {
     setSkinsPathResolved(pathInfo.resolved)
   }, [])
 
+  const setLanguageSetting = useCallback(async (lang: 'ru' | 'en') => {
+    setLanguage(lang)
+    await window.tosuGui.saveGuiSettings({ language: lang })
+  }, [])
+
   return {
     ready,
+    language,
+    setLanguageSetting,
     closeToTray,
     showBeatmapPanel,
     songsPath,

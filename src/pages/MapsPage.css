@@ -505,10 +505,9 @@
 .maps-miniplayer-vol {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
   color: var(--text-tertiary);
-  min-width: 120px;
 }
 
 .maps-miniplayer-vol input[type='range'] {
@@ -520,6 +519,40 @@
 .maps-miniplayer-vol span {
   font-size: 11px;
   min-width: 30px;
+}
+
+.maps-mute-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  background: var(--bg-card, rgba(255, 255, 255, 0.04));
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.maps-mute-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.maps-mute-toggle.-on {
+  background: rgba(10, 132, 255, 0.18);
+  color: #5ac8fa;
+  border-color: rgba(10, 132, 255, 0.45);
+}
+
+.maps-mute-toggle.-on:hover {
+  background: rgba(10, 132, 255, 0.28);
+  border-color: rgba(10, 132, 255, 0.65);
 }
 
 /* Gameplay preview modal */

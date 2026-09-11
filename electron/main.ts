@@ -56,6 +56,16 @@ import {
   scanLocalSkins,
 } from './skins-path'
 import type { SkinDownloadProgress, SkinSearchParams } from './skins-types'
+import {
+  getSkinCustomizationData,
+  applySkinTweak,
+  resetSkinTweak,
+  resetAllSkinTweaks,
+  recolorSkinCursor,
+  setSkinComboColors,
+} from './skins-customizer'
+import { osuAudio } from './osu-audio'
+
 
 const isWin = process.platform === 'win32'
 const isDevBuild = !app.isPackaged
@@ -381,6 +391,7 @@ if (gotLock) {
         const guiSettings = readGuiSettings()
         writeMapsKeybindFile(tosuDir, guiSettings.mapsOverlayKeybind)
         setOverlayAntialiasing(tosuDir, guiSettings.disableAntialiasing)
+        osuAudio.init()
         startSocketBridge()
       } catch (err) {
         console.error('Failed to start tosu:', err)
@@ -397,6 +408,7 @@ if (gotLock) {
 app.on('window-all-closed', () => {
   if (process.platform === 'darwin') return
   if (isQuitting) {
+    osuAudio.cleanup()
     tosuSocket.disconnect()
     tosuProcess.stop()
     app.quit()
@@ -405,6 +417,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  osuAudio.cleanup()
   stopMapsHttpServer()
   tosuSocket.disconnect()
   tosuProcess.stop()
@@ -412,6 +425,18 @@ app.on('before-quit', () => {
     tray.destroy()
     tray = null
   }
+})
+
+ipcMain.handle('osuAudio:getState', () => {
+  return osuAudio.getState()
+})
+
+ipcMain.handle('osuAudio:setAutoMute', async (_event, autoMute: boolean) => {
+  return await osuAudio.setAutoMute(autoMute)
+})
+
+ipcMain.handle('osuAudio:setPreviewActive', async (_event, active: boolean, key?: string) => {
+  return await osuAudio.setPreviewActive(active, key)
 })
 
 ipcMain.handle('tosu:status', async () => {
@@ -784,6 +809,66 @@ ipcMain.handle(
     }
   }
 )
+
+// --- Skin Customizer ---
+
+ipcMain.handle('skins:customizer:get', async (_e, skinPath: string) => {
+  if (typeof skinPath !== 'string' || !skinPath.trim()) {
+    throw new Error('Укажите путь к скину')
+  }
+  return getSkinCustomizationData(skinPath.trim())
+})
+
+ipcMain.handle(
+  'skins:customizer:apply',
+  async (_e, payload: { skinPath: string; tweakId: string; enable: boolean }) => {
+    const skinPath = typeof payload?.skinPath === 'string' ? payload.skinPath.trim() : ''
+    const tweakId = typeof payload?.tweakId === 'string' ? payload.tweakId.trim() : ''
+    const enable = Boolean(payload?.enable)
+    if (!skinPath || !tweakId) throw new Error('Некорректные параметры настройки скина')
+    return applySkinTweak(skinPath, tweakId, enable)
+  }
+)
+
+ipcMain.handle(
+  'skins:customizer:reset-element',
+  async (_e, payload: { skinPath: string; tweakId: string }) => {
+    const skinPath = typeof payload?.skinPath === 'string' ? payload.skinPath.trim() : ''
+    const tweakId = typeof payload?.tweakId === 'string' ? payload.tweakId.trim() : ''
+    if (!skinPath || !tweakId) throw new Error('Некорректные параметры сброса элемента скина')
+    return resetSkinTweak(skinPath, tweakId)
+  }
+)
+
+ipcMain.handle('skins:customizer:reset-all', async (_e, skinPath: string) => {
+  if (typeof skinPath !== 'string' || !skinPath.trim()) {
+    throw new Error('Укажите путь к скину')
+  }
+  return resetAllSkinTweaks(skinPath.trim())
+})
+
+ipcMain.handle(
+  'skins:customizer:recolor-cursor',
+  async (_e, payload: { skinPath: string; hue: number; recolorTrail?: boolean }) => {
+    const skinPath = typeof payload?.skinPath === 'string' ? payload.skinPath.trim() : ''
+    const hue = typeof payload?.hue === 'number' ? payload.hue : 0
+    const recolorTrail = payload?.recolorTrail !== undefined ? Boolean(payload.recolorTrail) : true
+    if (!skinPath) throw new Error('Укажите путь к скину')
+    return recolorSkinCursor(skinPath, { hue, recolorTrail })
+  }
+)
+
+ipcMain.handle(
+  'skins:customizer:set-combo-colors',
+  async (_e, payload: { skinPath: string; colors: string[] }) => {
+    const skinPath = typeof payload?.skinPath === 'string' ? payload.skinPath.trim() : ''
+    const colors = Array.isArray(payload?.colors) ? payload.colors : []
+    if (!skinPath) throw new Error('Укажите путь к скину')
+    if (colors.length === 0) throw new Error('Необходимо указать хотя бы один цвет комбо')
+    return setSkinComboColors(skinPath, colors)
+  }
+)
+
 
 ipcMain.handle(
   'osu:user-beatmap-score',
