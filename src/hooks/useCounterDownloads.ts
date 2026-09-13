@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TosuCounter } from '../../electron/tosu-api'
+import { useI18n } from '../i18n/context'
 
 export type DownloadStatus = 'downloading' | 'success' | 'error'
 
@@ -16,6 +17,7 @@ export function counterKey(counter: { name: string; author: string }) {
 }
 
 export function useCounterDownloads(onToast: (msg: string, type: 'success' | 'error') => void) {
+  const { lang } = useI18n()
   const [downloads, setDownloads] = useState<Record<string, CounterDownloadState>>({})
   const timersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
   const clearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -82,13 +84,19 @@ export function useCounterDownloads(onToast: (msg: string, type: 'success' | 'er
       stopProgress(key)
       setDownloads((prev) => ({
         ...prev,
-        [key]: { key, name: counter.name, progress: 100, status: 'success', message: 'Установлен' },
+        [key]: {
+          key,
+          name: counter.name,
+          progress: 100,
+          status: 'success',
+          message: lang === 'en' ? 'Installed' : 'Установлен',
+        },
       }))
-      onToast('Счётчик загружен', 'success')
+      onToast(lang === 'en' ? 'Counter downloaded' : 'Счётчик загружен', 'success')
       scheduleClear(key, 2500)
       await onComplete?.()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка загрузки'
+      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Download error' : 'Ошибка загрузки')
       const isAlreadyInstalled = msg === 'Folder already exist'
       stopProgress(key)
       setDownloads((prev) => ({
@@ -98,16 +106,21 @@ export function useCounterDownloads(onToast: (msg: string, type: 'success' | 'er
           name: counter.name,
           progress: 100,
           status: isAlreadyInstalled ? 'success' : 'error',
-          message: isAlreadyInstalled ? 'Уже установлен' : msg,
+          message: isAlreadyInstalled ? (lang === 'en' ? 'Already installed' : 'Уже установлен') : msg,
         },
       }))
-      onToast(isAlreadyInstalled ? 'Счётчик уже установлен' : msg, isAlreadyInstalled ? 'success' : 'error')
+      onToast(
+        isAlreadyInstalled
+          ? (lang === 'en' ? 'Counter is already installed' : 'Счётчик уже установлен')
+          : msg,
+        isAlreadyInstalled ? 'success' : 'error'
+      )
       scheduleClear(key, isAlreadyInstalled ? 2500 : 5000)
       if (isAlreadyInstalled) await onComplete?.()
     } finally {
       inFlightRef.current.delete(key)
     }
-  }, [onToast, scheduleClear, startProgress, stopProgress])
+  }, [lang, onToast, scheduleClear, startProgress, stopProgress])
 
   useEffect(() => {
     const timers = timersRef.current

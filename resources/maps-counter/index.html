@@ -9,8 +9,9 @@
 <body>
   <div id="app">
     <header class="top">
-      <div class="top-title">Карты</div>
+      <div class="top-title" id="top-title">Карты</div>
       <div class="top-actions">
+        <button type="button" id="btn-ui-lang" class="btn" title="Сменить язык / Switch language">RU</button>
         <button type="button" id="btn-mute-osu" class="btn btn-mute-toggle -on" title="Заглушать звук osu! во время превью" aria-pressed="true">🔇 Глушить osu!</button>
         <span id="auth-label" class="auth-label">…</span>
         <button type="button" id="btn-login" class="btn -primary" hidden>Войти</button>
@@ -37,7 +38,7 @@
         <option value="other">Другой</option>
       </select>
     </div>
-    <div class="filters-label">Статус</div>
+    <div class="filters-label" id="lbl-status">Статус</div>
     <div class="status-row">
       <div class="statuses" id="statuses">
         <button type="button" data-status="ranked" class="chip -on">Ranked</button>
@@ -54,7 +55,7 @@
         <option value="mine">Мои карты</option>
       </select>
     </div>
-    <div class="filters-label">Режим</div>
+    <div class="filters-label" id="lbl-mode">Режим</div>
     <div class="modes" id="modes">
       <button type="button" data-mode="any" class="chip -on">Все</button>
       <button type="button" data-mode="osu" class="chip">osu!</button>

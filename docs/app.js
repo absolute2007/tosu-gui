@@ -62,6 +62,24 @@ const GALLERY = [
     titleKey: "shotSkinsTitle",
     descKey: "shotSkinsBody",
   },
+  {
+    id: "editor",
+    src: "assets/screenshots/Editor.png",
+    titleKey: "shotEditorTitle",
+    descKey: "shotEditorBody",
+  },
+  {
+    id: "colors",
+    src: "assets/screenshots/Colors.png",
+    titleKey: "shotColorsTitle",
+    descKey: "shotColorsBody",
+  },
+  {
+    id: "optimizer",
+    src: "assets/screenshots/Optimizer.png",
+    titleKey: "shotOptimizerTitle",
+    descKey: "shotOptimizerBody",
+  },
 ];
 
 const I18N = {
@@ -84,6 +102,9 @@ const I18N = {
     altMaps: "Браузер карт: поиск, фильтры и скачивание",
     altPreview: "Интерактивное превью нот, слайдеров и реплея",
     altSkins: "Каталог скинов: поиск, фильтры и установка",
+    altEditor: "Редактор элементов скина и курсора",
+    altColors: "Редактор цветов комбо-нот",
+    altOptimizer: "Оптимизатор спрайтов скина и FPS Boost",
     shotMainTitle: "Статус",
     shotMainBody:
       "Состояние tosu и osu! в одном окне: работает ли reader, найдена ли игра, версия и порт API. Перезапуск tosu и проверка обновлений — без браузера.",
@@ -102,6 +123,15 @@ const I18N = {
     shotSkinsTitle: "Скины",
     shotSkinsBody:
       "Каталог skins.osuck.net: поиск, фильтры по режиму, превью скриншотов и установка .osk в папку Skins. Быстрый поиск и индикаторы уже установленных скинов.",
+    shotEditorTitle: "Редактор элементов",
+    shotEditorBody:
+      "Кастомизация и тонкая настройка элементов скина: плавный непрерывный или классический след курсора с подгонкой под размер в osu!, линии следования, скрытие мешающих эффектов, замена текстур и звуков через Drag & Drop.",
+    shotColorsTitle: "Цвета комбо-нот",
+    shotColorsBody:
+      "Настройка оттенков кругов для каждой серии комбо прямо в skin.ini: визуальный спектр, HSL-слайдеры, готовые палитры и интерактивное превью с кликабельными нотами.",
+    shotOptimizerTitle: "Оптимизатор скинов",
+    shotOptimizerBody:
+      "Повышение FPS и разгрузка GPU: автоматическое сжатие тяжёлых @2x HD спрайтов в один клик (FPS Boost), быстрый поиск по файлам и мгновенный откат исходного качества скина.",
   },
   en: {
     lead:
@@ -122,6 +152,9 @@ const I18N = {
     altMaps: "Maps browser: search, filters, and download",
     altPreview: "Interactive map and replay preview",
     altSkins: "Skins catalog: search, filters, and install",
+    altEditor: "Skin elements and cursor customizer",
+    altColors: "Note combo colors studio",
+    altOptimizer: "Skin sprite optimizer and FPS Boost",
     shotMainTitle: "Status",
     shotMainBody:
       "tosu and osu! health in one place: reader running, game detected, API version and port. Restart tosu and check updates without opening a browser.",
@@ -140,6 +173,15 @@ const I18N = {
     shotSkinsTitle: "Skins",
     shotSkinsBody:
       "Browse skins.osuck.net: search, mode filters, screenshot previews, and install .osk directly into your Skins folder.",
+    shotEditorTitle: "Skin Editor",
+    shotEditorBody:
+      "Customize and tune skin elements: smooth continuous or classic cursor trail adjusted to your in-game cursor size, follow points, hiding distracting effects, and custom texture replacement with Drag & Drop.",
+    shotColorsTitle: "Combo Colors",
+    shotColorsBody:
+      "Customize hitcircle combo colors saved directly into skin.ini: visual spectrum, HSL sliders, curated palettes, and interactive live hitcircle preview.",
+    shotOptimizerTitle: "Skin Optimizer",
+    shotOptimizerBody:
+      "Boost FPS and reduce GPU memory: 1-click batch downscaling of heavy @2x HD sprites, quick sprite search, and instant restore of original skin quality.",
   },
 };
 

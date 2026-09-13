@@ -2,14 +2,164 @@
 ;(function () {
   const API = 'http://127.0.0.1:24777'
 
+  const UI_LANG_KEY = 'tosu_overlay_ui_lang'
+  let uiLang = 'ru'
+  try {
+    const storedUiLang = localStorage.getItem(UI_LANG_KEY)
+    if (storedUiLang === 'en' || storedUiLang === 'ru') uiLang = storedUiLang
+  } catch {}
+
+  const I18N = {
+    ru: {
+      title: 'Карты',
+      login: 'Войти',
+      searchPlaceholder: 'Поиск…',
+      anyLang: 'Любой язык',
+      statusLabel: 'Статус',
+      modeLabel: 'Режим',
+      statusAny: 'Любой',
+      statusMore: 'Ещё…',
+      modeAll: 'Все',
+      showMore: 'Показать ещё',
+      installed: 'Есть',
+      download: 'Скачать',
+      loading: 'Поиск…',
+      moreLoading: 'Ещё…',
+      emptyNoResults: 'Ничего нет',
+      emptyLoginPrompt: 'Войдите, чтобы искать',
+      previewUnavailable: 'Превью недоступно',
+      previewFailed: 'Не удалось воспроизвести превью',
+      searchError: 'Ошибка поиска',
+      loginFirst: 'Сначала войдите',
+      loginWindow: 'Окно входа…',
+      noGuiConnection: 'Нет связи с tosu GUI',
+      guiOffline: 'GUI offline',
+      notLoggedIn: 'Не вошли',
+      loggedInAs: 'Вы вошли как ',
+      cardsCount: '{n} карт',
+      diffSingular: '{n} сложность',
+      diffFew: '{n} сложности',
+      diffMany: '{n} сложностей',
+      muteOsuOn: '🔇 Глушить osu!',
+      muteOsuOff: '🔈 Звук osu!',
+      muteOsuTitle: 'Заглушать звук osu! во время превью',
+      hintNoGui: 'Запусти tosu GUI — без него поиск и скачивание не работают.',
+      hintLogin: 'Войдите в osu!, затем ищите и качайте. Закрыть: «{keybind}».',
+      hintActive: 'Ввод активен. Скачивай карты. Закрыть панель: «{keybind}».',
+      moreStatusOptions: {
+        pending: 'На рассмотрении',
+        wip: 'В разработке',
+        graveyard: 'Graveyard',
+        favourites: 'Избранное',
+        mine: 'Мои карты',
+      },
+      langOptions: {
+        any: 'Любой язык',
+        english: 'English',
+        japanese: 'Japanese',
+        chinese: 'Chinese',
+        korean: 'Korean',
+        russian: 'Russian',
+        instrumental: 'Instrumental',
+        french: 'French',
+        german: 'German',
+        spanish: 'Spanish',
+        italian: 'Italian',
+        swedish: 'Swedish',
+        polish: 'Polish',
+        unspecified: 'Не указан',
+        other: 'Другой',
+      },
+    },
+    en: {
+      title: 'Beatmaps',
+      login: 'Log in',
+      searchPlaceholder: 'Search…',
+      anyLang: 'Any language',
+      statusLabel: 'Status',
+      modeLabel: 'Mode',
+      statusAny: 'Any',
+      statusMore: 'More…',
+      modeAll: 'All',
+      showMore: 'Show more',
+      installed: 'Installed',
+      download: 'Download',
+      loading: 'Searching…',
+      moreLoading: 'More…',
+      emptyNoResults: 'No beatmaps found',
+      emptyLoginPrompt: 'Log in to search',
+      previewUnavailable: 'Preview unavailable',
+      previewFailed: 'Failed to play preview',
+      searchError: 'Search error',
+      loginFirst: 'Log in first',
+      loginWindow: 'Login window…',
+      noGuiConnection: 'Cannot connect to tosu GUI',
+      guiOffline: 'GUI offline',
+      notLoggedIn: 'Not logged in',
+      loggedInAs: 'Logged in as ',
+      cardsCount: '{n} beatmaps',
+      diffSingular: '{n} difficulty',
+      diffFew: '{n} difficulties',
+      diffMany: '{n} difficulties',
+      muteOsuOn: '🔇 Mute osu!',
+      muteOsuOff: '🔈 osu! audio',
+      muteOsuTitle: 'Mute osu! sound during beatmap preview',
+      hintNoGui: 'Start tosu GUI — search and downloads require it.',
+      hintLogin: 'Log in to osu!, then search and download. Close: «{keybind}».',
+      hintActive: 'Input active. Download beatmaps. Close panel: «{keybind}».',
+      moreStatusOptions: {
+        pending: 'Pending',
+        wip: 'WIP',
+        graveyard: 'Graveyard',
+        favourites: 'Favorites',
+        mine: 'My beatmaps',
+      },
+      langOptions: {
+        any: 'Any language',
+        english: 'English',
+        japanese: 'Japanese',
+        chinese: 'Chinese',
+        korean: 'Korean',
+        russian: 'Russian',
+        instrumental: 'Instrumental',
+        french: 'French',
+        german: 'German',
+        spanish: 'Spanish',
+        italian: 'Italian',
+        swedish: 'Swedish',
+        polish: 'Polish',
+        unspecified: 'Unspecified',
+        other: 'Other',
+      },
+    },
+  }
+
+  function t(key, params) {
+    const dict = I18N[uiLang] || I18N.ru
+    let val = dict[key] != null ? dict[key] : (I18N.ru[key] != null ? I18N.ru[key] : key)
+    if (typeof val === 'string' && params) {
+      for (const p in params) {
+        if (Object.prototype.hasOwnProperty.call(params, p)) {
+          val = val.replace(new RegExp('\\{' + p + '\\}', 'g'), String(params[p]))
+        }
+      }
+    }
+    return val
+  }
+
   const el = {
+    topTitle: document.getElementById('top-title'),
+    uiLangBtn: document.getElementById('btn-ui-lang'),
+    btnMute: document.getElementById('btn-mute-osu'),
     authLabel: document.getElementById('auth-label'),
     login: document.getElementById('btn-login'),
     hint: document.getElementById('hint'),
     q: document.getElementById('q'),
     language: document.getElementById('language'),
+    lblStatus: document.getElementById('lbl-status'),
     statuses: document.getElementById('statuses'),
     moreStatus: document.getElementById('more-status'),
+    lblMode: document.getElementById('lbl-mode'),
     modes: document.getElementById('modes'),
     list: document.getElementById('list'),
     more: document.getElementById('btn-more'),
@@ -85,12 +235,61 @@
     }).catch(() => {})
   }
 
+  function applyLanguage(lang) {
+    uiLang = lang === 'en' ? 'en' : 'ru'
+    try {
+      localStorage.setItem(UI_LANG_KEY, uiLang)
+    } catch {}
+
+    if (el.topTitle) el.topTitle.textContent = t('title')
+    if (el.uiLangBtn) el.uiLangBtn.textContent = uiLang.toUpperCase()
+    if (el.login) el.login.textContent = t('login')
+    if (el.q) el.q.placeholder = t('searchPlaceholder')
+    if (el.lblStatus) el.lblStatus.textContent = t('statusLabel')
+    if (el.lblMode) el.lblMode.textContent = t('modeLabel')
+    if (el.more) el.more.textContent = t('showMore')
+
+    if (el.statuses) {
+      const anyStatusChip = el.statuses.querySelector('[data-status="any"]')
+      if (anyStatusChip) anyStatusChip.textContent = t('statusAny')
+    }
+    if (el.modes) {
+      const allModeChip = el.modes.querySelector('[data-mode="any"]')
+      if (allModeChip) allModeChip.textContent = t('modeAll')
+    }
+
+    if (el.moreStatus) {
+      const opts = t('moreStatusOptions')
+      const currentVal = el.moreStatus.value
+      el.moreStatus.innerHTML =
+        '<option value="">' + escapeHtml(t('statusMore')) + '</option>' +
+        Object.keys(opts).map(function (k) {
+          return '<option value="' + k + '">' + escapeHtml(opts[k]) + '</option>'
+        }).join('')
+      el.moreStatus.value = currentVal
+    }
+
+    if (el.language) {
+      const langOpts = t('langOptions')
+      const currentLang = el.language.value
+      el.language.innerHTML = Object.keys(langOpts).map(function (k) {
+        return '<option value="' + k + '">' + escapeHtml(langOpts[k]) + '</option>'
+      }).join('')
+      el.language.value = currentLang
+    }
+
+    syncMuteBtnUi()
+    updateAuthUi()
+    render()
+  }
+
   function syncMuteBtnUi() {
     const btn = document.getElementById('btn-mute-osu')
     if (!btn) return
     btn.classList.toggle('-on', muteOsuOnPreview)
     btn.setAttribute('aria-pressed', muteOsuOnPreview ? 'true' : 'false')
-    btn.textContent = muteOsuOnPreview ? '🔇 Глушить osu!' : '🔈 Звук osu!'
+    btn.textContent = muteOsuOnPreview ? t('muteOsuOn') : t('muteOsuOff')
+    btn.title = t('muteOsuTitle')
   }
 
   function previewUrlFor(s) {
@@ -119,7 +318,7 @@
     })
     const url = previewUrlFor(set)
     if (!url) {
-      setLine('Превью недоступно')
+      setLine(t('previewUnavailable'))
       return
     }
     if (previewId === id) {
@@ -138,7 +337,7 @@
       previewAudio.addEventListener('error', function () {
         previewId = null
         notifyPreviewState(false)
-        setLine('Не удалось воспроизвести превью')
+        setLine(t('previewFailed'))
         render()
       })
     }
@@ -151,13 +350,13 @@
       void previewAudio.play().catch(function () {
         previewId = null
         notifyPreviewState(false)
-        setLine('Не удалось воспроизвести превью')
+        setLine(t('previewFailed'))
         render()
       })
     } catch {
       previewId = null
       notifyPreviewState(false)
-      setLine('Не удалось воспроизвести превью')
+      setLine(t('previewFailed'))
       render()
     }
   }
@@ -194,28 +393,27 @@
 
   function updateHint() {
     if (!apiOk) {
-      el.hint.textContent = 'Запусти tosu GUI — без него поиск и скачивание не работают.'
+      el.hint.textContent = t('hintNoGui')
       return
     }
     if (!loggedIn) {
-      el.hint.textContent = 'Войдите в osu!, затем ищите и качайте. Закрыть: «' + mapsKeybind + '».'
+      el.hint.textContent = t('hintLogin', { keybind: mapsKeybind })
       return
     }
-    el.hint.textContent =
-      'Ввод активен. Скачивай карты. Закрыть панель: «' + mapsKeybind + '».'
+    el.hint.textContent = t('hintActive', { keybind: mapsKeybind })
   }
 
   function updateAuthUi() {
     if (loggedIn) {
-      el.authLabel.textContent = 'Вы вошли как ' + (username || 'osu!')
+      el.authLabel.textContent = t('loggedInAs') + (username || 'osu!')
       el.authLabel.hidden = false
       el.login.hidden = true
     } else if (!apiOk) {
-      el.authLabel.textContent = 'GUI offline'
+      el.authLabel.textContent = t('guiOffline')
       el.authLabel.hidden = false
       el.login.hidden = true
     } else {
-      el.authLabel.textContent = 'Не вошли'
+      el.authLabel.textContent = t('notLoggedIn')
       el.authLabel.hidden = false
       el.login.hidden = false
     }
@@ -227,6 +425,14 @@
       const c = await api('/api/maps/config')
       if (c.mapsKeybind) mapsKeybind = String(c.mapsKeybind)
       if (c.overlayKeybind) overlayKeybind = String(c.overlayKeybind)
+      if (c.language && (c.language === 'ru' || c.language === 'en')) {
+        try {
+          if (!localStorage.getItem(UI_LANG_KEY)) {
+            uiLang = c.language
+            applyLanguage(uiLang)
+          }
+        } catch {}
+      }
     } catch {
       /* ignore */
     }
@@ -240,7 +446,7 @@
       return true
     } catch {
       apiOk = false
-      setLine('Нет связи с tosu GUI')
+      setLine(t('noGuiConnection'))
       return false
     }
   }
@@ -355,12 +561,15 @@
   }
 
   function pluralizeDiffs(n) {
+    if (uiLang === 'en') {
+      return n === 1 ? t('diffSingular', { n }) : t('diffMany', { n })
+    }
     var abs = Math.abs(n) % 100
     var rem = abs % 10
-    if (abs > 10 && abs < 20) return n + ' сложностей'
-    if (rem > 1 && rem < 5) return n + ' сложности'
-    if (rem === 1) return n + ' сложность'
-    return n + ' сложностей'
+    if (abs > 10 && abs < 20) return t('diffMany', { n })
+    if (rem > 1 && rem < 5) return t('diffFew', { n })
+    if (rem === 1) return t('diffSingular', { n })
+    return t('diffMany', { n })
   }
 
   function diffIconHtml(mode, stars, size, title) {
@@ -375,7 +584,7 @@
     if (!sets.length) {
       el.list.innerHTML =
         '<div class="empty">' +
-        (loading ? 'Поиск…' : loggedIn ? 'Ничего нет' : 'Войдите, чтобы искать') +
+        (loading ? escapeHtml(t('loading')) : loggedIn ? escapeHtml(t('emptyNoResults')) : escapeHtml(t('emptyLoginPrompt'))) +
         '</div>'
       el.more.hidden = true
       return
@@ -392,7 +601,7 @@
         const cover = s.listCoverUrl || s.coverUrl || ''
         let btn
         if (owned) {
-          btn = '<button type="button" class="btn -owned" disabled>Есть</button>'
+          btn = '<button type="button" class="btn -owned" disabled>' + escapeHtml(t('installed')) + '</button>'
         } else if (busy) {
           btn =
             '<button type="button" class="btn -busy" data-cancel="' +
@@ -402,7 +611,7 @@
             '%</button>'
         } else {
           btn =
-            '<button type="button" class="btn -primary" data-dl="' + s.id + '">Скачать</button>'
+            '<button type="button" class="btn -primary" data-dl="' + s.id + '">' + escapeHtml(t('download')) + '</button>'
         }
         const playing = previewId === s.id
         const previewBtn =
@@ -462,7 +671,7 @@
     if (loading) return
     if (!apiOk && !(await checkApi())) return
     if (!loggedIn) {
-      setLine('Сначала войдите')
+      setLine(t('loginFirst'))
       return
     }
 
@@ -473,7 +682,7 @@
       sets = []
       render()
     }
-    setLine(append ? 'Ещё…' : 'Поиск…')
+    setLine(append ? t('moreLoading') : t('loading'))
 
     try {
       const sp = new URLSearchParams()
@@ -510,9 +719,9 @@
         cursor = r.cursor || null
         hasMore = !!r.hasMore
       }
-      setLine(sets.length ? sets.length + ' карт' : 'Пусто')
+      setLine(sets.length ? t('cardsCount', { n: sets.length }) : t('emptyNoResults'))
     } catch (err) {
-      setLine(err.message || 'Ошибка поиска')
+      setLine(err.message || t('searchError'))
       if (!append) sets = []
     } finally {
       loading = false
@@ -559,22 +768,35 @@
             localIds.add(id)
           } else {
             downloads[id] = { setId: id, phase: 'error', progress: 0 }
-            setLine(r.error || 'Ошибка')
+            setLine(r.error || t('searchError'))
           }
           render()
         })
         .catch(function (err) {
           downloads[id] = { setId: id, phase: 'error', progress: 0 }
-          setLine(err.message || 'Ошибка')
+          setLine(err.message || t('searchError'))
           render()
         })
     }
   })
 
+  if (el.uiLangBtn) {
+    el.uiLangBtn.addEventListener('click', function (e) {
+      if (e.button !== undefined && e.button !== 0) return
+      e.preventDefault()
+      const nextLang = uiLang === 'ru' ? 'en' : 'ru'
+      applyLanguage(nextLang)
+      void api('/api/maps/ui-lang', {
+        method: 'POST',
+        body: JSON.stringify({ language: nextLang }),
+      }).catch(() => {})
+    })
+  }
+
   el.login.addEventListener('click', function () {
     void (async function () {
       if (!apiOk && !(await checkApi())) return
-      setLine('Окно входа…')
+      setLine(t('loginWindow'))
       await api('/api/maps/login', { method: 'POST', body: '{}' })
       await refreshAuth()
       if (loggedIn) {
@@ -687,6 +909,7 @@
 
     await refreshAuth()
     await refreshLocal()
+    applyLanguage(uiLang)
     if (loggedIn) void search(false)
     else {
       setLine('')

@@ -253,11 +253,11 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
           name={settingsCounter}
           onClose={() => setSettingsCounter(null)}
           onSaved={() => {
-            onToast('Настройки счётчика сохранены', 'success')
+            onToast(lang === 'en' ? 'Counter settings saved' : 'Настройки счётчика сохранены', 'success')
             setSettingsCounter(null)
             reloadCounters()
           }}
-          onError={() => onToast('Ошибка сохранения счётчика', 'error')}
+          onError={() => onToast(lang === 'en' ? 'Failed to save counter settings' : 'Ошибка сохранения счётчика', 'error')}
         />
       )}
     </div>

@@ -7,7 +7,7 @@
  * simple gameplay preview without downloading the full set (osu!preview-style).
  */
 ;(function (global) {
-  var APP_VERSION = 31
+  var APP_VERSION = 32
   if (global.__TosuGuiMapsApp && global.__TosuGuiMapsAppVersion === APP_VERSION) return
   if (global.__TosuGuiMapsApp) {
     try {
@@ -25,6 +25,182 @@
   var API = 'http://127.0.0.1:24777'
   var ROOT_ID = 'tosu-gui-maps-root'
   var VOL_KEY = 'tosu-gui-preview-volume'
+  var UI_LANG_KEY = 'tosu_overlay_ui_lang'
+  var uiLang = 'ru'
+  try {
+    var storedUiLang = localStorage.getItem(UI_LANG_KEY)
+    if (storedUiLang === 'en' || storedUiLang === 'ru') uiLang = storedUiLang
+  } catch (e) {}
+
+  var I18N = {
+    ru: {
+      title: 'Карты',
+      login: 'Войти',
+      close: 'Закрыть',
+      searchPlaceholder: 'Поиск…',
+      clearSearch: 'Очистить поиск',
+      anyLang: 'Любой язык',
+      refresh: 'Обновить список',
+      statusLabel: 'Статус',
+      modeLabel: 'Режим',
+      statusAny: 'Любой',
+      statusMore: 'Ещё…',
+      modeAll: 'Все',
+      showMore: 'Показать ещё',
+      noTrack: 'Нет трека',
+      selectBeatmap: 'Выберите карту ▶',
+      pause: 'Пауза',
+      play: 'Играть',
+      prevTrack: 'Предыдущая',
+      nextTrack: 'Следующая',
+      seek: 'Перемотка',
+      volume: 'Громкость',
+      muteOsuOn: 'Глушить osu!',
+      muteOsuOff: 'Звук osu!',
+      muteOsuTitle: 'Заглушать звук osu! во время превью',
+      previewModalTitle: 'Превью',
+      previewMapBtn: 'Предпросмотр карты',
+      listen: 'Слушать',
+      installed: 'Есть',
+      download: 'Скачать',
+      loading: 'Загрузка…',
+      updatingList: 'Обновление списка…',
+      emptyNoResults: 'Ничего нет',
+      emptyLoginPrompt: 'Войдите, чтобы искать',
+      emptyDiffs: 'Нет сложностей для превью',
+      errBeatmapId: 'Ошибка: не найден ID сложности',
+      errEngine: 'Движок превью не загружен',
+      errSearch: 'Ошибка поиска',
+      errGeneric: 'Ошибка',
+      loginFirst: 'Сначала войдите',
+      loginWindow: 'Окно входа…',
+      noGuiConnection: 'Нет связи с tosu GUI',
+      guiOffline: 'GUI offline',
+      notLoggedIn: 'Не вошли',
+      loggedInAs: 'Вы вошли как ',
+      hintNoGui: 'Запусти tosu GUI — без него поиск не работает.',
+      hintLogin: 'Войдите в osu!, затем ищите карты.',
+      hintActive: 'Ввод активен · «{keybind}» / Esc / ✕ — закрыть',
+      cardsCount: '{n} карт',
+      diffSingular: '{n} сложность',
+      diffFew: '{n} сложности',
+      diffMany: '{n} сложностей',
+      langOptions: [
+        ['any', 'Любой язык'],
+        ['english', 'English'],
+        ['japanese', 'Japanese'],
+        ['chinese', 'Chinese'],
+        ['korean', 'Korean'],
+        ['russian', 'Russian'],
+        ['instrumental', 'Instrumental'],
+        ['french', 'French'],
+        ['german', 'German'],
+        ['spanish', 'Spanish'],
+        ['italian', 'Italian'],
+        ['swedish', 'Swedish'],
+        ['polish', 'Polish'],
+        ['unspecified', 'Не указан'],
+        ['other', 'Другой'],
+      ],
+      moreStatusOptions: [
+        ['pending', 'На рассмотрении'],
+        ['wip', 'В разработке'],
+        ['graveyard', 'Graveyard'],
+        ['favourites', 'Избранное'],
+        ['mine', 'Мои карты'],
+      ],
+    },
+    en: {
+      title: 'Beatmaps',
+      login: 'Log in',
+      close: 'Close',
+      searchPlaceholder: 'Search…',
+      clearSearch: 'Clear search',
+      anyLang: 'Any language',
+      refresh: 'Refresh list',
+      statusLabel: 'Status',
+      modeLabel: 'Mode',
+      statusAny: 'Any',
+      statusMore: 'More…',
+      modeAll: 'All',
+      showMore: 'Show more',
+      noTrack: 'No track',
+      selectBeatmap: 'Select beatmap ▶',
+      pause: 'Pause',
+      play: 'Play',
+      prevTrack: 'Previous',
+      nextTrack: 'Next',
+      seek: 'Seek',
+      volume: 'Volume',
+      muteOsuOn: 'Mute osu!',
+      muteOsuOff: 'osu! audio',
+      muteOsuTitle: 'Mute osu! sound during beatmap preview',
+      previewModalTitle: 'Preview',
+      previewMapBtn: 'Preview beatmap',
+      listen: 'Listen',
+      installed: 'Installed',
+      download: 'Download',
+      loading: 'Loading…',
+      updatingList: 'Updating list…',
+      emptyNoResults: 'No beatmaps found',
+      emptyLoginPrompt: 'Log in to search',
+      emptyDiffs: 'No difficulties for preview',
+      errBeatmapId: 'Error: difficulty ID not found',
+      errEngine: 'Preview engine not loaded',
+      errSearch: 'Search error',
+      errGeneric: 'Error',
+      loginFirst: 'Log in first',
+      loginWindow: 'Login window…',
+      noGuiConnection: 'Cannot connect to tosu GUI',
+      guiOffline: 'GUI offline',
+      notLoggedIn: 'Not logged in',
+      loggedInAs: 'Logged in as ',
+      hintNoGui: 'Start tosu GUI — search does not work without it.',
+      hintLogin: 'Log in to osu!, then search for beatmaps.',
+      hintActive: 'Input active · «{keybind}» / Esc / ✕ — close',
+      cardsCount: '{n} beatmaps',
+      diffSingular: '{n} difficulty',
+      diffFew: '{n} difficulties',
+      diffMany: '{n} difficulties',
+      langOptions: [
+        ['any', 'Any language'],
+        ['english', 'English'],
+        ['japanese', 'Japanese'],
+        ['chinese', 'Chinese'],
+        ['korean', 'Korean'],
+        ['russian', 'Russian'],
+        ['instrumental', 'Instrumental'],
+        ['french', 'French'],
+        ['german', 'German'],
+        ['spanish', 'Spanish'],
+        ['italian', 'Italian'],
+        ['swedish', 'Swedish'],
+        ['polish', 'Polish'],
+        ['unspecified', 'Unspecified'],
+        ['other', 'Other'],
+      ],
+      moreStatusOptions: [
+        ['pending', 'Pending'],
+        ['wip', 'WIP'],
+        ['graveyard', 'Graveyard'],
+        ['favourites', 'Favorites'],
+        ['mine', 'My beatmaps'],
+      ],
+    },
+  }
+
+  function t(key, params) {
+    var dict = I18N[uiLang] || I18N.ru
+    var val = dict[key] != null ? dict[key] : (I18N.ru[key] != null ? I18N.ru[key] : key)
+    if (typeof val === 'string' && params) {
+      for (var p in params) {
+        if (Object.prototype.hasOwnProperty.call(params, p)) {
+          val = val.replace(new RegExp('\\{' + p + '\\}', 'g'), String(params[p]))
+        }
+      }
+    }
+    return val
+  }
 
   var mode = 'any'
   var statusFilter = 'ranked'
@@ -36,30 +212,12 @@
     favourites: 1,
     mine: 1,
   }
-  var LANG_OPTIONS = [
-    ['any', 'Любой язык'],
-    ['english', 'English'],
-    ['japanese', 'Japanese'],
-    ['chinese', 'Chinese'],
-    ['korean', 'Korean'],
-    ['russian', 'Russian'],
-    ['instrumental', 'Instrumental'],
-    ['french', 'French'],
-    ['german', 'German'],
-    ['spanish', 'Spanish'],
-    ['italian', 'Italian'],
-    ['swedish', 'Swedish'],
-    ['polish', 'Polish'],
-    ['unspecified', 'Не указан'],
-    ['other', 'Другой'],
-  ]
-  var MORE_STATUS_OPTIONS = [
-    ['pending', 'На рассмотрении'],
-    ['wip', 'В разработке'],
-    ['graveyard', 'Graveyard'],
-    ['favourites', 'Избранное'],
-    ['mine', 'Мои карты'],
-  ]
+  function getLangOptions() {
+    return (I18N[uiLang] || I18N.ru).langOptions
+  }
+  function getMoreStatusOptions() {
+    return (I18N[uiLang] || I18N.ru).moreStatusOptions
+  }
 
   var page = 0
   var cursor = null
@@ -174,7 +332,8 @@
     var ico = els.muteBtn.querySelector('.mg-mute-ico')
     if (ico) ico.textContent = muteOsuOnPreview ? '🔇' : '🔈'
     var label = els.muteBtn.querySelector('.mg-mute-label')
-    if (label) label.textContent = muteOsuOnPreview ? 'Глушить osu!' : 'Звук osu!'
+    if (label) label.textContent = muteOsuOnPreview ? t('muteOsuOn') : t('muteOsuOff')
+    els.muteBtn.title = t('muteOsuTitle')
   }
 
   function esc(t) {
@@ -282,12 +441,15 @@
   }
 
   function pluralizeDiffs(n) {
+    if (uiLang === 'en') {
+      return n === 1 ? t('diffSingular', { n: n }) : t('diffMany', { n: n })
+    }
     var abs = Math.abs(n) % 100
     var rem = abs % 10
-    if (abs > 10 && abs < 20) return n + ' сложностей'
-    if (rem > 1 && rem < 5) return n + ' сложности'
-    if (rem === 1) return n + ' сложность'
-    return n + ' сложностей'
+    if (abs > 10 && abs < 20) return t('diffMany', { n: n })
+    if (rem > 1 && rem < 5) return t('diffFew', { n: n })
+    if (rem === 1) return t('diffSingular', { n: n })
+    return t('diffMany', { n: n })
   }
 
   function diffIconHtml(mode, stars, size, title) {
@@ -511,15 +673,15 @@
       }
     }
     if (els.playerTitle) {
-      els.playerTitle.textContent = set ? set.artist + ' — ' + set.title : 'Нет трека'
+      els.playerTitle.textContent = set ? set.artist + ' — ' + set.title : t('noTrack')
     }
     if (els.playerSub) {
-      els.playerSub.textContent = set ? set.creator : 'Выберите карту ▶'
+      els.playerSub.textContent = set ? set.creator : t('selectBeatmap')
     }
     if (els.playerPlay) {
       var playing = active && previewAudio && !previewAudio.paused && !previewPaused
       els.playerPlay.textContent = playing ? '❚❚' : '▶'
-      els.playerPlay.title = playing ? 'Пауза' : 'Играть'
+      els.playerPlay.title = playing ? t('pause') : t('play')
     }
     if (els.volRange) {
       els.volRange.value = String(Math.round(previewVolume * 100))
@@ -533,26 +695,26 @@
   function updateHint() {
     if (!els.hint) return
     if (!apiOk) {
-      els.hint.textContent = 'Запусти tosu GUI — без него поиск не работает.'
+      els.hint.textContent = t('hintNoGui')
       return
     }
     if (!loggedIn) {
-      els.hint.textContent = 'Войдите в osu!, затем ищите карты.'
+      els.hint.textContent = t('hintLogin')
       return
     }
-    els.hint.textContent = 'Ввод активен · «' + mapsKeybind + '» / Esc / ✕ — закрыть'
+    els.hint.textContent = t('hintActive', { keybind: mapsKeybind })
   }
 
   function updateAuthUi() {
     if (!els.authLabel || !els.login) return
     if (loggedIn) {
-      els.authLabel.textContent = 'Вы вошли как ' + (username || 'osu!')
+      els.authLabel.textContent = t('loggedInAs') + (username || 'osu!')
       els.login.hidden = true
     } else if (!apiOk) {
-      els.authLabel.textContent = 'GUI offline'
+      els.authLabel.textContent = t('guiOffline')
       els.login.hidden = true
     } else {
-      els.authLabel.textContent = 'Не вошли'
+      els.authLabel.textContent = t('notLoggedIn')
       els.login.hidden = false
     }
     updateHint()
@@ -566,7 +728,7 @@
       els.refresh.disabled = !!isLoading
     }
     if (els.more) els.more.disabled = !!isLoading
-    if (isLoading) setLine(message || 'Загрузка…')
+    if (isLoading) setLine(message || t('loading'))
   }
 
   function renderList() {
@@ -575,17 +737,17 @@
       els.list.innerHTML =
         '<div class="mg-empty">' +
         (loading
-          ? '<div class="mg-spinner"></div><div class="mg-empty-text">Загрузка…</div>'
+          ? '<div class="mg-spinner"></div><div class="mg-empty-text">' + esc(t('loading')) + '</div>'
           : loggedIn
-            ? 'Ничего нет'
-            : 'Войдите, чтобы искать') +
+            ? esc(t('emptyNoResults'))
+            : esc(t('emptyLoginPrompt'))) +
         '</div>'
       if (els.more) els.more.hidden = true
       return
     }
 
     var banner = loading
-      ? '<div class="mg-loading-banner"><span class="mg-spinner"></span><span>Обновление списка…</span></div>'
+      ? '<div class="mg-loading-banner"><span class="mg-spinner"></span><span>' + esc(t('updatingList')) + '</span></div>'
       : ''
 
     els.list.innerHTML =
@@ -602,7 +764,7 @@
           var sc = statusClass(s.status)
           var btn
           if (owned) {
-            btn = '<button type="button" class="mg-btn mg-owned" disabled>Есть</button>'
+            btn = '<button type="button" class="mg-btn mg-owned" disabled>' + esc(t('installed')) + '</button>'
           } else if (busy) {
             btn =
               '<button type="button" class="mg-btn mg-busy" data-cancel="' +
@@ -614,7 +776,7 @@
             btn =
               '<button type="button" class="mg-btn mg-primary" data-dl="' +
               s.id +
-              '">Скачать</button>'
+              '">' + esc(t('download')) + '</button>'
           }
           var playing = previewId === s.id && !previewPaused
           var previewBtn =
@@ -623,7 +785,7 @@
             '" data-preview="' +
             s.id +
             '" title="' +
-            (playing ? 'Пауза' : 'Слушать') +
+            (playing ? esc(t('pause')) : esc(t('listen'))) +
             '">' +
             (playing ? '❚❚' : '▶') +
             '</button>'
@@ -631,7 +793,7 @@
           var gpBtn =
             '<button type="button" class="mg-btn mg-gp" data-gp="' +
             s.id +
-            '" title="Предпросмотр карты" ' +
+            '" title="' + esc(t('previewMapBtn')) + '" ' +
             (hasBm ? '' : 'disabled') +
             '>◎</button>'
           var matchingBm = (s.beatmaps || []).filter(function (b) {
@@ -684,6 +846,14 @@
     try {
       var c = await api('/api/maps/config')
       if (c.mapsKeybind) mapsKeybind = String(c.mapsKeybind)
+      if (c.language && (c.language === 'ru' || c.language === 'en')) {
+        try {
+          if (!localStorage.getItem(UI_LANG_KEY)) {
+            uiLang = c.language
+            applyLanguage(uiLang)
+          }
+        } catch (e) {}
+      }
     } catch (e) {
       /* ignore */
     }
@@ -697,7 +867,7 @@
       return true
     } catch (e) {
       apiOk = false
-      setLine('Нет связи с tosu GUI')
+      setLine(t('noGuiConnection'))
       return false
     }
   }
@@ -739,7 +909,7 @@
     if (append && loading) return
     if (!apiOk && !(await checkApi())) return
     if (!loggedIn) {
-      setLine('Сначала войдите')
+      setLine(t('loginFirst'))
       return
     }
 
@@ -748,7 +918,7 @@
       page = 0
       cursor = null
     }
-    setLoadingUi(true, append ? 'Загрузка ещё…' : 'Обновление…')
+    setLoadingUi(true, append ? t('loading') : t('loading'))
     renderList()
 
     try {
@@ -789,10 +959,10 @@
         hasMore = !!r.hasMore
         didInitialSearch = true
       }
-      setLine(sets.length ? sets.length + ' карт' : 'Пусто')
+      setLine(sets.length ? t('cardsCount', { n: sets.length }) : t('emptyNoResults'))
     } catch (err) {
       if (seq !== searchSeq) return
-      setLine(err.message || 'Ошибка поиска')
+      setLine(err.message || t('errSearch'))
       if (!append) sets = []
     } finally {
       if (seq === searchSeq) {
@@ -838,16 +1008,18 @@
   }
 
   function langLabel() {
-    for (var i = 0; i < LANG_OPTIONS.length; i++) {
-      if (LANG_OPTIONS[i][0] === languageFilter) return LANG_OPTIONS[i][1]
+    var opts = getLangOptions()
+    for (var i = 0; i < opts.length; i++) {
+      if (opts[i][0] === languageFilter) return opts[i][1]
     }
-    return 'Язык'
+    return t('anyLang')
   }
 
   function moreStatusLabel() {
-    if (!MORE_STATUSES[statusFilter]) return 'Ещё…'
-    for (var i = 0; i < MORE_STATUS_OPTIONS.length; i++) {
-      if (MORE_STATUS_OPTIONS[i][0] === statusFilter) return MORE_STATUS_OPTIONS[i][1]
+    if (!MORE_STATUSES[statusFilter]) return t('statusMore')
+    var opts = getMoreStatusOptions()
+    for (var i = 0; i < opts.length; i++) {
+      if (opts[i][0] === statusFilter) return opts[i][1]
     }
     return statusFilter
   }
@@ -1111,7 +1283,7 @@
     }
     var bms = set.beatmaps || []
     if (!bms.length) {
-      setLine('Нет сложностей для превью')
+      setLine(t('emptyDiffs'))
       return
     }
     // Prefer osu!standard with valid ID
@@ -1121,7 +1293,7 @@
       }) || bms.find(function (b) { return b.id }) || bms[0]
 
     if (!pick || !pick.id) {
-      setLine('Ошибка: не найден ID сложности')
+      setLine(t('errBeatmapId'))
       return
     }
 
@@ -1135,7 +1307,7 @@
 
     if (els.gpModal) els.gpModal.hidden = false
     if (els.gpTitle) els.gpTitle.textContent = set.artist + ' — ' + set.title
-    if (els.gpSub) els.gpSub.textContent = pick.version + ' · ' + (pick.stars || 0).toFixed(2) + '★ · загрузка…'
+    if (els.gpSub) els.gpSub.textContent = pick.version + ' · ' + (pick.stars || 0).toFixed(2) + '★ · ' + t('loading').toLowerCase()
     if (els.gpDiffs) {
       els.gpDiffs.innerHTML = bms
         .map(function (b) {
@@ -1161,7 +1333,7 @@
     gp.error = ''
     gp.beatmapId = beatmapId
     stopGpAnimation()
-    if (els.gpSub) els.gpSub.textContent = 'Загрузка…'
+    if (els.gpSub) els.gpSub.textContent = t('loading')
 
     var bm = (set.beatmaps || []).find(function (b) {
       return b.id === beatmapId
@@ -1176,7 +1348,7 @@
       var eng = engine()
       if (!eng || typeof eng.parseOsu !== 'function') {
         console.error('[maps-gp] engine not loaded!', eng)
-        throw new Error('Движок превью не загружен')
+        throw new Error(t('errEngine'))
       }
       var r = null
       try {
@@ -1265,7 +1437,7 @@
         if (els.gpSub) {
           els.gpSub.textContent = bm
             ? bm.version + ' · ' + (bm.stars || 0).toFixed(2) + '★'
-            : 'Предпросмотр'
+            : t('previewModalTitle')
         }
         var curRt = ensureGpRuntime()
         if (curRt && typeof eng.resetPreviewRuntime === 'function') {
@@ -1282,7 +1454,7 @@
     } catch (err) {
       console.error('[maps-gp] loadGameplayDiff failed:', err)
       gp.loading = false
-      gp.error = err.message || 'Ошибка'
+      gp.error = err.message || t('errGeneric')
       if (els.gpSub) els.gpSub.textContent = gp.error
     }
   }
@@ -1312,13 +1484,94 @@
     container.addEventListener('click', handle, true)
   }
 
+  function applyLanguage(lang) {
+    uiLang = lang === 'en' ? 'en' : 'ru'
+    try {
+      localStorage.setItem(UI_LANG_KEY, uiLang)
+    } catch (e) {}
+
+    if (!els || !rootEl) return
+
+    if (els.topTitle) els.topTitle.textContent = t('title')
+    if (els.uiLangBtn) els.uiLangBtn.textContent = uiLang.toUpperCase()
+    if (els.login) els.login.textContent = t('login')
+    if (els.close) {
+      els.close.title = t('close')
+      els.close.setAttribute('aria-label', t('close'))
+    }
+    if (els.q) els.q.placeholder = t('searchPlaceholder')
+    if (els.qClear) {
+      els.qClear.title = t('clearSearch')
+      els.qClear.setAttribute('aria-label', t('clearSearch'))
+    }
+    if (els.refresh) els.refresh.title = t('refresh')
+    if (els.lblStatus) els.lblStatus.textContent = t('statusLabel')
+    if (els.lblMode) els.lblMode.textContent = t('modeLabel')
+    if (els.more) els.more.textContent = t('showMore')
+
+    // Update 'any' status chip and 'any' mode chip label
+    if (els.statuses) {
+      var anyStatusChip = els.statuses.querySelector('[data-status="any"]')
+      if (anyStatusChip) anyStatusChip.textContent = t('statusAny')
+    }
+    if (els.modes) {
+      var allModeChip = els.modes.querySelector('[data-mode="any"]')
+      if (allModeChip) allModeChip.textContent = t('modeAll')
+    }
+
+    // Update menus innerHTML
+    if (els.langMenu) {
+      els.langMenu.innerHTML = menuItems(getLangOptions(), 'data-lang')
+    }
+    if (els.moreMenu) {
+      els.moreMenu.innerHTML = menuItems(getMoreStatusOptions(), 'data-more-status')
+    }
+
+    // Mini-player and gameplay preview
+    if (els.playerBar) els.playerBar.title = t('seek')
+    if (els.playerPrev) els.playerPrev.title = t('prevTrack')
+    if (els.playerNext) els.playerNext.title = t('nextTrack')
+    if (els.gpClose) els.gpClose.title = t('close')
+    if (els.gpTitle) els.gpTitle.textContent = t('previewModalTitle')
+
+    updateAuthUi()
+    syncFilterUi()
+    syncPlayerUi()
+    syncMuteBtnUi()
+    renderList()
+  }
+
   function bindUi() {
+    if (els.uiLangBtn) {
+      var lastLangToggle = 0
+      var handleLangToggle = function (e) {
+        if (e.button !== undefined && e.button !== 0) return
+        var now = Date.now()
+        if (now - lastLangToggle < 250) {
+          e.preventDefault()
+          e.stopPropagation()
+          return
+        }
+        lastLangToggle = now
+        e.preventDefault()
+        e.stopPropagation()
+        var nextLang = uiLang === 'ru' ? 'en' : 'ru'
+        applyLanguage(nextLang)
+        void api('/api/maps/ui-lang', {
+          method: 'POST',
+          body: JSON.stringify({ language: nextLang }),
+        }).catch(function () {})
+      }
+      els.uiLangBtn.addEventListener('pointerup', handleLangToggle)
+      els.uiLangBtn.addEventListener('click', handleLangToggle)
+    }
+
     els.login.addEventListener('click', function (e) {
       e.preventDefault()
       e.stopPropagation()
       void (async function () {
         if (!apiOk && !(await checkApi())) return
-        setLine('Окно входа…')
+        setLine(t('loginWindow'))
         await api('/api/maps/login', { method: 'POST', body: '{}' })
         await refreshAuth()
         if (loggedIn) {
@@ -1652,42 +1905,43 @@
       '<div class="mg-shade" data-mg-close="1"></div>' +
       '<div class="mg-panel" role="dialog">' +
       '<header class="mg-top">' +
-      '<div class="mg-top-title">Карты</div>' +
+      '<div class="mg-top-title" id="mg-top-title">' + esc(t('title')) + '</div>' +
       '<div class="mg-top-spacer"></div>' +
+      '<button type="button" class="mg-btn mg-ui-lang-btn" id="mg-ui-lang-btn" title="Сменить язык / Switch language">' + uiLang.toUpperCase() + '</button>' +
       '<span class="mg-auth" id="mg-auth">…</span>' +
-      '<button type="button" class="mg-btn mg-primary mg-login-btn" id="mg-login" hidden>Войти</button>' +
-      '<button type="button" class="mg-x" id="mg-close" title="Закрыть" aria-label="Закрыть">×</button>' +
+      '<button type="button" class="mg-btn mg-primary mg-login-btn" id="mg-login" hidden>' + esc(t('login')) + '</button>' +
+      '<button type="button" class="mg-x" id="mg-close" title="' + esc(t('close')) + '" aria-label="' + esc(t('close')) + '">×</button>' +
       '</header>' +
       '<p class="mg-hint" id="mg-hint"></p>' +
       '<div class="mg-toolbar">' +
       '<div class="mg-search-wrap">' +
-      '<input class="mg-input" id="mg-q" type="search" placeholder="Поиск…" autocomplete="off" spellcheck="false" />' +
-      '<button type="button" class="mg-q-clear" id="mg-q-clear" title="Очистить" aria-label="Очистить поиск" hidden>×</button>' +
+      '<input class="mg-input" id="mg-q" type="search" placeholder="' + esc(t('searchPlaceholder')) + '" autocomplete="off" spellcheck="false" />' +
+      '<button type="button" class="mg-q-clear" id="mg-q-clear" title="' + esc(t('clearSearch')) + '" aria-label="' + esc(t('clearSearch')) + '" hidden>×</button>' +
       '</div>' +
       '<div class="mg-dd" id="mg-lang-wrap">' +
-      '<button type="button" class="mg-dd-btn" id="mg-lang-btn" title="Язык">Любой язык</button>' +
+      '<button type="button" class="mg-dd-btn" id="mg-lang-btn" title="' + esc(t('anyLang')) + '">' + esc(langLabel()) + '</button>' +
       '<div class="mg-dd-menu" id="mg-lang-menu" hidden>' +
-      menuItems(LANG_OPTIONS, 'data-lang') +
+      menuItems(getLangOptions(), 'data-lang') +
       '</div></div>' +
-      '<button type="button" class="mg-btn mg-refresh" id="mg-refresh" title="Обновить список">↻</button>' +
+      '<button type="button" class="mg-btn mg-refresh" id="mg-refresh" title="' + esc(t('refresh')) + '">↻</button>' +
       '</div>' +
-      '<div class="mg-label">Статус</div>' +
+      '<div class="mg-label" id="mg-lbl-status">' + esc(t('statusLabel')) + '</div>' +
       '<div class="mg-status-row">' +
       '<div class="mg-chips mg-chips-inline" id="mg-statuses">' +
       chip('status', 'ranked', 'Ranked', true) +
       chip('status', 'qualified', 'Qualified', false) +
       chip('status', 'loved', 'Loved', false) +
-      chip('status', 'any', 'Любой', false) +
+      chip('status', 'any', t('statusAny'), false) +
       '</div>' +
       '<div class="mg-dd" id="mg-more-wrap">' +
-      '<button type="button" class="mg-dd-btn mg-dd-btn-sm" id="mg-more-btn" title="Другие категории">Ещё…</button>' +
+      '<button type="button" class="mg-dd-btn mg-dd-btn-sm" id="mg-more-btn" title="' + esc(t('statusMore')) + '">' + esc(moreStatusLabel()) + '</button>' +
       '<div class="mg-dd-menu" id="mg-more-menu" hidden>' +
-      menuItems(MORE_STATUS_OPTIONS, 'data-more-status') +
+      menuItems(getMoreStatusOptions(), 'data-more-status') +
       '</div></div>' +
       '</div>' +
-      '<div class="mg-label">Режим</div>' +
+      '<div class="mg-label" id="mg-lbl-mode">' + esc(t('modeLabel')) + '</div>' +
       '<div class="mg-chips" id="mg-modes">' +
-      chip('mode', 'any', 'Все', true) +
+      chip('mode', 'any', t('modeAll'), true) +
       chip('mode', 'osu', 'osu!', false) +
       chip('mode', 'taiko', 'Taiko', false) +
       chip('mode', 'fruits', 'Catch', false) +
@@ -1695,31 +1949,31 @@
       '</div>' +
       '<div class="mg-list" id="mg-list"></div>' +
       '<div class="mg-footer">' +
-      '<button type="button" class="mg-btn" id="mg-more" hidden>Показать ещё</button>' +
+      '<button type="button" class="mg-btn" id="mg-more" hidden>' + esc(t('showMore')) + '</button>' +
       '<div class="mg-line" id="mg-line"></div>' +
       '</div>' +
       // Mini-player (osu website style)
       '<div class="mg-player" id="mg-player">' +
-      '<div class="mg-player-bar" id="mg-player-bar" title="Перемотка"><div class="mg-player-progress" id="mg-player-progress"></div></div>' +
+      '<div class="mg-player-bar" id="mg-player-bar" title="' + esc(t('seek')) + '"><div class="mg-player-progress" id="mg-player-progress"></div></div>' +
       '<div class="mg-player-body">' +
       '<div class="mg-player-cover" id="mg-player-cover"></div>' +
       '<div class="mg-player-meta">' +
-      '<div class="mg-player-title" id="mg-player-title">Нет трека</div>' +
-      '<div class="mg-player-sub" id="mg-player-sub">Выберите карту ▶</div>' +
+      '<div class="mg-player-title" id="mg-player-title">' + esc(t('noTrack')) + '</div>' +
+      '<div class="mg-player-sub" id="mg-player-sub">' + esc(t('selectBeatmap')) + '</div>' +
       '</div>' +
       '<div class="mg-player-controls">' +
-      '<button type="button" class="mg-pbtn" id="mg-player-prev" title="Предыдущая">⏮</button>' +
-      '<button type="button" class="mg-pbtn mg-pbtn-main" id="mg-player-play" title="Играть">▶</button>' +
-      '<button type="button" class="mg-pbtn" id="mg-player-next" title="Следующая">⏭</button>' +
+      '<button type="button" class="mg-pbtn" id="mg-player-prev" title="' + esc(t('prevTrack')) + '">⏮</button>' +
+      '<button type="button" class="mg-pbtn mg-pbtn-main" id="mg-player-play" title="' + esc(t('play')) + '">▶</button>' +
+      '<button type="button" class="mg-pbtn" id="mg-player-next" title="' + esc(t('nextTrack')) + '">⏭</button>' +
       '</div>' +
-      '<div class="mg-player-vol" title="Громкость">' +
+      '<div class="mg-player-vol" title="' + esc(t('volume')) + '">' +
       '<span class="mg-vol-ico">♪</span>' +
       '<input type="range" class="mg-vol-range" id="mg-vol" min="0" max="100" value="55" />' +
       '<span class="mg-vol-label" id="mg-vol-label">55%</span>' +
       '</div>' +
-      '<button type="button" class="mg-mute-btn' + (muteOsuOnPreview ? ' -on' : '') + '" id="mg-mute-osu" title="Заглушать звук osu! во время превью" aria-pressed="' + (muteOsuOnPreview ? 'true' : 'false') + '">' +
+      '<button type="button" class="mg-mute-btn' + (muteOsuOnPreview ? ' -on' : '') + '" id="mg-mute-osu" title="' + esc(t('muteOsuTitle')) + '" aria-pressed="' + (muteOsuOnPreview ? 'true' : 'false') + '">' +
       '<span class="mg-mute-ico">' + (muteOsuOnPreview ? '🔇' : '🔈') + '</span>' +
-      '<span class="mg-mute-label">' + (muteOsuOnPreview ? 'Глушить osu!' : 'Звук osu!') + '</span>' +
+      '<span class="mg-mute-label">' + (muteOsuOnPreview ? esc(t('muteOsuOn')) : esc(t('muteOsuOff'))) + '</span>' +
       '</button>' +
       '</div></div>' +
       // Gameplay preview modal
@@ -1728,10 +1982,10 @@
       '<div class="mg-gp-panel">' +
       '<div class="mg-gp-head">' +
       '<div class="mg-gp-head-text">' +
-      '<div class="mg-gp-title" id="mg-gp-title">Превью</div>' +
+      '<div class="mg-gp-title" id="mg-gp-title">' + esc(t('previewModalTitle')) + '</div>' +
       '<div class="mg-gp-sub" id="mg-gp-sub"></div>' +
       '</div>' +
-      '<button type="button" class="mg-x" id="mg-gp-close" title="Закрыть">×</button>' +
+      '<button type="button" class="mg-x" id="mg-gp-close" title="' + esc(t('close')) + '">×</button>' +
       '</div>' +
       '<div class="mg-gp-diffs" id="mg-gp-diffs"></div>' +
       '<canvas class="mg-gp-canvas" id="mg-gp-canvas" width="640" height="480"></canvas>' +
@@ -1744,13 +1998,17 @@
     }
 
     els = {
+      topTitle: rootEl.querySelector('#mg-top-title'),
+      uiLangBtn: rootEl.querySelector('#mg-ui-lang-btn'),
       authLabel: rootEl.querySelector('#mg-auth'),
       login: rootEl.querySelector('#mg-login'),
       close: rootEl.querySelector('#mg-close'),
       hint: rootEl.querySelector('#mg-hint'),
       q: rootEl.querySelector('#mg-q'),
       qClear: rootEl.querySelector('#mg-q-clear'),
+      lblStatus: rootEl.querySelector('#mg-lbl-status'),
       statuses: rootEl.querySelector('#mg-statuses'),
+      lblMode: rootEl.querySelector('#mg-lbl-mode'),
       modes: rootEl.querySelector('#mg-modes'),
       langBtn: rootEl.querySelector('#mg-lang-btn'),
       langMenu: rootEl.querySelector('#mg-lang-menu'),
@@ -1918,6 +2176,12 @@
     '#' +
     ROOT_ID +
     ' .mg-auth{font-size:13px;color:rgba(255,255,255,.58);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;line-height:38px;height:38px;flex-shrink:1}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-ui-lang-btn{height:38px;padding:0 12px;border:none;border-radius:10px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.92);font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}' +
+    '#' +
+    ROOT_ID +
+    ' .mg-ui-lang-btn:hover{background:rgba(255,255,255,.18);color:#fff}' +
     '#' +
     ROOT_ID +
     ' .mg-login-btn{height:38px;flex-shrink:0}' +

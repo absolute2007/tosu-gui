@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } from 'electron'
 import type { Tray } from 'electron'
 import fs from 'fs'
 import path from 'path'
@@ -64,6 +64,11 @@ import {
   recolorSkinCursor,
   revertPreviousCursorColor,
   setSkinComboColors,
+  replaceSkinElement,
+  customizeSkinFollowPoints,
+  getSkinOptimizerData,
+  optimizeSkinSprites,
+  type FollowPointsCustomOptions,
 } from './skins-customizer'
 import { osuAudio } from './osu-audio'
 
@@ -822,12 +827,12 @@ ipcMain.handle('skins:customizer:get', async (_e, skinPath: string) => {
 
 ipcMain.handle(
   'skins:customizer:apply',
-  async (_e, payload: { skinPath: string; tweakId: string; enable: boolean }) => {
+  async (_e, payload: { skinPath: string; tweakId: string; enable: boolean; options?: Record<string, any> }) => {
     const skinPath = typeof payload?.skinPath === 'string' ? payload.skinPath.trim() : ''
     const tweakId = typeof payload?.tweakId === 'string' ? payload.tweakId.trim() : ''
     const enable = Boolean(payload?.enable)
     if (!skinPath || !tweakId) throw new Error('Некорректные параметры настройки скина')
-    return applySkinTweak(skinPath, tweakId, enable)
+    return applySkinTweak(skinPath, tweakId, enable, payload.options)
   }
 )
 
@@ -874,6 +879,64 @@ ipcMain.handle(
     if (!skinPath) throw new Error('Укажите путь к скину')
     if (colors.length === 0) throw new Error('Необходимо указать хотя бы один цвет комбо')
     return setSkinComboColors(skinPath, colors)
+  }
+)
+
+ipcMain.handle(
+  'skins:customizer:replace-file',
+  async (
+    _e,
+    payload: { skinPath: string; tweakId: string; filePath?: string; fileBufferBase64?: string; fileName?: string }
+  ) => {
+    const skinPath = typeof payload?.skinPath === 'string' ? payload.skinPath.trim() : ''
+    const tweakId = typeof payload?.tweakId === 'string' ? payload.tweakId.trim() : ''
+    if (!skinPath || !tweakId) throw new Error('Некорректные параметры замены файла')
+    return replaceSkinElement(skinPath, tweakId, payload)
+  }
+)
+
+ipcMain.handle(
+  'skins:customizer:pick-file',
+  async (_e, category: 'image' | 'audio' = 'image') => {
+    const filters =
+      category === 'audio'
+        ? [{ name: 'Audio Files', extensions: ['wav', 'mp3', 'ogg'] }]
+        : [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg'] }]
+    const win = BrowserWindow.getFocusedWindow() || mainWindow || undefined
+    const dialogOpts: Electron.OpenDialogOptions = {
+      title: category === 'audio' ? 'Выберите звуковой файл' : 'Выберите изображение',
+      properties: ['openFile'],
+      filters,
+    }
+    const result = win ? await dialog.showOpenDialog(win, dialogOpts) : await dialog.showOpenDialog(dialogOpts)
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  }
+)
+
+ipcMain.handle(
+  'skins:customizer:customize-follow-points',
+  async (_e, payload: { skinPath: string; options: FollowPointsCustomOptions }) => {
+    const skinPath = typeof payload?.skinPath === 'string' ? payload.skinPath.trim() : ''
+    if (!skinPath) throw new Error('Укажите путь к скину')
+    return customizeSkinFollowPoints(skinPath, payload.options)
+  }
+)
+
+ipcMain.handle('skins:customizer:get-optimizer-data', async (_e, skinPath: string) => {
+  if (typeof skinPath !== 'string' || !skinPath.trim()) throw new Error('Укажите путь к скину')
+  return getSkinOptimizerData(skinPath.trim())
+})
+
+ipcMain.handle(
+  'skins:customizer:optimize-sprites',
+  async (
+    _e,
+    payload: { skinPath: string; mode: 'downscale_fps' | 'restore_quality'; targetFiles?: string[] }
+  ) => {
+    const skinPath = typeof payload?.skinPath === 'string' ? payload.skinPath.trim() : ''
+    if (!skinPath) throw new Error('Укажите путь к скину')
+    return optimizeSkinSprites(skinPath, payload)
   }
 )
 

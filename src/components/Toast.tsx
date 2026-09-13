@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Check, AlertCircle } from 'lucide-react'
 
 interface Props {
@@ -8,10 +8,15 @@ interface Props {
 }
 
 export function Toast({ message, type, onClose }: Props) {
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
-    const t = setTimeout(onClose, 3500)
+    const t = setTimeout(() => {
+      onCloseRef.current()
+    }, 3500)
     return () => clearTimeout(t)
-  }, [onClose])
+  }, [message])
 
   return (
     <div className={`toast -${type}`} role="alert" onClick={onClose}>

@@ -5,6 +5,17 @@ import { PNG } from 'pngjs'
 export type SkinTweakCategory = 'cursor' | 'gameplay' | 'interface' | 'audio'
 export type SkinPreviewType = 'cursor' | 'image' | 'audio' | 'ini' | 'combo'
 
+export interface FileDetails {
+  fileName: string
+  ext: string
+  width?: number
+  height?: number
+  is2x?: boolean
+  sampleRate?: string
+  sizeBytes: number
+  badgeText: string
+}
+
 export interface SkinTweakInfo {
   id: string
   title: string
@@ -19,6 +30,7 @@ export interface SkinTweakInfo {
   previewAudio?: string | null
   affectedFiles: string[]
   meta?: Record<string, any>
+  fileDetails?: FileDetails
 }
 
 export interface SkinCustomizationData {
@@ -27,6 +39,35 @@ export interface SkinCustomizationData {
   modifiedCount: number
   hasBackup: boolean
   tweaks: SkinTweakInfo[]
+}
+
+export interface FollowPointsCustomOptions {
+  hue: number
+  scale: number
+  opacity: number
+}
+
+export interface OptimizerSpriteInfo {
+  fileName: string
+  relPath: string
+  width: number
+  height: number
+  is2x: boolean
+  sizeBytes: number
+  optimized: boolean
+  canRevert: boolean
+  previewUrl?: string | null
+}
+
+export interface SkinOptimizerSummary {
+  skinName: string
+  skinPath: string
+  totalSprites: number
+  at2xCount: number
+  totalSizeBytes: number
+  optimizedCount: number
+  canRevertAll: boolean
+  sprites: OptimizerSpriteInfo[]
 }
 
 interface BackupFileRecord {
@@ -56,6 +97,7 @@ interface BackupManifest {
   createdAt: number
   updatedAt: number
   tweaks: Record<string, BackupTweakRecord>
+  disabledTweaks?: Record<string, { appliedAt: number; files?: BackupFileRecord[] }>
 }
 
 // 1x1 32-bit RGBA Transparent PNG
@@ -220,7 +262,7 @@ export const TWEAK_CONFIGS: TweakConfig[] = [
     previewType: 'image',
     filePatterns: [/^followpoint.*\.png$/i],
     defaultInjectFiles: ['followpoint.png', 'followpoint@2x.png'],
-    previewCandidates: ['followpoint.png', 'followpoint-0.png'],
+    previewCandidates: ['followpoint.png', 'followpoint@2x.png'],
   },
   {
     id: 'hit-lighting',
@@ -636,15 +678,118 @@ function getFileAsBase64Url(filePath: string, isAudio = false): string | null {
   }
 }
 
-function findSpriteBase64(skinPath: string, candidates: string[]): string | null {
+function findSpriteBase64(skinPath: string, candidates: string[], backupFilesDir?: string): string | null {
   for (const name of candidates) {
     const p = path.join(skinPath, name)
+    const bp = backupFilesDir ? path.join(backupFilesDir, name) : null
     if (fs.existsSync(p)) {
-      const url = getFileAsBase64Url(p, false)
+      if (isBlankPlaceholderFile(p, false) && bp && fs.existsSync(bp) && !isBlankPlaceholderFile(bp, false)) {
+        const url = getFileAsBase64Url(bp, false)
+        if (url) return url
+      }
+      if (!isBlankPlaceholderFile(p, false)) {
+        const url = getFileAsBase64Url(p, false)
+        if (url) return url
+      }
+    } else if (bp && fs.existsSync(bp) && !isBlankPlaceholderFile(bp, false)) {
+      const url = getFileAsBase64Url(bp, false)
       if (url) return url
     }
   }
   return null
+}
+
+function countVisiblePngPixels(filePath: string): number {
+  try {
+    if (!fs.existsSync(filePath)) return 0
+    const stat = fs.statSync(filePath)
+    if (stat.size <= 70) return 0
+    const buf = fs.readFileSync(filePath)
+    const dims = getPngDimensions(buf)
+    if (dims && (dims.width <= 2 || dims.height <= 2)) return 0
+    if (stat.size < 30000) {
+      const png = PNG.sync.read(buf)
+      let count = 0
+      for (let i = 3; i < png.data.length; i += 4) {
+        if (png.data[i] > 15) count++
+      }
+      return count
+    }
+    return 99999
+  } catch {
+    return 0
+  }
+}
+
+function findFollowPointSpriteBase64(skinPath: string, backupFilesDir?: string): string | null {
+  // 1. Check static followpoint.png / followpoint@2x.png (must have visible content)
+  for (const name of ['followpoint@2x.png', 'followpoint.png']) {
+    const sPath = path.join(skinPath, name)
+    const bPath = backupFilesDir ? path.join(backupFilesDir, name) : null
+    if (fs.existsSync(sPath) && countVisiblePngPixels(sPath) > 0) {
+      const url = getFileAsBase64Url(sPath, false)
+      if (url) return url
+    }
+    if (bPath && fs.existsSync(bPath) && countVisiblePngPixels(bPath) > 0) {
+      const url = getFileAsBase64Url(bPath, false)
+      if (url) return url
+    }
+  }
+
+  // 2. Animated followpoint-*.png: find frame with maximum visible pixels
+  const pattern = /^followpoint.*\.png$/i
+  const inSkin = findMatchingFilesInDir(skinPath, [pattern])
+  const inBackup = backupFilesDir && fs.existsSync(backupFilesDir) ? findMatchingFilesInDir(backupFilesDir, [pattern]) : []
+  const all = Array.from(new Set([...inSkin, ...inBackup]))
+
+  let best = ''
+  let maxVisible = 0
+  for (const f of all) {
+    const pSkin = path.join(skinPath, f)
+    const pBackup = backupFilesDir ? path.join(backupFilesDir, f) : ''
+    const target = fs.existsSync(pSkin) ? pSkin : pBackup
+    const visible = countVisiblePngPixels(target)
+    if (visible > maxVisible) {
+      maxVisible = visible
+      best = f
+    }
+  }
+
+  if (best) {
+    const pSkin = path.join(skinPath, best)
+    const pBackup = backupFilesDir ? path.join(backupFilesDir, best) : ''
+    const target = fs.existsSync(pSkin) ? pSkin : pBackup
+    return getFileAsBase64Url(target, false)
+  }
+
+  return null
+}
+
+function getFollowPointFileCandidates(skinPath: string, backupFilesDir?: string): string[] {
+  const pattern = /^followpoint.*\.png$/i
+  const inSkin = findMatchingFilesInDir(skinPath, [pattern])
+  const inBackup = backupFilesDir && fs.existsSync(backupFilesDir) ? findMatchingFilesInDir(backupFilesDir, [pattern]) : []
+  const all = Array.from(new Set([...inSkin, ...inBackup]))
+
+  let bestAnimated = ''
+  let maxVisible = 0
+  for (const f of all) {
+    const pSkin = path.join(skinPath, f)
+    const pBackup = backupFilesDir ? path.join(backupFilesDir, f) : ''
+    const target = fs.existsSync(pSkin) ? pSkin : pBackup
+    const visible = countVisiblePngPixels(target)
+    if (visible > maxVisible) {
+      maxVisible = visible
+      bestAnimated = f
+    }
+  }
+
+  const result: string[] = []
+  if (bestAnimated) result.push(bestAnimated)
+  for (const f of ['followpoint@2x.png', 'followpoint.png']) {
+    if (!result.includes(f)) result.push(f)
+  }
+  return result
 }
 
 function findMatchingFilesInDir(dirPath: string, patterns: RegExp[]): string[] {
@@ -667,6 +812,132 @@ function findMatchingFilesInDir(dirPath: string, patterns: RegExp[]): string[] {
   }
 }
 
+export function getPngDimensions(buf: Buffer): { width: number; height: number } | null {
+  if (buf.length >= 24 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+    const width = buf.readUInt32BE(16)
+    const height = buf.readUInt32BE(20)
+    return { width, height }
+  }
+  return null
+}
+
+export function getWavSampleRate(buf: Buffer): string | null {
+  if (buf.length >= 28 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WAVE') {
+    const rate = buf.readUInt32LE(24)
+    if (rate >= 8000 && rate <= 192000) {
+      return (rate / 1000).toFixed(rate % 1000 === 0 ? 0 : 1) + ' kHz'
+    }
+  }
+  return null
+}
+
+export function isBlankPlaceholderFile(filePath: string, isAudio = false): boolean {
+  try {
+    if (!fs.existsSync(filePath)) return true
+    const stat = fs.statSync(filePath)
+    if (stat.size <= 44) return true
+    if (isAudio) return stat.size <= 60
+    if (stat.size <= 70) return true
+    if (stat.size <= 300) {
+      const fd = fs.openSync(filePath, 'r')
+      const buf = Buffer.alloc(24)
+      fs.readSync(fd, buf, 0, 24, 0)
+      fs.closeSync(fd)
+      const dims = getPngDimensions(buf)
+      if (dims && dims.width <= 2 && dims.height <= 2) return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+export function isBlankPlaceholderBuffer(buf: Buffer, isAudio = false): boolean {
+  if (buf.length <= 44) return true
+  if (isAudio) return buf.length <= 60
+  if (buf.length <= 70) return true
+  const dims = getPngDimensions(buf)
+  if (dims && (dims.width <= 2 || dims.height <= 2)) return true
+  if (buf.length < 30000) {
+    try {
+      const png = PNG.sync.read(buf)
+      for (let i = 3; i < png.data.length; i += 4) {
+        if (png.data[i] > 15) return false
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+export function getFileDetails(
+  skinPath: string,
+  candidates: string[],
+  isAudio = false,
+  backupFilesDir?: string,
+  hasCustomTexture = false
+): FileDetails | undefined {
+  for (const candidate of candidates) {
+    const sPath = path.join(skinPath, candidate)
+    const bPath = backupFilesDir ? path.join(backupFilesDir, candidate) : ''
+    const sExists = fs.existsSync(sPath)
+    const bExists = Boolean(bPath && fs.existsSync(bPath))
+
+    let targetPath = ''
+    if (sExists) {
+      // If user replaced texture or skin has a real file (not a blank placeholder), prioritize skinPath!
+      if (hasCustomTexture || !isBlankPlaceholderFile(sPath, isAudio) || !bExists) {
+        targetPath = sPath
+      } else {
+        targetPath = bPath
+      }
+    } else if (bExists) {
+      targetPath = bPath
+    }
+
+    if (!targetPath || !fs.existsSync(targetPath)) continue
+
+    try {
+      const stat = fs.statSync(targetPath)
+      const ext = path.extname(candidate).toLowerCase()
+      const is2x = candidate.toLowerCase().includes('@2x')
+      const fileName = candidate
+      const sizeBytes = stat.size
+
+      if (isAudio) {
+        let sampleRate: string | null = null
+        try {
+          const fd = fs.openSync(targetPath, 'r')
+          const headerBuf = Buffer.alloc(32)
+          fs.readSync(fd, headerBuf, 0, 32, 0)
+          fs.closeSync(fd)
+          sampleRate = getWavSampleRate(headerBuf)
+        } catch {}
+        const badgeText = `${sampleRate ? `${sampleRate} ` : ''}${ext}`
+        return { fileName, ext, sampleRate: sampleRate || undefined, sizeBytes, badgeText }
+      } else {
+        const fd = fs.openSync(targetPath, 'r')
+        const headerBuf = Buffer.alloc(30)
+        fs.readSync(fd, headerBuf, 0, 30, 0)
+        fs.closeSync(fd)
+
+        const dims = getPngDimensions(headerBuf)
+        if (dims) {
+          const badgeText = `${dims.width}×${dims.height}${is2x ? ' @2x' : ''} ${ext}`
+          return { fileName, ext, width: dims.width, height: dims.height, is2x, sizeBytes, badgeText }
+        } else {
+          return { fileName, ext, is2x, sizeBytes, badgeText: `${ext}` }
+        }
+      }
+    } catch {
+      continue
+    }
+  }
+  return undefined
+}
+
 // --- Main Customizer API ---
 
 export async function getSkinCustomizationData(skinPath: string): Promise<SkinCustomizationData> {
@@ -685,35 +956,27 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
 
   const cursorCandidates = ['cursor.png', 'cursor@2x.png']
   for (const c of cursorCandidates) {
-    const inBackup = path.join(backupFilesDir, c)
-    if (fs.existsSync(inBackup)) {
-      previewCursorImage = getFileAsBase64Url(inBackup, false)
+    const sPath = path.join(skinPath, c)
+    const bPath = path.join(backupFilesDir, c)
+    if (fs.existsSync(sPath) && !isBlankPlaceholderFile(sPath, false)) {
+      previewCursorImage = getFileAsBase64Url(sPath, false)
       if (previewCursorImage) break
-    }
-    const inSkin = path.join(skinPath, c)
-    if (fs.existsSync(inSkin)) {
-      previewCursorImage = getFileAsBase64Url(inSkin, false)
+    } else if (fs.existsSync(bPath) && !isBlankPlaceholderFile(bPath, false)) {
+      previewCursorImage = getFileAsBase64Url(bPath, false)
       if (previewCursorImage) break
     }
   }
 
   const trailCandidates = ['cursortrail.png', 'cursortrail@2x.png']
   for (const c of trailCandidates) {
-    const inBackup = path.join(backupFilesDir, c)
-    if (fs.existsSync(inBackup)) {
-      const s = fs.statSync(inBackup).size
-      if (s > 150) {
-        previewTrailImage = getFileAsBase64Url(inBackup, false)
-        if (previewTrailImage) break
-      }
-    }
-    const inSkin = path.join(skinPath, c)
-    if (fs.existsSync(inSkin)) {
-      const s = fs.statSync(inSkin).size
-      if (s > 150) {
-        previewTrailImage = getFileAsBase64Url(inSkin, false)
-        if (previewTrailImage) break
-      }
+    const sPath = path.join(skinPath, c)
+    const bPath = path.join(backupFilesDir, c)
+    if (fs.existsSync(sPath) && !isBlankPlaceholderFile(sPath, false)) {
+      previewTrailImage = getFileAsBase64Url(sPath, false)
+      if (previewTrailImage) break
+    } else if (fs.existsSync(bPath) && !isBlankPlaceholderFile(bPath, false)) {
+      previewTrailImage = getFileAsBase64Url(bPath, false)
+      if (previewTrailImage) break
     }
   }
 
@@ -722,6 +985,7 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
 
   for (const cfg of TWEAK_CONFIGS) {
     const isManifestApplied = Boolean(manifest?.tweaks?.[cfg.id])
+    const isExplicitlyDisabled = Boolean(manifest?.disabledTweaks?.[cfg.id])
     let isNativeApplied = false
 
     // Check if tweak matches in skin.ini
@@ -738,11 +1002,22 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
       : []
 
     if (matchedSkinFiles.length > 0 && !cfg.ini) {
-      // Check if all matched files are transparent 1x1 (<= 150 bytes) or silent audio (<= 150 bytes)
+      // Check if all matched files are transparent 1x1 (width <= 2) or silent audio (<= 60 bytes)
       const allBlank = matchedSkinFiles.every((f) => {
         try {
-          const s = fs.statSync(path.join(skinPath, f)).size
-          return s <= 150
+          const p = path.join(skinPath, f)
+          const s = fs.statSync(p).size
+          if (s <= 70) return true
+          if (cfg.isAudio) return s <= 60
+          if (s <= 300) {
+            const fd = fs.openSync(p, 'r')
+            const headerBuf = Buffer.alloc(24)
+            fs.readSync(fd, headerBuf, 0, 24, 0)
+            fs.closeSync(fd)
+            const dims = getPngDimensions(headerBuf)
+            if (dims && dims.width <= 2 && dims.height <= 2) return true
+          }
+          return false
         } catch {
           return false
         }
@@ -752,33 +1027,85 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
       }
     }
 
-    const applied = isManifestApplied || isNativeApplied
-    const canReset = isManifestApplied
+    // Mutual exclusion check for cursor-trail vs continuous-cursor-trail
+    if (cfg.id === 'continuous-cursor-trail') {
+      const isTrailSuppressed = Boolean(
+        manifest?.tweaks?.['cursor-trail'] ||
+        getIniValue(iniContent, 'General', 'CursorTrail') === '0'
+      )
+      let isTrailFileBlank = false
+      const trailPath = path.join(skinPath, 'cursortrail.png')
+      if (fs.existsSync(trailPath)) {
+        try {
+          const s = fs.statSync(trailPath).size
+          if (s <= 70) {
+            isTrailFileBlank = true
+          } else if (s <= 300) {
+            const fd = fs.openSync(trailPath, 'r')
+            const headerBuf = Buffer.alloc(24)
+            fs.readSync(fd, headerBuf, 0, 24, 0)
+            fs.closeSync(fd)
+            const dims = getPngDimensions(headerBuf)
+            if (dims && dims.width <= 2 && dims.height <= 2) {
+              isTrailFileBlank = true
+            }
+          }
+        } catch {}
+      }
+      if (isTrailSuppressed || isTrailFileBlank || isExplicitlyDisabled) {
+        isNativeApplied = false
+      }
+    }
+
+    if (isExplicitlyDisabled) {
+      isNativeApplied = false
+    }
+
+    let applied = isManifestApplied || isNativeApplied
+    if (isExplicitlyDisabled) {
+      applied = false
+    }
+    if (cfg.id === 'continuous-cursor-trail' && Boolean(manifest?.tweaks?.['cursor-trail'])) {
+      applied = false
+    }
+    if (cfg.id === 'cursor-trail' && Boolean(manifest?.tweaks?.['continuous-cursor-trail'])) {
+      applied = false
+    }
+
+    const tweakRecord = manifest?.tweaks?.[cfg.id]
+    const hasCustomTexture = Boolean(tweakRecord?.meta?.hasCustomTexture)
+    const isCustomized = Boolean(tweakRecord?.meta?.isCustomized)
+    if (hasCustomTexture || isCustomized) {
+      applied = true
+    }
+
+    const canReset = isManifestApplied || Boolean(tweakRecord) || isExplicitlyDisabled
 
     if (applied) {
       modifiedCount++
     }
 
-    // Determine preview asset: priority to backed-up original, then existing file
+    // Determine preview asset: priority to custom replaced, then existing file, then backup
     let previewImage: string | null = null
     let previewAudio: string | null = null
 
     for (const candidate of cfg.previewCandidates) {
+      const sPath = path.join(skinPath, candidate)
       const bPath = path.join(backupFilesDir, candidate)
-      if (fs.existsSync(bPath)) {
+      const sExists = fs.existsSync(sPath)
+      const bExists = Boolean(bPath && fs.existsSync(bPath))
+
+      if ((hasCustomTexture || isCustomized) && sExists) {
         if (cfg.isAudio) {
-          previewAudio = getFileAsBase64Url(bPath, true)
+          previewAudio = getFileAsBase64Url(sPath, true)
         } else {
-          previewImage = getFileAsBase64Url(bPath, false)
+          previewImage = getFileAsBase64Url(sPath, false)
         }
         if (previewImage || previewAudio) break
       }
 
-      const sPath = path.join(skinPath, candidate)
-      if (fs.existsSync(sPath)) {
-        // If file is 1x1 blank and applied, don't show the blank 1x1 if we can avoid it
-        const size = fs.statSync(sPath).size
-        if (size > 150 || !applied) {
+      if (sExists) {
+        if (!applied || !isBlankPlaceholderFile(sPath, cfg.isAudio)) {
           if (cfg.isAudio) {
             previewAudio = getFileAsBase64Url(sPath, true)
           } else {
@@ -787,9 +1114,16 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
           if (previewImage || previewAudio) break
         }
       }
-    }
 
-    const tweakRecord = manifest?.tweaks?.[cfg.id]
+      if (bExists) {
+        if (cfg.isAudio) {
+          previewAudio = getFileAsBase64Url(bPath, true)
+        } else {
+          previewImage = getFileAsBase64Url(bPath, false)
+        }
+        if (previewImage || previewAudio) break
+      }
+    }
 
     let meta: Record<string, any> | undefined = tweakRecord?.meta
     let subtitle = cfg.subtitle
@@ -800,9 +1134,9 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
       const activeColors = (tweakRecord?.meta?.colors as string[] | undefined) || extracted.colors
       const originalColors = (tweakRecord?.meta?.originalColors as string[] | undefined) || extracted.colors
 
-      const hitcircleImage = findSpriteBase64(skinPath, ['hitcircle.png', 'hitcircle@2x.png'])
-      const hitcircleOverlayImage = findSpriteBase64(skinPath, ['hitcircleoverlay.png', 'hitcircleoverlay@2x.png'])
-      const approachCircleImage = findSpriteBase64(skinPath, ['approachcircle.png', 'approachcircle@2x.png'])
+      const hitcircleImage = findSpriteBase64(skinPath, ['hitcircle.png', 'hitcircle@2x.png'], backupFilesDir)
+      const hitcircleOverlayImage = findSpriteBase64(skinPath, ['hitcircleoverlay.png', 'hitcircleoverlay@2x.png'], backupFilesDir)
+      const approachCircleImage = findSpriteBase64(skinPath, ['approachcircle.png', 'approachcircle@2x.png'], backupFilesDir)
 
       const digitImages: Record<number, string | null> = {}
       for (let d = 1; d <= 8; d++) {
@@ -811,7 +1145,7 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
           `default-${d}@2x.png`,
           `default_${d}.png`,
           `default_${d}@2x.png`,
-        ])
+        ], backupFilesDir)
       }
       const default1Image = digitImages[1] || null
 
@@ -827,7 +1161,52 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
       }
       subtitle = `skin.ini: [Colours] (${activeColors.length} комбо)`
       affectedFiles = ['skin.ini']
+    } else if (cfg.id === 'follow-points') {
+      const followPointImage = findFollowPointSpriteBase64(skinPath, backupFilesDir)
+      if (followPointImage) {
+        previewImage = followPointImage
+      }
+      const hitcircleImage = findSpriteBase64(skinPath, ['hitcircle.png', 'hitcircle@2x.png'], backupFilesDir)
+      const hitcircleOverlayImage = findSpriteBase64(
+        skinPath,
+        ['hitcircleoverlay.png', 'hitcircleoverlay@2x.png'],
+        backupFilesDir
+      )
+      const approachCircleImage = findSpriteBase64(
+        skinPath,
+        ['approachcircle.png', 'approachcircle@2x.png'],
+        backupFilesDir
+      )
+      const digitImages: Record<number, string | null> = {}
+      for (let d = 1; d <= 8; d++) {
+        digitImages[d] = findSpriteBase64(
+          skinPath,
+          [`default-${d}.png`, `default-${d}@2x.png`, `default_${d}.png`, `default_${d}@2x.png`],
+          backupFilesDir
+        )
+      }
+      const extracted = extractComboColorsFromIni(iniContent)
+      meta = {
+        ...meta,
+        ...(tweakRecord?.meta || {}),
+        followPointImage: followPointImage || previewImage,
+        hitcircleImage,
+        hitcircleOverlayImage,
+        approachCircleImage,
+        digitImages,
+        comboColors: extracted.colors,
+      }
     }
+
+    const candidateFiles = cfg.id === 'follow-points'
+      ? getFollowPointFileCandidates(skinPath, backupFilesDir)
+      : cfg.previewCandidates
+
+    const fileDetails = cfg.previewType === 'ini'
+      ? { fileName: 'skin.ini', ext: '.ini', sizeBytes: 0, badgeText: 'skin.ini' }
+      : cfg.id === 'combo-colors'
+      ? { fileName: 'skin.ini', ext: '.ini', sizeBytes: 0, badgeText: 'skin.ini [Colours]' }
+      : getFileDetails(skinPath, candidateFiles, cfg.isAudio, backupFilesDir, Boolean(hasCustomTexture || isCustomized))
 
     tweaks.push({
       id: cfg.id,
@@ -843,6 +1222,7 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
       previewAudio,
       affectedFiles,
       meta,
+      fileDetails,
     })
   }
 
@@ -858,7 +1238,8 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
 export async function applySkinTweak(
   skinPath: string,
   tweakId: string,
-  enable: boolean
+  enable: boolean,
+  options?: Record<string, any>
 ): Promise<SkinCustomizationData> {
   const cfg = TWEAK_CONFIGS.find((t) => t.id === tweakId)
   if (!cfg) {
@@ -882,19 +1263,52 @@ export async function applySkinTweak(
       }
     }
 
+    // Handle mutual conflict between cursor-trail and continuous-cursor-trail
+    if (tweakId === 'cursor-trail') {
+      if (manifest?.tweaks['continuous-cursor-trail']) {
+        await resetSkinTweak(skinPath, 'continuous-cursor-trail')
+        manifest = readManifest(skinPath) || manifest
+      }
+      for (const f of ['cursormiddle.png', 'cursormiddle@2x.png']) {
+        const cmPath = path.join(skinPath, f)
+        if (fs.existsSync(cmPath)) {
+          try {
+            if (fs.statSync(cmPath).size <= 150) fs.unlinkSync(cmPath)
+          } catch {}
+        }
+      }
+    } else if (tweakId === 'continuous-cursor-trail') {
+      if (manifest?.tweaks['cursor-trail']) {
+        await resetSkinTweak(skinPath, 'cursor-trail')
+        manifest = readManifest(skinPath) || manifest
+      }
+      const currentIni = readSkinIni(skinPath)
+      if (getIniValue(currentIni, 'General', 'CursorTrail') === '0') {
+        const fixedIni = setIniValue(currentIni, 'General', 'CursorTrail', '1')
+        writeSkinIni(skinPath, fixedIni)
+      }
+    }
+
+    if (manifest.disabledTweaks?.[tweakId]) {
+      delete manifest.disabledTweaks[tweakId]
+    }
+
     const backupFilesDir = getBackupFilesDir(skinPath)
     if (!fs.existsSync(backupFilesDir)) {
       fs.mkdirSync(backupFilesDir, { recursive: true })
     }
 
-    const backedUpFiles: BackupFileRecord[] = []
+    const existingTweak = manifest.tweaks[tweakId]
+    const backedUpFiles: BackupFileRecord[] = existingTweak ? [...existingTweak.files] : []
     const matchingFiles = cfg.filePatterns
       ? findMatchingFilesInDir(skinPath, cfg.filePatterns)
       : []
 
-    const filesToModify = matchingFiles.length > 0
-      ? matchingFiles
-      : (cfg.defaultInjectFiles || [])
+    const filesToModifySet = new Set(matchingFiles)
+    if (cfg.defaultInjectFiles) {
+      for (const f of cfg.defaultInjectFiles) filesToModifySet.add(f)
+    }
+    const filesToModify = Array.from(filesToModifySet)
 
     const replacementBuffer = cfg.isAudio ? SILENT_WAV : TRANSPARENT_1X1_PNG
 
@@ -902,27 +1316,118 @@ export async function applySkinTweak(
       const fullPath = path.join(skinPath, relName)
       const exists = fs.existsSync(fullPath)
 
-      if (exists) {
-        // Backup original file if not already backed up
-        const backupTarget = path.join(backupFilesDir, relName)
-        if (!fs.existsSync(backupTarget)) {
-          fs.copyFileSync(fullPath, backupTarget)
+      const isAlreadyBackedUp = backedUpFiles.some(f => f.relPath === relName)
+
+      if (!isAlreadyBackedUp) {
+        if (exists) {
+          // Backup original file if not already backed up
+          const backupTarget = path.join(backupFilesDir, relName)
+          if (!fs.existsSync(backupTarget)) {
+            fs.copyFileSync(fullPath, backupTarget)
+          }
+          backedUpFiles.push({
+            relPath: relName,
+            existedBefore: true,
+            backupRelPath: relName,
+          })
+        } else {
+          backedUpFiles.push({
+            relPath: relName,
+            existedBefore: false,
+            backupRelPath: null,
+          })
         }
-        backedUpFiles.push({
-          relPath: relName,
-          existedBefore: true,
-          backupRelPath: relName,
-        })
-      } else {
-        backedUpFiles.push({
-          relPath: relName,
-          existedBefore: false,
-          backupRelPath: null,
-        })
       }
 
-      // Write transparent PNG or silent WAV
-      fs.writeFileSync(fullPath, replacementBuffer)
+      let fileBuffer = replacementBuffer
+      if (tweakId === 'continuous-cursor-trail' && !cfg.isAudio) {
+        if (relName.includes('cursortrail')) {
+          const backupTarget = path.join(backupFilesDir, relName)
+          const isOriginallyPresent = fs.existsSync(backupTarget) || (exists && !backedUpFiles.some(b => b.relPath === relName && !b.existedBefore))
+          if (!isOriginallyPresent && !fs.existsSync(backupTarget) && !exists) {
+            // Never write a dummy cursortrail if the skin didn't have one!
+            continue
+          }
+
+          const srcPath = fs.existsSync(backupTarget) ? backupTarget : fullPath
+          if (fs.existsSync(srcPath)) {
+            try {
+              const srcPng = PNG.sync.read(fs.readFileSync(srcPath))
+              const cursorSize = (options && typeof options.cursorSize === 'number' && options.cursorSize > 0) ? options.cursorSize : 1.0
+              const baseThickness = (options && typeof options.trailThickness === 'number' && options.trailThickness >= 6) ? options.trailThickness : 15.5
+              const is2x = relName.includes('@2x')
+              // Direct intuitive scaling: smaller cursor size / thickness = thinner trail!
+              const targetThickness = (is2x ? baseThickness * 2 : baseThickness) * cursorSize
+              const targetWidth = Math.max(is2x ? 8 : 4, Math.round(targetThickness))
+              const targetHeight = Math.max(is2x ? 8 : 4, Math.round(targetThickness))
+              const newWidth = Math.min(srcPng.width, targetWidth)
+              const newHeight = Math.min(srcPng.height, targetHeight)
+
+              if ((newWidth < srcPng.width || newHeight < srcPng.height) && srcPng.width > 1 && srcPng.height > 1) {
+                const dst = new PNG({ width: newWidth, height: newHeight })
+                const scaleX = srcPng.width / newWidth
+                const scaleY = srcPng.height / newHeight
+
+                for (let y = 0; y < newHeight; y++) {
+                  for (let x = 0; x < newWidth; x++) {
+                    const gx = (x + 0.5) * scaleX - 0.5
+                    const gy = (y + 0.5) * scaleY - 0.5
+                    const gxi = Math.floor(gx)
+                    const gyi = Math.floor(gy)
+                    const tx = Math.max(0, Math.min(1, gx - gxi))
+                    const ty = Math.max(0, Math.min(1, gy - gyi))
+
+                    const getP = (px: number, py: number) => {
+                      px = Math.max(0, Math.min(px, srcPng.width - 1))
+                      py = Math.max(0, Math.min(py, srcPng.height - 1))
+                      const idx = (srcPng.width * py + px) << 2
+                      return [srcPng.data[idx], srcPng.data[idx+1], srcPng.data[idx+2], srcPng.data[idx+3]]
+                    }
+
+                    const c00 = getP(gxi, gyi)
+                    const c10 = getP(gxi + 1, gyi)
+                    const c01 = getP(gxi, gyi + 1)
+                    const c11 = getP(gxi + 1, gyi + 1)
+                    
+                    const w00 = (1 - tx) * (1 - ty)
+                    const w10 = tx * (1 - ty)
+                    const w01 = (1 - tx) * ty
+                    const w11 = tx * ty
+
+                    const rawAlpha = c00[3] * w00 + c10[3] * w10 + c01[3] * w01 + c11[3] * w11
+                    let r = 0, g = 0, b = 0
+                    if (rawAlpha > 0) {
+                      r = (c00[0] * c00[3] * w00 + c10[0] * c10[3] * w10 + c01[0] * c01[3] * w01 + c11[0] * c11[3] * w11) / rawAlpha
+                      g = (c00[1] * c00[3] * w00 + c10[1] * c10[3] * w10 + c01[1] * c01[3] * w01 + c11[1] * c11[3] * w11) / rawAlpha
+                      b = (c00[2] * c00[3] * w00 + c10[2] * c10[3] * w10 + c01[2] * c01[3] * w01 + c11[2] * c11[3] * w11) / rawAlpha
+                    }
+
+                    // Boost the core density slightly so consecutive trail points fuse seamlessly without dips
+                    const a = rawAlpha > 0 ? Math.min(255, Math.pow(rawAlpha / 255, 0.82) * 255) : 0
+
+                    const dstIdx = (newWidth * y + x) << 2
+                    dst.data[dstIdx] = Math.round(r)
+                    dst.data[dstIdx+1] = Math.round(g)
+                    dst.data[dstIdx+2] = Math.round(b)
+                    dst.data[dstIdx+3] = Math.round(a)
+                  }
+                }
+                fileBuffer = PNG.sync.write(dst, { deflateLevel: 9 })
+              } else {
+                fileBuffer = fs.readFileSync(srcPath)
+              }
+            } catch (err) {
+              console.error(`Ошибка при чтении/ресайзе ${relName}:`, err)
+              fileBuffer = fs.readFileSync(srcPath)
+            }
+          }
+        } else if (relName.includes('cursormiddle')) {
+          fileBuffer = TRANSPARENT_1X1_PNG
+        }
+      }
+
+      // Write transparent PNG or silent WAV or resized trail
+      fs.writeFileSync(fullPath, fileBuffer)
     }
 
     // Handle ini change if specified
@@ -946,6 +1451,7 @@ export async function applySkinTweak(
       appliedAt: Date.now(),
       files: backedUpFiles,
       iniChanges,
+      meta: options,
     }
     manifest.updatedAt = Date.now()
     writeManifest(skinPath, manifest)
@@ -1061,10 +1567,23 @@ export async function resetSkinTweak(
       writeSkinIni(skinPath, iniContent)
     }
 
+    if (tweakId === 'continuous-cursor-trail') {
+      for (const f of ['cursormiddle.png', 'cursormiddle@2x.png']) {
+        const cmPath = path.join(skinPath, f)
+        if (fs.existsSync(cmPath)) {
+          try {
+            if (fs.statSync(cmPath).size <= 150) fs.unlinkSync(cmPath)
+          } catch {}
+        }
+      }
+      if (!manifest.disabledTweaks) manifest.disabledTweaks = {}
+      manifest.disabledTweaks['continuous-cursor-trail'] = { appliedAt: Date.now() }
+    }
+
     delete manifest.tweaks[tweakId]
     manifest.updatedAt = Date.now()
 
-    if (Object.keys(manifest.tweaks).length === 0) {
+    if (Object.keys(manifest.tweaks).length === 0 && (!manifest.disabledTweaks || Object.keys(manifest.disabledTweaks).length === 0)) {
       // No more tweaks in backup; remove .tosu-backup folder
       const backupDir = getBackupDir(skinPath)
       try {
@@ -1076,11 +1595,59 @@ export async function resetSkinTweak(
       writeManifest(skinPath, manifest)
     }
   } else {
-    // Tweak wasn't in manifest, but user wants to revert (e.g. skin author had CursorExpand: 0)
+    // Tweak wasn't in manifest, but user wants to revert or disable native state
     if (cfg.ini && cfg.ini.revertValue) {
       let iniContent = readSkinIni(skinPath)
       iniContent = setIniValue(iniContent, cfg.ini.section, cfg.ini.key, cfg.ini.revertValue)
       writeSkinIni(skinPath, iniContent)
+    }
+
+    if (tweakId === 'continuous-cursor-trail') {
+      for (const f of ['cursormiddle.png', 'cursormiddle@2x.png']) {
+        const cmPath = path.join(skinPath, f)
+        if (fs.existsSync(cmPath)) {
+          const s = fs.statSync(cmPath).size
+          if (s <= 150) {
+            try {
+              fs.unlinkSync(cmPath)
+            } catch {}
+          } else {
+            const backupTarget = path.join(backupFilesDir, f)
+            if (!fs.existsSync(backupTarget)) {
+              try {
+                fs.copyFileSync(cmPath, backupTarget)
+              } catch {}
+            }
+            try {
+              fs.unlinkSync(cmPath)
+            } catch {}
+          }
+        }
+      }
+      let currentManifest = readManifest(skinPath) || {
+        version: 1,
+        skinName: path.basename(skinPath),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        tweaks: {},
+      }
+      if (!currentManifest.disabledTweaks) currentManifest.disabledTweaks = {}
+      currentManifest.disabledTweaks['continuous-cursor-trail'] = { appliedAt: Date.now() }
+      writeManifest(skinPath, currentManifest)
+    }
+
+    if (manifest?.disabledTweaks?.[tweakId]) {
+      delete manifest.disabledTweaks[tweakId]
+      for (const f of ['cursormiddle.png', 'cursormiddle@2x.png']) {
+        const b = path.join(backupFilesDir, f)
+        const d = path.join(skinPath, f)
+        if (fs.existsSync(b) && !fs.existsSync(d)) {
+          try {
+            fs.copyFileSync(b, d)
+          } catch {}
+        }
+      }
+      writeManifest(skinPath, manifest)
     }
   }
 
@@ -1542,3 +2109,464 @@ export async function setSkinComboColors(
   return getSkinCustomizationData(skinPath)
 }
 
+// --- Custom Texture Replacement ---
+
+export async function replaceSkinElement(
+  skinPath: string,
+  tweakId: string,
+  source: { filePath?: string; fileBufferBase64?: string; fileName?: string }
+): Promise<SkinCustomizationData> {
+  if (!fs.existsSync(skinPath) || !fs.statSync(skinPath).isDirectory()) {
+    throw new Error(`Папка скина не найдена: ${skinPath}`)
+  }
+
+  const cfg = TWEAK_CONFIGS.find((t) => t.id === tweakId)
+  if (!cfg) {
+    throw new Error(`Неизвестный элемент: ${tweakId}`)
+  }
+
+  let sourceBuffer: Buffer
+  if (source.filePath && fs.existsSync(source.filePath)) {
+    sourceBuffer = fs.readFileSync(source.filePath)
+  } else if (source.fileBufferBase64) {
+    sourceBuffer = Buffer.from(source.fileBufferBase64, 'base64')
+  } else {
+    throw new Error('Файл не предоставлен')
+  }
+
+  if (sourceBuffer.length === 0) {
+    throw new Error('Файл пустой')
+  }
+
+  let targetFileName = ''
+  const providedName = source.fileName ? path.basename(source.fileName) : ''
+
+  if (providedName && cfg.previewCandidates.some((c) => c.toLowerCase() === providedName.toLowerCase())) {
+    targetFileName = cfg.previewCandidates.find((c) => c.toLowerCase() === providedName.toLowerCase())!
+  } else if (providedName && cfg.defaultInjectFiles?.some((c) => c.toLowerCase() === providedName.toLowerCase())) {
+    targetFileName = cfg.defaultInjectFiles.find((c) => c.toLowerCase() === providedName.toLowerCase())!
+  } else if (providedName.toLowerCase().includes('@2x') && cfg.previewCandidates.some((c) => c.toLowerCase().includes('@2x'))) {
+    targetFileName = cfg.previewCandidates.find((c) => c.toLowerCase().includes('@2x'))!
+  } else {
+    targetFileName = cfg.previewCandidates[0] || cfg.defaultInjectFiles?.[0] || (cfg.isAudio ? 'audio.wav' : 'custom.png')
+  }
+
+  const backupFilesDir = getBackupFilesDir(skinPath)
+  if (!fs.existsSync(backupFilesDir)) {
+    fs.mkdirSync(backupFilesDir, { recursive: true })
+  }
+
+  let manifest = readManifest(skinPath) || {
+    version: 1,
+    skinName: path.basename(skinPath),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    tweaks: {},
+  }
+
+  const existingTweak = manifest.tweaks[tweakId]
+  const backedUpFiles: BackupFileRecord[] = existingTweak ? [...existingTweak.files] : []
+
+  const targetFullPath = path.join(skinPath, targetFileName)
+  const exists = fs.existsSync(targetFullPath)
+
+  if (!backedUpFiles.some((f) => f.relPath === targetFileName)) {
+    if (exists) {
+      const backupTarget = path.join(backupFilesDir, targetFileName)
+      if (!fs.existsSync(backupTarget)) {
+        fs.copyFileSync(targetFullPath, backupTarget)
+      }
+      backedUpFiles.push({
+        relPath: targetFileName,
+        existedBefore: true,
+        backupRelPath: targetFileName,
+      })
+    } else {
+      backedUpFiles.push({
+        relPath: targetFileName,
+        existedBefore: false,
+        backupRelPath: null,
+      })
+    }
+  }
+
+  fs.writeFileSync(targetFullPath, sourceBuffer)
+
+  manifest.tweaks[tweakId] = {
+    tweakId,
+    appliedAt: Date.now(),
+    files: backedUpFiles,
+    meta: {
+      ...existingTweak?.meta,
+      hasCustomTexture: true,
+      customFileName: targetFileName,
+    },
+  }
+  manifest.updatedAt = Date.now()
+  writeManifest(skinPath, manifest)
+
+  return getSkinCustomizationData(skinPath)
+}
+
+// --- Follow Points Studio Customization ---
+
+export async function customizeSkinFollowPoints(
+  skinPath: string,
+  options: FollowPointsCustomOptions
+): Promise<SkinCustomizationData> {
+  if (!fs.existsSync(skinPath) || !fs.statSync(skinPath).isDirectory()) {
+    throw new Error(`Папка скина не найдена: ${skinPath}`)
+  }
+
+  const { hue, scale = 1.0, opacity = 100 } = options
+  const targetHue = ((hue % 360) + 360) % 360
+  const clampedScale = Math.max(0.4, Math.min(2.5, scale))
+  const clampedOpacity = Math.max(10, Math.min(100, opacity)) / 100
+
+  const backupFilesDir = getBackupFilesDir(skinPath)
+  if (!fs.existsSync(backupFilesDir)) {
+    fs.mkdirSync(backupFilesDir, { recursive: true })
+  }
+
+  let manifest = readManifest(skinPath) || {
+    version: 1,
+    skinName: path.basename(skinPath),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    tweaks: {},
+  }
+
+  const tweakId = 'follow-points'
+  const existingTweak = manifest.tweaks[tweakId]
+  const backedUpFiles: BackupFileRecord[] = existingTweak ? [...existingTweak.files] : []
+
+  const pattern = /^followpoint.*\.png$/i
+  const currentFilesInSkin = findMatchingFilesInDir(skinPath, [pattern])
+  const currentFilesInBackup = findMatchingFilesInDir(backupFilesDir, [pattern])
+  const allFollowPointFiles = Array.from(
+    new Set([...currentFilesInSkin, ...currentFilesInBackup, 'followpoint.png', 'followpoint@2x.png'])
+  )
+
+  for (const relName of allFollowPointFiles) {
+    const fullPath = path.join(skinPath, relName)
+    const backupTarget = path.join(backupFilesDir, relName)
+    const exists = fs.existsSync(fullPath)
+    const backupExists = fs.existsSync(backupTarget)
+
+    if (exists && !backupExists) {
+      if (!isBlankPlaceholderFile(fullPath, false)) {
+        fs.copyFileSync(fullPath, backupTarget)
+        if (!backedUpFiles.some((f) => f.relPath === relName)) {
+          backedUpFiles.push({ relPath: relName, existedBefore: true, backupRelPath: relName })
+        }
+      }
+    } else if (backupExists && !backedUpFiles.some((f) => f.relPath === relName)) {
+      backedUpFiles.push({ relPath: relName, existedBefore: true, backupRelPath: relName })
+    }
+  }
+
+  const filesToProcess = allFollowPointFiles.filter((f) => {
+    return (
+      fs.existsSync(path.join(backupFilesDir, f)) ||
+      (fs.existsSync(path.join(skinPath, f)) && !isBlankPlaceholderFile(path.join(skinPath, f), false))
+    )
+  })
+
+  if (filesToProcess.length === 0) {
+    for (const [name, size] of [['followpoint.png', 16], ['followpoint@2x.png', 32]] as const) {
+      const png = new PNG({ width: size, height: size })
+      const center = size / 2
+      const radius = size / 2 - 1
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const dist = Math.hypot(x + 0.5 - center, y + 0.5 - center)
+          const idx = (size * y + x) << 2
+          if (dist <= radius) {
+            const edgeAlpha = Math.max(0, Math.min(1, radius - dist + 0.5))
+            png.data[idx] = 255
+            png.data[idx + 1] = 255
+            png.data[idx + 2] = 255
+            png.data[idx + 3] = Math.round(255 * edgeAlpha)
+          } else {
+            png.data[idx + 3] = 0
+          }
+        }
+      }
+      const buf = PNG.sync.write(png)
+      fs.writeFileSync(path.join(backupFilesDir, name), buf)
+      backedUpFiles.push({ relPath: name, existedBefore: false, backupRelPath: name })
+      filesToProcess.push(name)
+    }
+  }
+
+  for (const relName of filesToProcess) {
+    const backupTarget = path.join(backupFilesDir, relName)
+    const srcPath = fs.existsSync(backupTarget) ? backupTarget : path.join(skinPath, relName)
+    if (!fs.existsSync(srcPath)) continue
+
+    const srcBuf = fs.readFileSync(srcPath)
+    if (isBlankPlaceholderBuffer(srcBuf, false)) continue
+
+    try {
+      const srcPng = PNG.sync.read(srcBuf)
+      let scaledPng = srcPng
+      if (Math.abs(clampedScale - 1.0) > 0.02 && srcPng.width > 1 && srcPng.height > 1) {
+        const newW = Math.max(4, Math.round(srcPng.width * clampedScale))
+        const newH = Math.max(4, Math.round(srcPng.height * clampedScale))
+        scaledPng = new PNG({ width: newW, height: newH })
+        const scaleX = srcPng.width / newW
+        const scaleY = srcPng.height / newH
+
+        for (let y = 0; y < newH; y++) {
+          for (let x = 0; x < newW; x++) {
+            const gx = Math.max(0, Math.min(srcPng.width - 1, Math.floor(x * scaleX)))
+            const gy = Math.max(0, Math.min(srcPng.height - 1, Math.floor(y * scaleY)))
+            const sIdx = (srcPng.width * gy + gx) << 2
+            const dIdx = (newW * y + x) << 2
+            scaledPng.data[dIdx] = srcPng.data[sIdx]
+            scaledPng.data[dIdx + 1] = srcPng.data[sIdx + 1]
+            scaledPng.data[dIdx + 2] = srcPng.data[sIdx + 2]
+            scaledPng.data[dIdx + 3] = srcPng.data[sIdx + 3]
+          }
+        }
+      }
+
+      const data = scaledPng.data
+      for (let i = 0; i < data.length; i += 4) {
+        const a = data[i + 3]
+        if (a < 5) continue
+
+        const r = data[i]
+        const g = data[i + 1]
+        const b = data[i + 2]
+        const [, , l] = rgbToHsl(r, g, b)
+
+        const [nr, ng, nb] = hslToRgb(targetHue, 0.88, l)
+        data[i] = nr
+        data[i + 1] = ng
+        data[i + 2] = nb
+        data[i + 3] = Math.round(a * clampedOpacity)
+      }
+
+      const outBuf = PNG.sync.write(scaledPng, { deflateLevel: 9 })
+      fs.writeFileSync(path.join(skinPath, relName), outBuf)
+    } catch (err) {
+      console.error(`Ошибка обработки followpoint ${relName}:`, err)
+    }
+  }
+
+  manifest.tweaks[tweakId] = {
+    tweakId,
+    appliedAt: Date.now(),
+    files: backedUpFiles,
+    meta: {
+      hue: targetHue,
+      scale: clampedScale,
+      opacity: Math.round(clampedOpacity * 100),
+      isCustomized: true,
+    },
+  }
+  manifest.updatedAt = Date.now()
+  writeManifest(skinPath, manifest)
+
+  return getSkinCustomizationData(skinPath)
+}
+
+// --- Skin Optimizer ---
+
+export async function getSkinOptimizerData(skinPath: string): Promise<SkinOptimizerSummary> {
+  const skinName = path.basename(skinPath)
+  if (!fs.existsSync(skinPath) || !fs.statSync(skinPath).isDirectory()) {
+    throw new Error(`Папка скина не найдена: ${skinPath}`)
+  }
+
+  const optimizerBackupDir = path.join(skinPath, '.tosu-backup', 'optimizer')
+  const entries = fs.readdirSync(skinPath, { withFileTypes: true })
+  const sprites: OptimizerSpriteInfo[] = []
+  let at2xCount = 0
+  let totalSizeBytes = 0
+  let optimizedCount = 0
+
+  for (const ent of entries) {
+    if (!ent.isFile()) continue
+    const lowerName = ent.name.toLowerCase()
+    if (!lowerName.endsWith('.png')) continue
+
+    const fullPath = path.join(skinPath, ent.name)
+    if (isBlankPlaceholderFile(fullPath)) continue
+    try {
+      const stat = fs.statSync(fullPath)
+      const sizeBytes = stat.size
+      totalSizeBytes += sizeBytes
+
+      const is2x = lowerName.includes('@2x')
+      if (is2x) at2xCount++
+
+      let width = 0
+      let height = 0
+      const fd = fs.openSync(fullPath, 'r')
+      const buf = Buffer.alloc(24)
+      fs.readSync(fd, buf, 0, 24, 0)
+      fs.closeSync(fd)
+      const dims = getPngDimensions(buf)
+      if (dims) {
+        width = dims.width
+        height = dims.height
+      }
+
+      const backupFile = path.join(optimizerBackupDir, ent.name)
+      const isOptimized = fs.existsSync(backupFile)
+      if (isOptimized) optimizedCount++
+
+      sprites.push({
+        fileName: ent.name,
+        relPath: ent.name,
+        width,
+        height,
+        is2x,
+        sizeBytes,
+        optimized: isOptimized,
+        canRevert: isOptimized,
+        previewUrl: sizeBytes <= 500 * 1024 ? getFileAsBase64Url(fullPath, false) : null,
+      })
+    } catch {
+      continue
+    }
+  }
+
+  sprites.sort((a, b) => {
+    if (a.is2x && !b.is2x) return -1
+    if (!a.is2x && b.is2x) return 1
+    return b.sizeBytes - a.sizeBytes
+  })
+
+  return {
+    skinName,
+    skinPath,
+    totalSprites: sprites.length,
+    at2xCount,
+    totalSizeBytes,
+    optimizedCount,
+    canRevertAll: optimizedCount > 0,
+    sprites,
+  }
+}
+
+export async function optimizeSkinSprites(
+  skinPath: string,
+  options: {
+    mode: 'downscale_fps' | 'restore_quality'
+    targetFiles?: string[]
+  }
+): Promise<SkinOptimizerSummary> {
+  if (!fs.existsSync(skinPath) || !fs.statSync(skinPath).isDirectory()) {
+    throw new Error(`Папка скина не найдена: ${skinPath}`)
+  }
+
+  const { mode, targetFiles } = options
+  const optimizerBackupDir = path.join(skinPath, '.tosu-backup', 'optimizer')
+
+  if (mode === 'downscale_fps') {
+    if (!fs.existsSync(optimizerBackupDir)) {
+      fs.mkdirSync(optimizerBackupDir, { recursive: true })
+    }
+
+    let filesToOptimize: string[] = []
+    if (targetFiles && targetFiles.length > 0) {
+      filesToOptimize = targetFiles
+    } else {
+      const entries = fs.readdirSync(skinPath, { withFileTypes: true })
+      for (const ent of entries) {
+        if (!ent.isFile() || !ent.name.toLowerCase().endsWith('.png')) continue
+        const p = path.join(skinPath, ent.name)
+        if (isBlankPlaceholderFile(p)) continue
+        if (ent.name.toLowerCase().includes('@2x')) {
+          filesToOptimize.push(ent.name)
+        } else {
+          if (fs.statSync(p).size > 60 * 1024) {
+            filesToOptimize.push(ent.name)
+          }
+        }
+      }
+    }
+
+    for (const relName of filesToOptimize) {
+      const srcPath = path.join(skinPath, relName)
+      if (!fs.existsSync(srcPath) || isBlankPlaceholderFile(srcPath)) continue
+
+      const backupTarget = path.join(optimizerBackupDir, relName)
+      if (!fs.existsSync(backupTarget)) {
+        fs.copyFileSync(srcPath, backupTarget)
+      }
+
+      try {
+        const buf = fs.readFileSync(backupTarget)
+        const png = PNG.sync.read(buf)
+
+        if (png.width > 2 && png.height > 2) {
+          const is2x = relName.toLowerCase().includes('@2x')
+          const scaleFactor = is2x ? 0.5 : (targetFiles && targetFiles.length > 0 ? 0.65 : (png.width > 256 ? 0.65 : 0.8))
+          const newW = Math.max(1, Math.round(png.width * scaleFactor))
+          const newH = Math.max(1, Math.round(png.height * scaleFactor))
+
+          const dst = new PNG({ width: newW, height: newH })
+          const scaleX = png.width / newW
+          const scaleY = png.height / newH
+
+          for (let y = 0; y < newH; y++) {
+            for (let x = 0; x < newW; x++) {
+              const gx = Math.max(0, Math.min(png.width - 1, Math.floor(x * scaleX)))
+              const gy = Math.max(0, Math.min(png.height - 1, Math.floor(y * scaleY)))
+              const sIdx = (png.width * gy + gx) << 2
+              const dIdx = (newW * y + x) << 2
+              dst.data[dIdx] = png.data[sIdx]
+              dst.data[dIdx + 1] = png.data[sIdx + 1]
+              dst.data[dIdx + 2] = png.data[sIdx + 2]
+              dst.data[dIdx + 3] = png.data[sIdx + 3]
+            }
+          }
+
+          const outBuf = PNG.sync.write(dst, { deflateLevel: 6 })
+          fs.writeFileSync(srcPath, outBuf)
+
+          if (is2x) {
+            const standard1xName = relName.replace(/@2x/i, '')
+            const standard1xPath = path.join(skinPath, standard1xName)
+            if (!fs.existsSync(standard1xPath)) {
+              fs.writeFileSync(standard1xPath, outBuf)
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Ошибка оптимизации ${relName}:`, err)
+      }
+    }
+  } else if (mode === 'restore_quality') {
+    if (fs.existsSync(optimizerBackupDir)) {
+      const backupEntries = fs.readdirSync(optimizerBackupDir, { withFileTypes: true })
+      const filesToRestore = targetFiles && targetFiles.length > 0
+        ? targetFiles
+        : backupEntries.filter((e) => e.isFile()).map((e) => e.name)
+
+      for (const relName of filesToRestore) {
+        const backupPath = path.join(optimizerBackupDir, relName)
+        const destPath = path.join(skinPath, relName)
+        if (fs.existsSync(backupPath)) {
+          try {
+            fs.copyFileSync(backupPath, destPath)
+            fs.unlinkSync(backupPath)
+          } catch {}
+        }
+      }
+
+      try {
+        const remaining = fs.readdirSync(optimizerBackupDir)
+        if (remaining.length === 0) {
+          fs.rmdirSync(optimizerBackupDir)
+        }
+      } catch {}
+    }
+  }
+
+  return getSkinOptimizerData(skinPath)
+}

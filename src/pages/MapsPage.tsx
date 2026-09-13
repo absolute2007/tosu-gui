@@ -9,7 +9,6 @@ import {
   FolderOpen,
   Loader2,
   LogIn,
-  LogOut,
   Map as MapIcon,
   Pause,
   Play,
@@ -46,9 +45,6 @@ interface Props {
   onToast: (msg: string, type: 'success' | 'error') => void
   onOpenSettings?: () => void
   account?: OsuAccountInfo | null
-  authBusy?: boolean
-  onLogin?: () => Promise<OsuAccountInfo>
-  onLogout?: () => Promise<OsuAccountInfo>
 }
 
 const PAGE_SIZE = 24
@@ -315,9 +311,6 @@ export function MapsPage({
   onToast,
   onOpenSettings,
   account: propAccount,
-  authBusy: propAuthBusy,
-  onLogin: propOnLogin,
-  onLogout: propOnLogout,
 }: Props) {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -349,10 +342,10 @@ export function MapsPage({
   })
   /** false until first auth status check finishes — avoids "not logged in" flash */
   const [authReady, setAuthReady] = useState(false)
-  const [internalAuthBusy, setInternalAuthBusy] = useState(false)
+  const { lang } = useI18n()
 
   const account = propAccount !== undefined ? propAccount : internalAccount
-  const authBusy = propAuthBusy !== undefined ? propAuthBusy : internalAuthBusy
+  
   const [rateLimitedUntil, setRateLimitedUntil] = useState(0)
   const [previewId, setPreviewId] = useState<number | null>(null)
   const [previewPaused, setPreviewPaused] = useState(false)
@@ -474,13 +467,13 @@ export function MapsPage({
               notifyPreview(false, 'gui-player')
               setPreviewId(null)
               setPreviewPaused(false)
-              onToast('Не удалось воспроизвести превью', 'error')
+              onToast(lang === 'en' ? 'Failed to play audio preview' : 'Не удалось воспроизвести превью', 'error')
             })
           } else {
             notifyPreview(false, 'gui-player')
             setPreviewId(null)
             setPreviewPaused(false)
-            onToast('Не удалось воспроизвести превью', 'error')
+            onToast(lang === 'en' ? 'Failed to play audio preview' : 'Не удалось воспроизвести превью', 'error')
           }
         }
         audio.src = primaryUrl
@@ -498,7 +491,7 @@ export function MapsPage({
               notifyPreview(false, 'gui-player')
               setPreviewId(null)
               setPreviewPaused(false)
-              onToast('Не удалось воспроизвести превью', 'error')
+              onToast(lang === 'en' ? 'Failed to play audio preview' : 'Не удалось воспроизвести превью', 'error')
             })
           } else {
             notifyPreview(false, 'gui-player')
@@ -507,10 +500,10 @@ export function MapsPage({
       } catch {
         notifyPreview(false, 'gui-player')
         setPreviewId(null)
-        onToast('Не удалось воспроизвести превью', 'error')
+        onToast(lang === 'en' ? 'Failed to play audio preview' : 'Не удалось воспроизвести превью', 'error')
       }
     },
-    [onToast, notifyPreview]
+    [lang, onToast, notifyPreview]
   )
 
   const togglePreview = useCallback(
@@ -682,7 +675,7 @@ export function MapsPage({
     (mapSet: MapSetSummary) => {
       const bms = mapSet.beatmaps || []
       if (!bms.length) {
-        onToast('Нет сложностей для превью', 'error')
+        onToast(lang === 'en' ? 'No difficulties for preview' : 'Нет сложностей для превью', 'error')
         return
       }
       stopPreview()
@@ -695,7 +688,7 @@ export function MapsPage({
       setGpOpen(true)
       void loadGameplayDiff(pick.id, mapSet)
     },
-    [onToast, stopPreview, stopGameplay, loadGameplayDiff]
+    [lang, onToast, stopPreview, stopGameplay, loadGameplayDiff]
   )
 
   // Stop preview when leaving the page or unmounting
@@ -817,13 +810,13 @@ export function MapsPage({
       q: string,
       m: MapModeFilter,
       s: MapStatusFilter,
-      lang: MapLanguageFilter,
+      langFilter: MapLanguageFilter,
       append: boolean,
       cursorStr: string | null,
       page: number
     ) => {
       if (inFlightRef.current) {
-        if (append) onToast('Подождите, идёт запрос…', 'error')
+        if (append) onToast(lang === 'en' ? 'Please wait, request in progress…' : 'Подождите, идёт запрос…', 'error')
         return
       }
 
@@ -831,9 +824,13 @@ export function MapsPage({
       if (now < rateLimitedUntilRef.current) {
         const sec = Math.ceil((rateLimitedUntilRef.current - now) / 1000)
         if (append) {
-          onToast(`Лимит osu! — подождите ~${sec}с`, 'error')
+          onToast(lang === 'en' ? `osu! rate limit — please wait ~${sec}s` : `Лимит osu! — подождите ~${sec}с`, 'error')
         } else {
-          setError(`Лимит запросов osu! — подождите ~${sec}с и нажмите Повторить`)
+          setError(
+            lang === 'en'
+              ? `osu! rate limit — please wait ~${sec}s and click Retry`
+              : `Лимит запросов osu! — подождите ~${sec}с и нажмите Повторить`
+          )
         }
         return
       }
@@ -857,7 +854,7 @@ export function MapsPage({
           query: q,
           mode: m,
           status: s,
-          language: lang,
+          language: langFilter,
           page,
           limit: PAGE_SIZE,
           cursor: append ? cursorStr : null,
@@ -902,7 +899,7 @@ export function MapsPage({
           pageIndexRef.current = 0
           setError(msg)
         } else {
-          onToast(msg || 'Не удалось подгрузить ещё', 'error')
+          onToast(msg || (lang === 'en' ? 'Failed to load more' : 'Не удалось подгрузить ещё'), 'error')
         }
       } finally {
         // Always clear flags for this attempt if still current, else force-clear if stuck
@@ -911,7 +908,7 @@ export function MapsPage({
         inFlightRef.current = false
       }
     },
-    [onToast, markRateLimited]
+    [lang, onToast, markRateLimited]
   )
 
   // Fresh search only when filters/query change — never auto-paginates
@@ -936,17 +933,17 @@ export function MapsPage({
   /** Manual only — button click, no auto-scroll load. */
   const loadMore = useCallback(() => {
     if (!loggedIn) {
-      onToast('Сначала войдите в osu!', 'error')
+      onToast(lang === 'en' ? 'Please log in to osu! first' : 'Сначала войдите в osu!', 'error')
       return
     }
     if (loadingMore || loading) return
     if (!hasMore) {
-      onToast('Больше карт нет', 'error')
+      onToast(lang === 'en' ? 'No more beatmaps' : 'Больше карт нет', 'error')
       return
     }
     if (Date.now() < rateLimitedUntilRef.current) {
       const sec = Math.ceil((rateLimitedUntilRef.current - Date.now()) / 1000)
-      onToast(`Лимит osu! — подождите ~${sec}с`, 'error')
+      onToast(lang === 'en' ? `osu! rate limit — please wait ~${sec}s` : `Лимит osu! — подождите ~${sec}с`, 'error')
       return
     }
     const nextPage = pageIndexRef.current + 1
@@ -961,6 +958,7 @@ export function MapsPage({
     loggedIn,
     hasMore,
     fetchPage,
+    lang,
     onToast,
   ])
 
@@ -982,72 +980,15 @@ export function MapsPage({
     return () => clearTimeout(t)
   }, [rateLimitedUntil])
 
-  const handleLogin = async () => {
-    if (propOnLogin) {
-      try {
-        await propOnLogin()
-      } catch {
-        /* handled by parent */
-      }
-      return
-    }
-    setInternalAuthBusy(true)
-    try {
-      const info = await window.tosuGui.loginOsu()
-      setInternalAccount(info)
-      try {
-        if (info.loggedIn) localStorage.setItem('tosu_cached_osu_account', JSON.stringify(info))
-        else localStorage.removeItem('tosu_cached_osu_account')
-      } catch {}
-      if (info.loggedIn) {
-        onToast(info.username ? `Вошли как ${info.username}` : 'Вход выполнен', 'success')
-      } else {
-        onToast('Вход не выполнен', 'error')
-      }
-    } catch (err) {
-      onToast(cleanIpcError(err) || 'Ошибка входа', 'error')
-    } finally {
-      setInternalAuthBusy(false)
-    }
-  }
-
-  const handleLogout = async () => {
-    if (propOnLogout) {
-      try {
-        await propOnLogout()
-      } catch {
-        /* handled by parent */
-      }
-    } else {
-      setInternalAuthBusy(true)
-      try {
-        const info = await window.tosuGui.logoutOsu()
-        setInternalAccount(info)
-        try {
-          localStorage.removeItem('tosu_cached_osu_account')
-        } catch {}
-        onToast('Вышли из osu!', 'success')
-      } catch {
-        onToast('Не удалось выйти', 'error')
-      } finally {
-        setInternalAuthBusy(false)
-      }
-    }
-    setSets([])
-    setCursor(null)
-    cursorRef.current = null
-    setHasMore(false)
-  }
-
   const handlePickSongs = async () => {
     try {
       const result = await window.tosuGui.pickSongsPath()
       if (result.cancelled) return
       setSongsPath(result.resolved)
       await refreshLocal()
-      onToast('Папка Songs сохранена', 'success')
+      onToast(lang === 'en' ? 'Songs folder saved' : 'Папка Songs сохранена', 'success')
     } catch {
-      onToast('Не удалось выбрать папку', 'error')
+      onToast(lang === 'en' ? 'Failed to select folder' : 'Не удалось выбрать папку', 'error')
     }
   }
 
@@ -1057,23 +998,23 @@ export function MapsPage({
         await window.tosuGui.cancelMapDownload(setId)
         setDownloads((prev) => ({
           ...prev,
-          [setId]: { setId, phase: 'cancelled', progress: 0, message: 'Отменено' },
+          [setId]: { setId, phase: 'cancelled', progress: 0, message: lang === 'en' ? 'Cancelled' : 'Отменено' },
         }))
       } catch {
-        onToast('Не удалось отменить', 'error')
+        onToast(lang === 'en' ? 'Failed to cancel' : 'Не удалось отменить', 'error')
       }
     },
-    [onToast]
+    [lang, onToast]
   )
 
   const handleDownload = useCallback(
     async (set: MapSetSummary) => {
       if (!loggedIn) {
-        onToast('Сначала войдите в osu!', 'error')
+        onToast(lang === 'en' ? 'Please log in to osu! first' : 'Сначала войдите в osu!', 'error')
         return
       }
       if (!songsPath) {
-        onToast('Сначала укажите папку Songs', 'error')
+        onToast(lang === 'en' ? 'Please specify Songs folder first' : 'Сначала укажите папку Songs', 'error')
         return
       }
 
@@ -1083,7 +1024,7 @@ export function MapsPage({
         return prev
       })
       if (blocked) {
-        onToast('Эта карта уже есть в Songs', 'success')
+        onToast(lang === 'en' ? 'This beatmap is already in Songs' : 'Эта карта уже есть в Songs', 'success')
         return
       }
 
@@ -1094,7 +1035,7 @@ export function MapsPage({
         }
         return {
           ...prev,
-          [set.id]: { setId: set.id, phase: 'queued', progress: 0, message: 'В очереди…' },
+          [set.id]: { setId: set.id, phase: 'queued', progress: 0, message: lang === 'en' ? 'Queued…' : 'В очереди…' },
         }
       })
       if (blocked) return
@@ -1106,10 +1047,15 @@ export function MapsPage({
           title: set.title,
         })
         if (result.cancelled) {
-          onToast('Загрузка отменена', 'success')
+          onToast(lang === 'en' ? 'Download cancelled' : 'Загрузка отменена', 'success')
           return
         }
-        onToast(`Скачано: ${set.artist} — ${set.title}`, 'success')
+        onToast(
+          lang === 'en'
+            ? `Downloaded: ${set.artist} — ${set.title}`
+            : `Скачано: ${set.artist} — ${set.title}`,
+          'success'
+        )
         setLocalIds((prev) => {
           if (prev.has(set.id)) return prev
           const next = new Set(prev)
@@ -1118,10 +1064,10 @@ export function MapsPage({
         })
       } catch (err) {
         const msg = cleanIpcError(err)
-        if (/отмен/i.test(msg)) {
+        if (/отмен|cancel/i.test(msg)) {
           setDownloads((prev) => ({
             ...prev,
-            [set.id]: { setId: set.id, phase: 'cancelled', progress: 0, message: 'Отменено' },
+            [set.id]: { setId: set.id, phase: 'cancelled', progress: 0, message: lang === 'en' ? 'Cancelled' : 'Отменено' },
           }))
           return
         }
@@ -1132,10 +1078,10 @@ export function MapsPage({
           ...prev,
           [set.id]: { setId: set.id, phase: 'error', progress: 0, error: msg },
         }))
-        onToast(msg || 'Ошибка скачивания', 'error')
+        onToast(msg || (lang === 'en' ? 'Download failed' : 'Ошибка скачивания'), 'error')
       }
     },
-    [songsPath, loggedIn, onToast, markRateLimited]
+    [songsPath, loggedIn, lang, onToast, markRateLimited]
   )
 
   const handleSongsClick = () => {
@@ -1146,8 +1092,6 @@ export function MapsPage({
   const canDownload = Boolean(songsPath && loggedIn)
   const rateLimitActive = rateLimitedUntil > Date.now()
   const rateLimitSec = rateLimitActive ? Math.ceil((rateLimitedUntil - Date.now()) / 1000) : 0
-
-  const { lang } = useI18n()
 
   const currentModeOptions = MODE_OPTIONS(lang)
   const currentMainStatusOptions = MAIN_STATUS_OPTIONS(lang)
@@ -1167,33 +1111,6 @@ export function MapsPage({
             </p>
           </div>
           <div className="maps-header-actions">
-            {!authReady ? (
-              <button type="button" className="btn btn-ghost btn-sm" disabled>
-                <Loader2 size={14} className="spin" />
-                …
-              </button>
-            ) : loggedIn ? (
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                disabled={authBusy}
-                onClick={() => void handleLogout()}
-                title={account?.username || (lang === 'en' ? 'Log out' : 'Выйти')}
-              >
-                {authBusy ? <Loader2 size={14} className="spin" /> : <LogOut size={14} strokeWidth={1.8} />}
-                {account?.username || (lang === 'en' ? 'Log out' : 'Выйти')}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                disabled={authBusy}
-                onClick={() => void handleLogin()}
-              >
-                {authBusy ? <Loader2 size={14} className="spin" /> : <LogIn size={14} strokeWidth={1.8} />}
-                {lang === 'en' ? 'Log in' : 'Войти'}
-              </button>
-            )}
             <button
               type="button"
               className={`btn btn-sm ${songsPath ? 'btn-ghost' : 'btn-primary'}`}
@@ -1205,26 +1122,6 @@ export function MapsPage({
             </button>
           </div>
         </div>
-
-        {authReady && !loggedIn && (
-          <div className="maps-banner">
-            <div className="maps-banner-text">
-              <strong>{lang === 'en' ? 'Log in to osu!' : 'Войдите в osu!'}</strong>
-              <span>{lang === 'en' ? 'Search and downloads work via your official osu.ppy.sh account' : 'Поиск и скачивание идут с osu.ppy.sh под вашим аккаунтом'}</span>
-            </div>
-            <div className="maps-banner-actions">
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                disabled={authBusy}
-                onClick={() => void handleLogin()}
-              >
-                {authBusy ? <Loader2 size={14} className="spin" /> : <LogIn size={14} strokeWidth={1.8} />}
-                {lang === 'en' ? 'Log in' : 'Войти'}
-              </button>
-            </div>
-          </div>
-        )}
 
         {authReady && loggedIn && !songsPath && (
           <div className="maps-banner">

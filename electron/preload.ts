@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { TosuCounter, TosuAppSettings, CounterSetting } from './tosu-api'
 import type { AppUpdateInfo, AppUpdateProgress } from './app-updater'
 import type { GuiSettings } from './gui-settings'
@@ -21,6 +21,10 @@ import type {
   SkinCustomizationData,
   SkinTweakCategory,
   SkinPreviewType,
+  FileDetails,
+  FollowPointsCustomOptions,
+  OptimizerSpriteInfo,
+  SkinOptimizerSummary,
 } from './skins-customizer'
 
 export type {
@@ -29,6 +33,10 @@ export type {
   SkinCustomizationData,
   SkinTweakCategory,
   SkinPreviewType,
+  FileDetails,
+  FollowPointsCustomOptions,
+  OptimizerSpriteInfo,
+  SkinOptimizerSummary,
   OsuAccountInfo,
 }
 
@@ -195,6 +203,7 @@ const api = {
     skinPath: string
     tweakId: string
     enable: boolean
+    options?: Record<string, any>
   }): Promise<SkinCustomizationData> => ipcRenderer.invoke('skins:customizer:apply', payload),
   resetSkinTweak: (payload: {
     skinPath: string
@@ -216,6 +225,36 @@ const api = {
     colors: string[]
   }): Promise<SkinCustomizationData> =>
     ipcRenderer.invoke('skins:customizer:set-combo-colors', payload),
+  replaceSkinElement: (payload: {
+    skinPath: string
+    tweakId: string
+    filePath?: string
+    fileBufferBase64?: string
+    fileName?: string
+  }): Promise<SkinCustomizationData> =>
+    ipcRenderer.invoke('skins:customizer:replace-file', payload),
+  pickCustomSkinFile: (category: 'image' | 'audio' = 'image'): Promise<string | null> =>
+    ipcRenderer.invoke('skins:customizer:pick-file', category),
+  customizeSkinFollowPoints: (payload: {
+    skinPath: string
+    options: FollowPointsCustomOptions
+  }): Promise<SkinCustomizationData> =>
+    ipcRenderer.invoke('skins:customizer:customize-follow-points', payload),
+  getSkinOptimizerData: (skinPath: string): Promise<SkinOptimizerSummary> =>
+    ipcRenderer.invoke('skins:customizer:get-optimizer-data', skinPath),
+  optimizeSkinSprites: (payload: {
+    skinPath: string
+    mode: 'downscale_fps' | 'restore_quality'
+    targetFiles?: string[]
+  }): Promise<SkinOptimizerSummary> =>
+    ipcRenderer.invoke('skins:customizer:optimize-sprites', payload),
+  getPathForFile: (file: File): string => {
+    try {
+      return webUtils.getPathForFile(file)
+    } catch {
+      return (file as any).path || ''
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('tosuGui', api)
