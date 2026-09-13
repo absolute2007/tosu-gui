@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppUpdateInfo, AppUpdateProgress } from '../../electron/app-updater'
+import { useI18n } from '../i18n/context'
 
 export function useAppUpdate(onToast: (msg: string, type: 'success' | 'error') => void) {
+  const { lang } = useI18n()
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null)
   const [visible, setVisible] = useState(false)
   const [installing, setInstalling] = useState(false)
@@ -33,7 +35,12 @@ export function useAppUpdate(onToast: (msg: string, type: 'success' | 'error') =
 
         if (info.unsupported) {
           if (notify) {
-            onToast(info.error || 'Автообновление только в установленной версии', 'error')
+            onToast(
+              lang === 'en'
+                ? 'Auto-update is only available in the installed version'
+                : (info.error || 'Автообновление доступно только в установленной версии'),
+              'error'
+            )
           }
           setVisible(false)
           return info
@@ -52,12 +59,17 @@ export function useAppUpdate(onToast: (msg: string, type: 'success' | 'error') =
         setVisible(shouldShow)
 
         if (notify && !info.updateAvailable && !info.error) {
-          onToast(`tosu GUI актуален (v${info.currentVersion})`, 'success')
+          onToast(
+            lang === 'en'
+              ? `tosu GUI is up to date (v${info.currentVersion})`
+              : `tosu GUI актуален (v${info.currentVersion})`,
+            'success'
+          )
         }
         return info
       } catch (err) {
         if (notify) {
-          const msg = err instanceof Error ? err.message : 'Ошибка проверки обновлений'
+          const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Update check failed' : 'Ошибка проверки обновлений')
           onToast(msg, 'error')
         }
         return null
@@ -65,7 +77,7 @@ export function useAppUpdate(onToast: (msg: string, type: 'success' | 'error') =
         checkingRef.current = false
       }
     },
-    [checkEnabled, onToast]
+    [checkEnabled, lang, onToast]
   )
 
   const dismiss = useCallback(async () => {
@@ -82,22 +94,31 @@ export function useAppUpdate(onToast: (msg: string, type: 'success' | 'error') =
     if (installing) return
 
     setInstalling(true)
-    setProgress({ phase: 'downloading', progress: 0, message: 'Подготовка…' })
+    setProgress({
+      phase: 'downloading',
+      progress: 0,
+      message: lang === 'en' ? 'Preparing…' : 'Подготовка…',
+    })
 
     try {
       await window.tosuGui.installAppUpdate()
       // App usually quits here; if not, show a note
-      onToast('Установщик запущен — подтвердите обновление', 'success')
+      onToast(
+        lang === 'en'
+          ? 'Installer launched — confirm update'
+          : 'Установщик запущен — подтвердите обновление',
+        'success'
+      )
       setVisible(false)
     } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err ?? 'Ошибка обновления')
+      const raw = err instanceof Error ? err.message : String(err ?? (lang === 'en' ? 'Update failed' : 'Ошибка обновления'))
       const msg = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
-      onToast(msg || 'Ошибка обновления', 'error')
+      onToast(msg || (lang === 'en' ? 'Update failed' : 'Ошибка обновления'), 'error')
     } finally {
       setInstalling(false)
       setProgress(null)
     }
-  }, [installing, onToast])
+  }, [installing, lang, onToast])
 
   const setCheckAppUpdates = useCallback(
     async (enabled: boolean) => {

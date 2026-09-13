@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FolderOpen,
   Loader2,
@@ -8,10 +8,14 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Search,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
   Undo2,
+  Upload,
   Volume2,
+  Zap,
 } from 'lucide-react'
 import { useI18n } from '../i18n/context'
 import type {
@@ -19,6 +23,8 @@ import type {
   SkinCustomizationData,
   SkinTweakCategory,
   SkinTweakInfo,
+  SkinOptimizerSummary,
+  FollowPointsCustomOptions,
 } from '../../electron/preload'
 import './SkinCustomizerPage.css'
 
@@ -45,12 +51,15 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
   const [loadingSkins, setLoadingSkins] = useState<boolean>(true)
   const [customData, setCustomData] = useState<SkinCustomizationData | null>(null)
   const [loadingCustomData, setLoadingCustomData] = useState<boolean>(false)
-  const [mainView, setMainView] = useState<'tweaks' | 'colors'>('tweaks')
-  const [colorSubTab, setColorSubTab] = useState<'combo' | 'cursor'>('combo')
+  const [mainView, setMainView] = useState<'tweaks' | 'colors' | 'optimizer'>('tweaks')
+  const [colorSubTab, setColorSubTab] = useState<'combo' | 'cursor' | 'follow-points'>('combo')
   const [activeCategory, setActiveCategory] = useState<FilterCategory>('all')
   const [busyTweakId, setBusyTweakId] = useState<string | null>(null)
   const [showResetModal, setShowResetModal] = useState<boolean>(false)
   const [resettingAll, setResettingAll] = useState<boolean>(false)
+  const [optimizerData, setOptimizerData] = useState<SkinOptimizerSummary | null>(null)
+  const [loadingOptimizer, setLoadingOptimizer] = useState<boolean>(false)
+  const [optimizingBatch, setOptimizingBatch] = useState<boolean>(false)
 
   // Load local skins list
   const loadLocalSkins = useCallback(async (preferredPath?: string) => {
@@ -107,7 +116,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
     }
   }, [selectedSkinPath, loadSkinData])
 
-  const handleToggleTweak = async (tweak: SkinTweakInfo) => {
+  const handleToggleTweak = async (tweak: SkinTweakInfo, options?: Record<string, any>) => {
     if (!selectedSkinPath || busyTweakId) return
     const nextState = !tweak.applied
     setBusyTweakId(tweak.id)
@@ -116,6 +125,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         skinPath: selectedSkinPath,
         tweakId: tweak.id,
         enable: nextState,
+        options,
       })
       setCustomData(updated)
       const title = t(`skinCustomizer.tweaks.${tweak.id}.title`) || tweak.title
@@ -127,6 +137,30 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       )
     } catch (err) {
       const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to apply tweak' : 'Ошибка применения настройки')
+      onToast(msg, 'error')
+    } finally {
+      setBusyTweakId(null)
+    }
+  }
+
+  const handleUpdateTweakOptions = async (tweak: SkinTweakInfo, options: Record<string, any>) => {
+    if (!selectedSkinPath || busyTweakId) return
+    setBusyTweakId(tweak.id)
+    try {
+      const updated = await window.tosuGui.applySkinTweak({
+        skinPath: selectedSkinPath,
+        tweakId: tweak.id,
+        enable: true,
+        options,
+      })
+      setCustomData(updated)
+      const title = t(`skinCustomizer.tweaks.${tweak.id}.title`) || tweak.title
+      onToast(
+        lang === 'en' ? `Updated «${title}»` : `Настройки «${title}» обновлены`,
+        'success'
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to update tweak' : 'Ошибка обновления настройки')
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -239,14 +273,123 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
     }
   }
 
+  const handleReplaceTexture = async (
+    tweak: SkinTweakInfo,
+    source: { filePath?: string; fileBufferBase64?: string; fileName?: string }
+  ) => {
+    if (!selectedSkinPath || busyTweakId) return
+    setBusyTweakId(tweak.id)
+    try {
+      const updated = await window.tosuGui.replaceSkinElement({
+        skinPath: selectedSkinPath,
+        tweakId: tweak.id,
+        ...source,
+      })
+      setCustomData(updated)
+      onToast(t('skinCustomizer.textureReplaced'), 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Ошибка замены текстуры'
+      onToast(msg, 'error')
+    } finally {
+      setBusyTweakId(null)
+    }
+  }
+
+  const handlePickCustomFile = async (tweak: SkinTweakInfo) => {
+    if (!selectedSkinPath || busyTweakId) return
+    try {
+      const pickedPath = await window.tosuGui.pickCustomSkinFile(
+        tweak.previewType === 'audio' ? 'audio' : 'image'
+      )
+      if (pickedPath) {
+        await handleReplaceTexture(tweak, { filePath: pickedPath })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Ошибка выбора файла'
+      onToast(msg, 'error')
+    }
+  }
+
+  const handleCustomizeFollowPoints = async (options: FollowPointsCustomOptions) => {
+    if (!selectedSkinPath || busyTweakId) return
+    setBusyTweakId('follow-points')
+    try {
+      const updated = await window.tosuGui.customizeSkinFollowPoints({
+        skinPath: selectedSkinPath,
+        options,
+      })
+      setCustomData(updated)
+      onToast(lang === 'en' ? 'Follow points applied to skin' : 'Линии следования применены в скине', 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to apply follow points' : 'Ошибка применения линий следования')
+      onToast(msg, 'error')
+    } finally {
+      setBusyTweakId(null)
+    }
+  }
+
+  const loadOptimizerData = useCallback(async (skinPath: string) => {
+    if (!skinPath) {
+      setOptimizerData(null)
+      return
+    }
+    setLoadingOptimizer(true)
+    try {
+      const data = await window.tosuGui.getSkinOptimizerData(skinPath)
+      setOptimizerData(data)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Ошибка считывания данных оптимизатора'
+      onToast(msg, 'error')
+    } finally {
+      setLoadingOptimizer(false)
+    }
+  }, [onToast])
+
+  useEffect(() => {
+    if (mainView === 'optimizer' && selectedSkinPath) {
+      void loadOptimizerData(selectedSkinPath)
+    }
+  }, [mainView, selectedSkinPath, loadOptimizerData])
+
+  const handleOptimizeSprites = async (
+    mode: 'downscale_fps' | 'restore_quality',
+    targetFiles?: string[]
+  ) => {
+    if (!selectedSkinPath || optimizingBatch) return
+    setOptimizingBatch(true)
+    try {
+      const summary = await window.tosuGui.optimizeSkinSprites({
+        skinPath: selectedSkinPath,
+        mode,
+        targetFiles,
+      })
+      setOptimizerData(summary)
+      await loadSkinData(selectedSkinPath)
+      onToast(
+        mode === 'downscale_fps'
+          ? t('skinCustomizer.optimizerDone')
+          : t('skinCustomizer.optimizerRevertDone'),
+        'success'
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Ошибка оптимизации спрайтов'
+      onToast(msg, 'error')
+    } finally {
+      setOptimizingBatch(false)
+    }
+  }
+
   // Split tweaks into element modifications and color tweaks
   const allTweaks = customData?.tweaks || []
   const toggleTweaks = allTweaks.filter((t) => t.id !== 'cursor-color' && t.id !== 'combo-colors')
   const cursorColorTweak = allTweaks.find((t) => t.id === 'cursor-color')
   const comboColorTweak = allTweaks.find((t) => t.id === 'combo-colors')
+  const followPointsTweak = allTweaks.find((t) => t.id === 'follow-points')
 
   const modifiedColorsCount =
-    (cursorColorTweak?.applied ? 1 : 0) + (comboColorTweak?.applied ? 1 : 0)
+    (cursorColorTweak?.applied ? 1 : 0) +
+    (comboColorTweak?.applied ? 1 : 0) +
+    (Boolean(followPointsTweak?.meta?.isCustomized) ? 1 : 0)
 
   // Filter tweaks by category
   const filteredTweaks = toggleTweaks.filter((t) => {
@@ -339,7 +482,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
           </div>
         </div>
 
-        {/* Top-Level Mode Switcher: Tweaks vs Color Studio */}
+        {/* Top-Level Mode Switcher: Tweaks vs Color Studio vs Optimizer */}
         <div className="customizer-mode-switch-row">
           <div className="customizer-mode-switch">
             <button
@@ -362,8 +505,20 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
               {modifiedColorsCount > 0 ? (
                 <span className="customizer-mode-badge -modified">{t('skinCustomizer.modifiedCount', { count: modifiedColorsCount })}</span>
               ) : (
-                <span className="customizer-mode-count">2</span>
+                <span className="customizer-mode-count">3</span>
               )}
+            </button>
+
+            <button
+              type="button"
+              className={`customizer-mode-btn ${mainView === 'optimizer' ? '-active' : ''}`}
+              onClick={() => setMainView('optimizer')}
+            >
+              <Zap size={14} />
+              <span>{t('skinCustomizer.modeOptimizer')}</span>
+              {optimizerData && optimizerData.optimizedCount > 0 ? (
+                <span className="customizer-mode-badge -modified">{optimizerData.optimizedCount}</span>
+              ) : null}
             </button>
           </div>
         </div>
@@ -416,6 +571,18 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
                   <span className="color-studio-tab-pill">{t('skinCustomizer.modified')}</span>
                 )}
               </button>
+
+              <button
+                type="button"
+                className={`color-studio-tab ${colorSubTab === 'follow-points' ? '-active' : ''}`}
+                onClick={() => setColorSubTab('follow-points')}
+              >
+                <span className="color-studio-tab-indicator -followpoints" />
+                <span>{t('skinCustomizer.subtabFollowPoints')}</span>
+                {Boolean(followPointsTweak?.meta?.isCustomized) && (
+                  <span className="color-studio-tab-pill">{t('skinCustomizer.modified')}</span>
+                )}
+              </button>
             </div>
           </div>
         )}
@@ -435,6 +602,16 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
             {t('skinCustomizer.openSkinsFolder')}
           </button>
         </div>
+      ) : mainView === 'optimizer' ? (
+        <SkinOptimizerStudio
+          data={optimizerData}
+          isLoading={loadingOptimizer}
+          isBusy={optimizingBatch}
+          onOptimizeBatch={() => void handleOptimizeSprites('downscale_fps')}
+          onRestoreAll={() => void handleOptimizeSprites('restore_quality')}
+          onOptimizeSingle={(fileName) => void handleOptimizeSprites('downscale_fps', [fileName])}
+          onRestoreSingle={(fileName) => void handleOptimizeSprites('restore_quality', [fileName])}
+        />
       ) : mainView === 'colors' ? (
         <div className="color-studio-container">
           {colorSubTab === 'combo' ? (
@@ -450,23 +627,37 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
                 <p>{lang === 'en' ? 'Combo color settings are not available for this skin.' : 'Настройки комбо-цветов недоступны для этого скина.'}</p>
               </div>
             )
-          ) : cursorColorTweak ? (
-            <CursorColorStudio
-              tweak={cursorColorTweak}
-              isBusy={busyTweakId === 'cursor-color'}
-              isTrailDisabled={Boolean(
-                toggleTweaks.find((t) => t.id === 'cursor-trail')?.applied
-              )}
-              isContinuousTrail={Boolean(
-                toggleTweaks.find((t) => t.id === 'continuous-cursor-trail')?.applied
-              )}
-              onRecolorCursor={handleRecolorCursor}
-              onReset={() => void handleResetTweak(cursorColorTweak)}
-              onRevertPrevious={handleRevertPreviousCursorColor}
+          ) : colorSubTab === 'cursor' ? (
+            cursorColorTweak ? (
+              <CursorColorStudio
+                tweak={cursorColorTweak}
+                isBusy={busyTweakId === 'cursor-color'}
+                isTrailDisabled={Boolean(
+                  toggleTweaks.find((t) => t.id === 'cursor-trail')?.applied
+                )}
+                isContinuousTrail={Boolean(
+                  toggleTweaks.find((t) => t.id === 'continuous-cursor-trail')?.applied
+                )}
+                onRecolorCursor={handleRecolorCursor}
+                onReset={() => void handleResetTweak(cursorColorTweak)}
+                onRevertPrevious={handleRevertPreviousCursorColor}
+              />
+            ) : (
+              <div className="customizer-empty">
+                <p>{lang === 'en' ? 'Cursor color settings are not available for this skin.' : 'Настройки цвета курсора недоступны для этого скина.'}</p>
+              </div>
+            )
+          ) : followPointsTweak ? (
+            <FollowPointsStudio
+              tweak={followPointsTweak}
+              comboTweak={comboColorTweak}
+              isBusy={busyTweakId === 'follow-points'}
+              onCustomize={handleCustomizeFollowPoints}
+              onReset={() => void handleResetTweak(followPointsTweak)}
             />
           ) : (
             <div className="customizer-empty">
-              <p>{lang === 'en' ? 'Cursor color settings are not available for this skin.' : 'Настройки цвета курсора недоступны для этого скина.'}</p>
+              <p>{lang === 'en' ? 'Follow points settings are not available for this skin.' : 'Настройки линий следования недоступны для этого скина.'}</p>
             </div>
           )}
         </div>
@@ -483,6 +674,15 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
             const isContinuousTrail = Boolean(
               toggleTweaks.find((t) => t.id === 'continuous-cursor-trail')?.applied
             )
+            const cursorHue =
+              cursorColorTweak?.applied && typeof cursorColorTweak.meta?.hue === 'number'
+                ? cursorColorTweak.meta.hue
+                : undefined
+            const trailHue =
+              cursorColorTweak?.applied && cursorColorTweak.meta?.recolorTrail !== false
+                ? cursorHue
+                : undefined
+
             return filteredTweaks.map((tweak) => (
               <TweakCard
                 key={tweak.id}
@@ -490,8 +690,21 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
                 isBusy={busyTweakId === tweak.id}
                 isTrailDisabled={isTrailDisabled}
                 isContinuousTrail={isContinuousTrail}
-                onToggle={() => void handleToggleTweak(tweak)}
+                cursorHue={cursorHue}
+                trailHue={trailHue}
+                onToggle={(opts) => void handleToggleTweak(tweak, opts)}
+                onUpdateOptions={(opts) => void handleUpdateTweakOptions(tweak, opts)}
                 onReset={() => void handleResetTweak(tweak)}
+                onReplaceTexture={(source) => void handleReplaceTexture(tweak, source)}
+                onPickCustomFile={() => void handlePickCustomFile(tweak)}
+                onOpenStudio={
+                  tweak.id === 'follow-points'
+                    ? () => {
+                        setMainView('colors')
+                        setColorSubTab('follow-points')
+                      }
+                    : undefined
+                }
               />
             ))
           })()}
@@ -684,54 +897,65 @@ interface TweakCardProps {
   isBusy: boolean
   isTrailDisabled?: boolean
   isContinuousTrail?: boolean
-  onToggle: () => void
+  cursorHue?: number
+  trailHue?: number
+  onToggle: (options?: Record<string, any>) => void
+  onUpdateOptions?: (options: Record<string, any>) => void
   onReset: () => void
+  onReplaceTexture?: (source: { filePath?: string; fileBufferBase64?: string; fileName?: string }) => void
+  onPickCustomFile?: () => void
+  onOpenStudio?: () => void
 }
 
 const COLOR_PRESETS = [
-  { name: 'Красный', hue: 0, hex: '#ff453a' },
-  { name: 'Оранжевый', hue: 30, hex: '#ff9f0a' },
-  { name: 'Желтый', hue: 60, hex: '#ffd60a' },
-  { name: 'Зеленый', hue: 120, hex: '#32d74b' },
-  { name: 'Бирюзовый', hue: 175, hex: '#64d2ff' },
-  { name: 'Синий', hue: 215, hex: '#0a84ff' },
-  { name: 'Фиолетовый', hue: 275, hex: '#bf5af2' },
-  { name: 'Розовый', hue: 330, hex: '#ff375f' },
+  { id: 'red', name: 'Красный', hue: 0, hex: '#ff453a' },
+  { id: 'orange', name: 'Оранжевый', hue: 30, hex: '#ff9f0a' },
+  { id: 'yellow', name: 'Желтый', hue: 60, hex: '#ffd60a' },
+  { id: 'green', name: 'Зеленый', hue: 120, hex: '#32d74b' },
+  { id: 'turquoise', name: 'Бирюзовый', hue: 175, hex: '#64d2ff' },
+  { id: 'blue', name: 'Синий', hue: 215, hex: '#0a84ff' },
+  { id: 'purple', name: 'Фиолетовый', hue: 275, hex: '#bf5af2' },
+  { id: 'pink', name: 'Розовый', hue: 330, hex: '#ff375f' },
 ]
 
 const COMBO_COLOR_PRESETS = [
-  { name: 'Красный', hex: '#ff453a' },
-  { name: 'Оранжевый', hex: '#ff9f0a' },
-  { name: 'Желтый', hex: '#ffd60a' },
-  { name: 'Лайм', hex: '#32d74b' },
-  { name: 'Мята', hex: '#30e0a5' },
-  { name: 'Циан', hex: '#40c8e0' },
-  { name: 'Синий', hex: '#0a84ff' },
-  { name: 'Индиго', hex: '#5e5ce6' },
-  { name: 'Фиолетовый', hex: '#af52de' },
-  { name: 'Розовый', hex: '#ff2d55' },
-  { name: 'Белый', hex: '#ffffff' },
-  { name: 'Графит', hex: '#8e8e93' },
+  { id: 'red', name: 'Красный', hex: '#ff453a' },
+  { id: 'orange', name: 'Оранжевый', hex: '#ff9f0a' },
+  { id: 'yellow', name: 'Желтый', hex: '#ffd60a' },
+  { id: 'lime', name: 'Лайм', hex: '#32d74b' },
+  { id: 'mint', name: 'Мята', hex: '#30e0a5' },
+  { id: 'cyan', name: 'Циан', hex: '#40c8e0' },
+  { id: 'blue', name: 'Синий', hex: '#0a84ff' },
+  { id: 'indigo', name: 'Индиго', hex: '#5e5ce6' },
+  { id: 'purple', name: 'Фиолетовый', hex: '#af52de' },
+  { id: 'pink', name: 'Розовый', hex: '#ff2d55' },
+  { id: 'white', name: 'Белый', hex: '#ffffff' },
+  { id: 'graphite', name: 'Графит', hex: '#8e8e93' },
 ]
 
 const COMBO_THEMES = [
   {
+    id: 'standard',
     name: 'Стандарт',
     colors: ['255, 192, 0', '0, 202, 0', '18, 124, 255', '242, 24, 57'],
   },
   {
+    id: 'cyberpunk',
     name: 'Киберпанк',
     colors: ['0, 240, 255', '255, 0, 119', '153, 0, 255', '50, 215, 75'],
   },
   {
+    id: 'pastel',
     name: 'Пастель',
     colors: ['255, 179, 186', '255, 223, 186', '255, 255, 186', '186, 225, 255'],
   },
   {
+    id: 'sunset',
     name: 'Закат',
     colors: ['123, 31, 162', '244, 81, 30', '255, 179, 0', '233, 30, 99'],
   },
   {
+    id: 'monochrome',
     name: 'Монохром',
     colors: ['255, 255, 255', '144, 202, 249', '176, 190, 197'],
   },
@@ -742,10 +966,16 @@ function TweakCard({
   isBusy,
   isTrailDisabled,
   isContinuousTrail,
+  cursorHue,
+  trailHue,
   onToggle,
+  onUpdateOptions,
   onReset,
+  onReplaceTexture,
+  onPickCustomFile,
+  onOpenStudio,
 }: TweakCardProps) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const categoryLabels: Record<SkinTweakCategory, string> = {
     cursor: t('skinCustomizer.catCursor'),
     gameplay: t('skinCustomizer.catGameplay'),
@@ -753,32 +983,100 @@ function TweakCard({
     audio: t('skinCustomizer.catAudioSingle'),
   }
 
+  const [isDragOver, setIsDragOver] = useState(false)
+  const [localCursorSize, setLocalCursorSize] = useState<number>(
+    typeof tweak.meta?.cursorSize === 'number' ? tweak.meta.cursorSize : 1.0
+  )
+  const [localTrailThickness, setLocalTrailThickness] = useState<number>(
+    typeof tweak.meta?.trailThickness === 'number' ? tweak.meta.trailThickness : 15
+  )
+
+  const handleToggleWrapper = () => {
+    if (tweak.id === 'continuous-cursor-trail') {
+      onToggle({ cursorSize: localCursorSize, trailThickness: localTrailThickness })
+    } else {
+      onToggle()
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    if (isBusy || !onReplaceTexture) return
+
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      const file = files[0]
+      const path = window.tosuGui.getPathForFile ? window.tosuGui.getPathForFile(file) : (file as any).path
+      if (path) {
+        onReplaceTexture({ filePath: path, fileName: file.name })
+      } else {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const res = reader.result as string
+          const base64 = res.split(',')[1] || res
+          onReplaceTexture({ fileBufferBase64: base64, fileName: file.name })
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+  }
+
   const localizedTitle = t(`skinCustomizer.tweaks.${tweak.id}.title`)
-  const title = localizedTitle || tweak.title
-  const desc = t(`skinCustomizer.tweaks.${tweak.id}.desc`) || tweak.description
+  const title =
+    localizedTitle && localizedTitle !== `skinCustomizer.tweaks.${tweak.id}.title`
+      ? localizedTitle
+      : tweak.title
+  const localizedDesc = t(`skinCustomizer.tweaks.${tweak.id}.description`)
+  const desc =
+    localizedDesc && localizedDesc !== `skinCustomizer.tweaks.${tweak.id}.description`
+      ? localizedDesc
+      : tweak.description
 
   return (
     <div
       className={`customizer-card ${tweak.applied ? '-applied' : ''} ${
         isBusy ? '-busy' : ''
-      }`}
+      } ${isDragOver ? '-drag-over' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!isDragOver) setIsDragOver(true)
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragOver(false)
+      }}
+      onDrop={handleDrop}
     >
       {/* Top Header */}
       <div className="customizer-card-header">
-        <div className="customizer-card-titles">
-          <div className="customizer-card-title-row">
-            <span className="customizer-card-title">{title}</span>
-            <span className="customizer-card-badge">
-              {categoryLabels[tweak.category] || tweak.category}
+        <div className="customizer-card-header-left">
+          <span className="customizer-card-category">
+            {categoryLabels[tweak.category] || tweak.category}
+          </span>
+          {tweak.fileDetails?.badgeText && (
+            <span className="customizer-card-meta-badge" title={tweak.fileDetails.badgeText}>
+              {tweak.fileDetails.badgeText}
             </span>
-          </div>
-          {tweak.subtitle && (
-            <span className="customizer-card-subtitle">{tweak.subtitle}</span>
           )}
         </div>
 
-        {/* Toggle Switch */}
-        <div className="customizer-card-switch">
+        {/* Actions (Pick custom, Reset & Toggle) */}
+        <div className="customizer-card-actions">
+          {onPickCustomFile && (
+            <button
+              type="button"
+              className="customizer-icon-btn"
+              onClick={onPickCustomFile}
+              disabled={isBusy}
+              title={t('skinCustomizer.replaceTextureTooltip')}
+            >
+              <Upload size={13} />
+            </button>
+          )}
           {tweak.canReset && (
             <button
               type="button"
@@ -794,7 +1092,7 @@ function TweakCard({
             <input
               type="checkbox"
               checked={tweak.applied}
-              onChange={onToggle}
+              onChange={handleToggleWrapper}
               disabled={isBusy}
             />
             <span className="customizer-slider" />
@@ -804,6 +1102,12 @@ function TweakCard({
 
       {/* Preview Box */}
       <div className="customizer-card-preview">
+        {isDragOver && (
+          <div className="customizer-card-drop-overlay">
+            <Upload size={24} />
+            <span>{t('skinCustomizer.dropToReplace')}</span>
+          </div>
+        )}
         {tweak.previewType === 'cursor' ? (
           <CursorInteractivePreview
             key={`card-preview-${tweak.id}-${tweak.applied ? 'applied' : 'clean'}-${tweak.previewImage?.length || 0}`}
@@ -811,6 +1115,8 @@ function TweakCard({
             trailUrl={tweak.previewImage}
             trailDisabled={Boolean(tweak.id === 'cursor-trail' ? tweak.applied : isTrailDisabled)}
             continuousTrail={Boolean(tweak.id === 'continuous-cursor-trail' ? tweak.applied : isContinuousTrail)}
+            hueShift={cursorHue}
+            trailHueShift={trailHue}
           />
         ) : tweak.previewType === 'audio' ? (
           <AudioTweakPreview
@@ -839,6 +1145,74 @@ function TweakCard({
           {tweak.subtitle}
         </span>
         <p className="customizer-card-desc">{desc}</p>
+
+        {tweak.id === 'follow-points' && onOpenStudio && (
+          <div style={{ marginTop: '10px' }}>
+            <button
+              type="button"
+              className="customizer-btn -secondary"
+              style={{ width: '100%', justifyContent: 'center', fontSize: '11px', padding: '6px 10px' }}
+              onClick={onOpenStudio}
+            >
+              <Palette size={12} />
+              <span>{t('skinCustomizer.openInStudio')}</span>
+            </button>
+          </div>
+        )}
+        
+        {tweak.id === 'continuous-cursor-trail' && (
+          <div className="customizer-tweak-options" style={{ marginTop: '12px' }}>
+            <div className="combo-slider-row" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="combo-slider-label" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {lang === 'en' ? 'Cursor Size:' : 'Размер курсора:'}
+              </span>
+              <input
+                type="range"
+                min="0.5"
+                max="2.0"
+                step="0.1"
+                value={localCursorSize}
+                onChange={(e) => setLocalCursorSize(Number(e.target.value))}
+                className="combo-plain-slider"
+                disabled={isBusy}
+                title="Cursor Size (0.5x - 2.0x)"
+                style={{ flex: 1 }}
+              />
+              <span className="combo-slider-val" style={{ fontSize: '12px', fontWeight: 'bold' }}>{localCursorSize.toFixed(1)}x</span>
+            </div>
+            <div className="combo-slider-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+              <span className="combo-slider-label" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {lang === 'en' ? 'Thickness:' : 'Толщина:'}
+              </span>
+              <input
+                type="range"
+                min="10"
+                max="22"
+                step="1"
+                value={localTrailThickness}
+                onChange={(e) => setLocalTrailThickness(Number(e.target.value))}
+                className="combo-plain-slider"
+                disabled={isBusy}
+                title="Trail Thickness (10px - 22px)"
+                style={{ flex: 1 }}
+              />
+              <span className="combo-slider-val" style={{ fontSize: '12px', fontWeight: 'bold' }}>{localTrailThickness}px</span>
+            </div>
+            {tweak.applied && (
+              <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="customizer-btn -secondary"
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                  onClick={() => onUpdateOptions && onUpdateOptions({ cursorSize: localCursorSize, trailThickness: localTrailThickness })}
+                  disabled={isBusy || (tweak.meta?.cursorSize === localCursorSize && (tweak.meta?.trailThickness ?? 15.5) === localTrailThickness)}
+                >
+                  {lang === 'en' ? 'Apply Settings' : 'Применить настройки'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Card Footer */}
@@ -1192,6 +1566,7 @@ function ComboColorStudio({
             <div className="combo-swatches-grid">
               {COMBO_COLOR_PRESETS.map((p) => {
                 const isSelected = activeComboHex.toLowerCase() === p.hex.toLowerCase()
+                const displayName = t(`skinCustomizer.colorNames.${p.id}` as any) || p.name
                 return (
                   <button
                     key={p.hex}
@@ -1199,7 +1574,7 @@ function ComboColorStudio({
                     className={`combo-swatch ${isSelected ? '-active' : ''}`}
                     style={{ backgroundColor: p.hex }}
                     onClick={() => handleComboPresetSelect(p.hex)}
-                    title={p.name}
+                    title={displayName}
                     disabled={isBusy}
                   />
                 )
@@ -1219,7 +1594,7 @@ function ComboColorStudio({
                   max="360"
                   value={Math.round(currentComboHue)}
                   onChange={(e) => handleComboHueSlider(Number(e.target.value))}
-                  className="combo-hue-slider"
+                  className="combo-plain-slider"
                   disabled={isBusy}
                   title="Hue (0-360°)"
                 />
@@ -1268,27 +1643,30 @@ function ComboColorStudio({
           <div className="color-studio-section">
             <span className="color-studio-section-title">{t('skinCustomizer.themes')}</span>
             <div className="combo-themes-list">
-              {COMBO_THEMES.map((theme) => (
-                <button
-                  key={theme.name}
-                  type="button"
-                  className="combo-theme-btn"
-                  onClick={() => handleApplyTheme(theme.colors)}
-                  disabled={isBusy}
-                  title={theme.name}
-                >
-                  <span className="combo-theme-preview-dots">
-                    {theme.colors.map((c, i) => (
-                      <span
-                        key={i}
-                        className="combo-theme-dot"
-                        style={{ backgroundColor: rgbStringToHex(c) }}
-                      />
-                    ))}
-                  </span>
-                  {theme.name}
-                </button>
-              ))}
+              {COMBO_THEMES.map((theme) => {
+                const displayName = t(`skinCustomizer.themeNames.${theme.id}` as any) || theme.name
+                return (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    className="combo-theme-btn"
+                    onClick={() => handleApplyTheme(theme.colors)}
+                    disabled={isBusy}
+                    title={displayName}
+                  >
+                    <span className="combo-theme-preview-dots">
+                      {theme.colors.map((c, i) => (
+                        <span
+                          key={i}
+                          className="combo-theme-dot"
+                          style={{ backgroundColor: rgbStringToHex(c) }}
+                        />
+                      ))}
+                    </span>
+                    {displayName}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -1492,17 +1870,20 @@ function CursorColorStudio({
           <div className="color-studio-section">
             <span className="color-studio-section-title">{t('skinCustomizer.quickCursorColors')}</span>
             <div className="cursor-color-palette">
-              {COLOR_PRESETS.map((p) => (
-                <button
-                  key={p.hue}
-                  type="button"
-                  className={`cursor-color-swatch ${selectedHue === p.hue ? '-active' : ''}`}
-                  style={{ backgroundColor: p.hex }}
-                  onClick={() => handlePresetSelect(p.hue)}
-                  title={p.name}
-                  disabled={isBusy}
-                />
-              ))}
+              {COLOR_PRESETS.map((p) => {
+                const displayName = t(`skinCustomizer.colorNames.${p.id}` as any) || p.name
+                return (
+                  <button
+                    key={p.hue}
+                    type="button"
+                    className={`cursor-color-swatch ${selectedHue === p.hue ? '-active' : ''}`}
+                    style={{ backgroundColor: p.hex }}
+                    onClick={() => handlePresetSelect(p.hue)}
+                    title={displayName}
+                    disabled={isBusy}
+                  />
+                )
+              })}
             </div>
           </div>
 
@@ -1904,6 +2285,8 @@ function ImageTweakPreview({
   imageUrl?: string | null
   applied: boolean
 }) {
+  const [isSmall, setIsSmall] = useState(false)
+
   if (!imageUrl) {
     return (
       <div className="audio-preview-container">
@@ -1920,8 +2303,14 @@ function ImageTweakPreview({
       <img
         src={imageUrl}
         alt="Preview"
-        className={`customizer-preview-img ${applied ? '-suppressed' : ''}`}
+        className={`customizer-preview-img ${applied ? '-suppressed' : ''} ${isSmall ? '-pixelated' : ''}`}
         draggable={false}
+        onLoad={(e) => {
+          const img = e.currentTarget
+          if (img.naturalWidth > 0 && (img.naturalWidth <= 64 || img.naturalHeight <= 64)) {
+            setIsSmall(true)
+          }
+        }}
       />
       {applied && (
         <span className="customizer-preview-overlay-badge -hidden">
@@ -2033,6 +2422,7 @@ function CursorInteractivePreview({
   const lastPosRef = useRef<{ x: number; y: number } | null>(null)
   const currentPosRef = useRef<{ x: number; y: number }>({ x: 120, y: 75 })
   const isHoveredRef = useRef(false)
+  const distAccumRef = useRef<number>(0)
   const cursorImgRef = useRef<HTMLImageElement | null>(null)
   const trailImgRef = useRef<HTMLImageElement | null>(null)
   const tintedCursorRef = useRef<HTMLCanvasElement | null>(null)
@@ -2124,7 +2514,7 @@ function CursorInteractivePreview({
     if (!ctx) return
 
     let animId: number
-    const LIFESPAN = continuousTrail ? 520 : 360 // ms — longer lingering for continuous trail
+    const LIFESPAN = continuousTrail ? 480 : 340 // ms
 
     const render = (time: number) => {
       const dpr = window.devicePixelRatio || 1
@@ -2153,14 +2543,32 @@ function CursorInteractivePreview({
           const dx = x - last.x
           const dy = y - last.y
           const dist = Math.hypot(dx, dy)
-          const stepDist = continuousTrail ? 1.8 : 4
-          const steps = Math.max(1, Math.min(Math.floor(dist / stepDist), continuousTrail ? 36 : 16))
-          for (let i = 1; i <= steps; i++) {
-            particlesRef.current.push({
-              x: last.x + dx * (i / steps),
-              y: last.y + dy * (i / steps),
-              birth: now,
-            })
+          if (continuousTrail) {
+            const stepDist = 1.5
+            const steps = Math.max(1, Math.min(Math.floor(dist / stepDist), 36))
+            for (let i = 1; i <= steps; i++) {
+              particlesRef.current.push({
+                x: last.x + dx * (i / steps),
+                y: last.y + dy * (i / steps),
+                birth: now,
+              })
+            }
+          } else {
+            // Standard discrete trail: spaced dots with visible gaps
+            distAccumRef.current += dist
+            const stepDist = 24
+            if (distAccumRef.current >= stepDist) {
+              const count = Math.min(Math.floor(distAccumRef.current / stepDist), 6)
+              for (let i = 1; i <= count; i++) {
+                const frac = Math.min(1, Math.max(0, 1 - (distAccumRef.current - i * stepDist) / (dist || 1)))
+                particlesRef.current.push({
+                  x: last.x + dx * frac,
+                  y: last.y + dy * frac,
+                  birth: now,
+                })
+              }
+              distAccumRef.current %= stepDist
+            }
           }
         } else if (!trailDisabled) {
           particlesRef.current.push({ x, y, birth: now })
@@ -2182,25 +2590,38 @@ function CursorInteractivePreview({
           const p = particlesRef.current[i]
           const age = now - p.birth
           const progress = age / LIFESPAN // 0 = newly born, 1 = dying
-          // Smooth decay curve matching osu!
+          // Continuous trail: thin, sleek glowing ribbon
+          // Standard trail: distinct spaced circular dots
           const alpha = continuousTrail
-            ? Math.max(0, Math.pow(1 - progress, 1.1) * 0.92)
+            ? Math.max(0, Math.pow(1 - progress, 1.05) * 0.95)
             : Math.max(0, Math.pow(1 - progress, 1.25) * 0.85)
+          const isImgLoaded = Boolean(trailDrawable && (trailDrawable instanceof HTMLCanvasElement || (trailDrawable.complete && trailDrawable.naturalWidth > 0)))
+          const trailW = isImgLoaded ? (((trailDrawable as any).width) || (trailDrawable as any).naturalWidth || 32) : 32
+          const baseTrailSize = isImgLoaded ? Math.min(24, Math.max(12, trailW * 0.6)) : 16
           const size = continuousTrail
-            ? Math.max(16, 28 * (1 - progress * 0.25))
-            : Math.max(14, 28 * (1 - progress * 0.3))
+            ? Math.max(3.5, 8.5 * (1 - progress * 0.55))
+            : Math.max(baseTrailSize * 0.5, baseTrailSize * (1 - progress * 0.45))
 
           ctx.save()
+          if (continuousTrail) {
+            ctx.globalCompositeOperation = 'lighter'
+          }
           ctx.globalAlpha = alpha
 
-          if (trailDrawable && (trailDrawable instanceof HTMLCanvasElement || (trailDrawable.complete && trailDrawable.naturalWidth > 0))) {
+          if (isImgLoaded && trailDrawable) {
             ctx.drawImage(trailDrawable, p.x - size / 2, p.y - size / 2, size, size)
           } else {
             // Authentic glowing round particle fallback
             const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, size / 2)
-            grad.addColorStop(0, 'rgba(255, 255, 255, 0.95)')
-            grad.addColorStop(0.35, 'rgba(255, 180, 220, 0.65)')
-            grad.addColorStop(1, 'rgba(255, 102, 170, 0)')
+            if (continuousTrail) {
+              grad.addColorStop(0, 'rgba(255, 255, 255, 0.98)')
+              grad.addColorStop(0.5, 'rgba(255, 180, 220, 0.85)')
+              grad.addColorStop(1, 'rgba(255, 102, 170, 0)')
+            } else {
+              grad.addColorStop(0, 'rgba(255, 255, 255, 0.95)')
+              grad.addColorStop(0.35, 'rgba(255, 180, 220, 0.65)')
+              grad.addColorStop(1, 'rgba(255, 102, 170, 0)')
+            }
             ctx.fillStyle = grad
             ctx.beginPath()
             ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2)
@@ -2215,8 +2636,8 @@ function CursorInteractivePreview({
         ? tintedCursorRef.current
         : cursorImgRef.current
       const cursorPos = currentPosRef.current
-      const cursorSize = 32
-
+      const cursorW = (cursorDrawable && (cursorDrawable as any).width) ? (cursorDrawable as any).width : ((cursorDrawable as any)?.naturalWidth || 32)
+      const cursorSize = cursorW * 0.75
       ctx.save()
       ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
       ctx.shadowBlur = 5
@@ -2252,6 +2673,7 @@ function CursorInteractivePreview({
 
   const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
     isHoveredRef.current = true
+    distAccumRef.current = 0
     if (!containerRef.current) return
     const rect = containerRef.current.getBoundingClientRect()
     const x = Math.max(8, Math.min(rect.width - 8, e.clientX - rect.left))
@@ -2274,24 +2696,42 @@ function CursorInteractivePreview({
       const dx = x - last.x
       const dy = y - last.y
       const dist = Math.hypot(dx, dy)
-      // Interpolate for a continuous smooth ribbon
-      const stepDist = continuousTrail ? 1.8 : 4.5
-      const steps = Math.max(1, Math.min(Math.floor(dist / stepDist), continuousTrail ? 48 : 28))
 
-      for (let i = 1; i <= steps; i++) {
-        const t = i / steps
-        particlesRef.current.push({
-          x: last.x + dx * t,
-          y: last.y + dy * t,
-          birth: now,
-        })
+      if (continuousTrail) {
+        // Continuous smooth thin ribbon
+        const stepDist = 1.5
+        const steps = Math.max(1, Math.min(Math.floor(dist / stepDist), 48))
+        for (let i = 1; i <= steps; i++) {
+          const t = i / steps
+          particlesRef.current.push({
+            x: last.x + dx * t,
+            y: last.y + dy * t,
+            birth: now,
+          })
+        }
+      } else {
+        // Standard discrete trail: spaced dots with visible gaps
+        distAccumRef.current += dist
+        const stepDist = 24
+        if (distAccumRef.current >= stepDist) {
+          const count = Math.min(Math.floor(distAccumRef.current / stepDist), 10)
+          for (let i = 1; i <= count; i++) {
+            const frac = Math.min(1, Math.max(0, 1 - (distAccumRef.current - i * stepDist) / (dist || 1)))
+            particlesRef.current.push({
+              x: last.x + dx * frac,
+              y: last.y + dy * frac,
+              birth: now,
+            })
+          }
+          distAccumRef.current %= stepDist
+        }
       }
     } else if (!trailDisabled) {
       particlesRef.current.push({ x, y, birth: now })
     }
 
     // Limit buffer length
-    const maxParticles = continuousTrail ? 260 : 140
+    const maxParticles = continuousTrail ? 260 : 100
     if (particlesRef.current.length > maxParticles) {
       particlesRef.current = particlesRef.current.slice(-maxParticles)
     }
@@ -2303,6 +2743,7 @@ function CursorInteractivePreview({
   const handleMouseLeave = () => {
     isHoveredRef.current = false
     lastPosRef.current = null
+    distAccumRef.current = 0
   }
 
   const { t } = useI18n()
@@ -2456,6 +2897,1011 @@ function AudioTweakPreview({
         <span className="customizer-preview-overlay-badge -hidden">
           {t('skinCustomizer.mutedBadge')}
         </span>
+      )}
+    </div>
+  )
+}
+
+// --- Follow Points Studio Component ---
+
+function tintFollowpointSprite(
+  img: HTMLImageElement,
+  hue: number,
+  opacity: number
+): HTMLCanvasElement | null {
+  const w = img.naturalWidth || img.width
+  const h = img.naturalHeight || img.height
+  if (!w || !h) return null
+
+  const off = document.createElement('canvas')
+  off.width = w
+  off.height = h
+  const octx = off.getContext('2d')
+  if (!octx) return null
+
+  octx.drawImage(img, 0, 0)
+  const imgData = octx.getImageData(0, 0, w, h)
+  const data = imgData.data
+  const alphaFactor = Math.max(0.05, Math.min(1.0, opacity / 100))
+
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3]
+    if (a < 5) continue
+
+    const r = data[i]
+    const g = data[i + 1]
+    const b = data[i + 2]
+    const [, , l] = rgbToHsl(r, g, b)
+
+    const [nr, ng, nb] = hslToRgb(hue, 0.88, l)
+    data[i] = nr
+    data[i + 1] = ng
+    data[i + 2] = nb
+    data[i + 3] = Math.round(a * alphaFactor)
+  }
+
+  octx.putImageData(imgData, 0, 0)
+  return off
+}
+
+interface FollowPointsStudioProps {
+  tweak: SkinTweakInfo
+  comboTweak?: SkinTweakInfo
+  isBusy: boolean
+  onCustomize: (options: FollowPointsCustomOptions) => Promise<void>
+  onReset: () => void
+}
+
+function FollowPointsStudio({
+  tweak,
+  comboTweak,
+  isBusy,
+  onCustomize,
+  onReset,
+}: FollowPointsStudioProps) {
+  const { t, lang } = useI18n()
+  const initialHue = typeof tweak.meta?.hue === 'number' ? tweak.meta.hue : 200
+  const initialScale = typeof tweak.meta?.scale === 'number' ? tweak.meta.scale : 1.0
+  const initialOpacity = typeof tweak.meta?.opacity === 'number' ? tweak.meta.opacity : 100
+
+  const [hue, setHue] = useState<number>(initialHue)
+  const [scale, setScale] = useState<number>(initialScale)
+  const [opacity, setOpacity] = useState<number>(initialOpacity)
+  const [hasChanged, setHasChanged] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (typeof tweak.meta?.hue === 'number') setHue(tweak.meta.hue)
+    if (typeof tweak.meta?.scale === 'number') setScale(tweak.meta.scale)
+    if (typeof tweak.meta?.opacity === 'number') setOpacity(tweak.meta.opacity)
+    setHasChanged(false)
+  }, [tweak.meta])
+
+  const handleHueChange = (newHue: number) => {
+    setHue(newHue)
+    setHasChanged(true)
+  }
+
+  const handleScaleChange = (newScale: number) => {
+    setScale(newScale)
+    setHasChanged(true)
+  }
+
+  const handleOpacityChange = (newOpacity: number) => {
+    setOpacity(newOpacity)
+    setHasChanged(true)
+  }
+
+  const handleApply = () => {
+    void onCustomize({ hue, scale, opacity })
+    setHasChanged(false)
+  }
+
+  const handleCancel = () => {
+    setHue(initialHue)
+    setScale(initialScale)
+    setOpacity(initialOpacity)
+    setHasChanged(false)
+  }
+
+  const activeHex = hslToHex(hue, 0.85, 0.55)
+
+  const hitcircleUrl = tweak.meta?.hitcircleImage || comboTweak?.meta?.hitcircleImage
+  const overlayUrl = tweak.meta?.hitcircleOverlayImage || comboTweak?.meta?.hitcircleOverlayImage
+  const approachCircleUrl = tweak.meta?.approachCircleImage || comboTweak?.meta?.approachCircleImage
+  const digitImages = tweak.meta?.digitImages || comboTweak?.meta?.digitImages
+  const default1Url = tweak.meta?.default1Image || comboTweak?.meta?.default1Image
+  const comboColors: string[] =
+    (tweak.meta?.comboColors as string[]) ||
+    (comboTweak?.meta?.colors as string[]) ||
+    ['255, 192, 0', '0, 202, 0', '18, 124, 255', '242, 24, 57']
+  const followPointUrl = tweak.meta?.followPointImage || tweak.previewImage
+
+  return (
+    <div className="color-studio-pane">
+      <div className="color-studio-header">
+        <div className="color-studio-header-info">
+          <div className="color-studio-title-badge-row">
+            <h2>{t('skinCustomizer.followPointsTitle')}</h2>
+            <span className="color-studio-tag">followpoint*.png</span>
+          </div>
+          <span className="color-studio-header-files">followpoint.png, followpoint@2x.png</span>
+          <p className="color-studio-header-desc">{t('skinCustomizer.followPointsDesc')}</p>
+        </div>
+        <div className="color-studio-header-status">
+          <span className={`customizer-status-badge ${Boolean(tweak.meta?.isCustomized) ? '-active' : ''}`}>
+            {Boolean(tweak.meta?.isCustomized)
+              ? (lang === 'en' ? 'Custom follow points active' : 'Кастомные линии активны')
+              : (lang === 'en' ? 'Original skin follow points' : 'Исходные линии скина')}
+          </span>
+          {Boolean(tweak.meta?.isCustomized) && (
+            <button
+              type="button"
+              className="customizer-btn -danger"
+              onClick={onReset}
+              disabled={isBusy}
+              title={t('skinCustomizer.revertBackupTooltip')}
+            >
+              <RotateCcw size={13} />
+              {t('skinCustomizer.revertFollowPoints')}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="color-studio-grid">
+        <div className="color-studio-preview-col">
+          <div className="color-studio-preview-box">
+            <FollowPointsInteractivePreview
+              hue={hue}
+              scale={scale}
+              opacity={opacity}
+              followPointUrl={followPointUrl}
+              hitcircleUrl={hitcircleUrl}
+              overlayUrl={overlayUrl}
+              approachCircleUrl={approachCircleUrl}
+              digitImages={digitImages}
+              default1Url={default1Url}
+              comboColors={comboColors}
+            />
+          </div>
+
+          <div className="color-studio-trail-info-card">
+            <div className="color-studio-trail-info-row">
+              <span className="color-studio-trail-info-title">{t('skinCustomizer.followPointsStatus')}</span>
+              <span className={`color-studio-trail-badge ${Boolean(tweak.meta?.isCustomized) ? '-enabled' : '-disabled'}`}>
+                {Boolean(tweak.meta?.isCustomized)
+                  ? t('skinCustomizer.followPointsActive')
+                  : t('skinCustomizer.followPointsOriginal')}
+              </span>
+            </div>
+            <p className="color-studio-trail-info-desc">
+              {Boolean(tweak.meta?.isCustomized)
+                ? t('skinCustomizer.followPointsCustomDesc', { hue, scale: scale.toFixed(2), opacity })
+                : t('skinCustomizer.followPointsOriginalDesc')}
+            </p>
+            <div className="color-studio-stats-row">
+              <span className="color-studio-stat-pill">
+                <span className="color-studio-stat-pill-label">Scale:</span>
+                <span className="color-studio-stat-pill-val">{scale.toFixed(2)}x</span>
+              </span>
+              <span className="color-studio-stat-pill">
+                <span className="color-studio-stat-pill-label">Opacity:</span>
+                <span className="color-studio-stat-pill-val">{opacity}%</span>
+              </span>
+              <span className="color-studio-stat-pill">
+                <span className="color-studio-stat-pill-label">Hue:</span>
+                <span className="color-studio-stat-pill-val" style={{ color: activeHex }}>{hue}°</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="color-studio-controls-col">
+          <div className="color-ctrl-card">
+            {/* Presets Swatches */}
+            <div className="color-ctrl-section-title">
+              {t('skinCustomizer.followPointsHue')}:
+              <span className="color-hue-val" style={{ color: activeHex, marginLeft: 8 }}>
+                {hue}°
+              </span>
+            </div>
+            <div className="cursor-color-palette" style={{ marginBottom: 14 }}>
+              {COLOR_PRESETS.map((preset) => {
+                const displayName = t(`skinCustomizer.colorNames.${preset.id}` as any) || preset.name
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`cursor-color-swatch ${hue === preset.hue ? '-active' : ''}`}
+                    onClick={() => handleHueChange(preset.hue)}
+                    style={{ backgroundColor: preset.hex }}
+                    title={displayName}
+                    disabled={isBusy}
+                  />
+                )
+              })}
+            </div>
+
+            {/* Hue Slider */}
+            <div className="cursor-slider-wrapper" style={{ marginBottom: 18 }}>
+              <input
+                type="range"
+                min="0"
+                max="360"
+                value={hue}
+                onChange={(e) => handleHueChange(Number(e.target.value))}
+                className="cursor-hue-slider"
+                disabled={isBusy}
+              />
+            </div>
+
+            {/* Scale Slider */}
+            <div className="color-ctrl-section-title" style={{ marginTop: 4 }}>
+              {t('skinCustomizer.followPointsThickness')}:
+              <span className="color-hue-val" style={{ marginLeft: 8 }}>{scale.toFixed(2)}x</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+              <input
+                type="range"
+                min="0.5"
+                max="2.0"
+                step="0.05"
+                value={scale}
+                onChange={(e) => handleScaleChange(Number(e.target.value))}
+                className="combo-plain-slider"
+                disabled={isBusy}
+                style={{ flex: 1 }}
+              />
+              <span style={{ fontSize: 12, fontWeight: 'bold', width: 44 }}>{Math.round(scale * 100)}%</span>
+            </div>
+
+            {/* Opacity Slider */}
+            <div className="color-ctrl-section-title" style={{ marginTop: 4 }}>
+              {t('skinCustomizer.followPointsOpacity')}:
+              <span className="color-hue-val" style={{ marginLeft: 8 }}>{opacity}%</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <input
+                type="range"
+                min="20"
+                max="100"
+                step="5"
+                value={opacity}
+                onChange={(e) => handleOpacityChange(Number(e.target.value))}
+                className="combo-plain-slider"
+                disabled={isBusy}
+                style={{ flex: 1 }}
+              />
+              <span style={{ fontSize: 12, fontWeight: 'bold', width: 44 }}>{opacity}%</span>
+            </div>
+
+            {/* Actions */}
+            <div className="color-studio-footer-actions">
+              <button
+                type="button"
+                className="customizer-btn -primary"
+                onClick={handleApply}
+                disabled={isBusy || (!hasChanged && !Boolean(tweak.meta?.isCustomized))}
+              >
+                {isBusy ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
+                {t('skinCustomizer.applyFollowPoints')}
+              </button>
+
+              {Boolean(tweak.meta?.isCustomized) && (
+                <button
+                  type="button"
+                  className="customizer-btn -danger"
+                  onClick={onReset}
+                  disabled={isBusy}
+                  title={t('skinCustomizer.revertBackupTooltip')}
+                >
+                  <RotateCcw size={14} />
+                  {t('skinCustomizer.revertFollowPoints')}
+                </button>
+              )}
+
+              {hasChanged && (
+                <button
+                  type="button"
+                  className="customizer-btn -secondary"
+                  onClick={handleCancel}
+                  disabled={isBusy}
+                >
+                  {t('skinCustomizer.cancelChanges')}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+interface FollowPointsInteractivePreviewProps {
+  hue: number
+  scale: number
+  opacity: number
+  followPointUrl?: string | null
+  hitcircleUrl?: string | null
+  overlayUrl?: string | null
+  approachCircleUrl?: string | null
+  digitImages?: Record<number, string | null>
+  default1Url?: string | null
+  comboColors?: string[]
+}
+
+function FollowPointsInteractivePreview({
+  hue,
+  scale,
+  opacity,
+  followPointUrl,
+  hitcircleUrl,
+  overlayUrl,
+  approachCircleUrl,
+  digitImages,
+  default1Url,
+  comboColors,
+}: FollowPointsInteractivePreviewProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  const fpImgRef = useRef<HTMLImageElement | null>(null)
+  const tintedFpRef = useRef<HTMLCanvasElement | null>(null)
+
+  const hitcircleImgRef = useRef<HTMLImageElement | null>(null)
+  const tintedHitcirclesRef = useRef<Record<number, HTMLCanvasElement | null>>({})
+
+  const overlayImgRef = useRef<HTMLImageElement | null>(null)
+  const approachCircleImgRef = useRef<HTMLImageElement | null>(null)
+  const tintedApproachRef = useRef<HTMLCanvasElement | null>(null)
+  const digitImgsRef = useRef<Record<number, HTMLImageElement | null>>({})
+
+  const effectiveColors = useMemo(() => {
+    return comboColors && comboColors.length > 0
+      ? comboColors
+      : ['255, 192, 0', '0, 202, 0', '18, 124, 255', '242, 24, 57']
+  }, [comboColors])
+
+  // Load Follow Point sprite (do NOT set crossOrigin on data URLs)
+  useEffect(() => {
+    if (!followPointUrl) {
+      fpImgRef.current = null
+      tintedFpRef.current = null
+      return
+    }
+    const img = new Image()
+    const handleLoaded = () => {
+      if (img.naturalWidth > 1 && img.naturalHeight > 1) {
+        fpImgRef.current = img
+        tintedFpRef.current = tintFollowpointSprite(img, hue, opacity)
+      } else {
+        fpImgRef.current = null
+        tintedFpRef.current = null
+      }
+    }
+    img.onload = handleLoaded
+    img.src = followPointUrl
+    if (img.complete) {
+      handleLoaded()
+    }
+  }, [followPointUrl])
+
+  // Re-tint Follow Point sprite when hue/opacity change
+  useEffect(() => {
+    if (fpImgRef.current && fpImgRef.current.naturalWidth > 1) {
+      tintedFpRef.current = tintFollowpointSprite(fpImgRef.current, hue, opacity)
+    }
+  }, [hue, opacity])
+
+  // Retint hitcircles
+  const reTintHitcircles = (img: HTMLImageElement | null, colors: string[]) => {
+    if (!img || img.naturalWidth <= 1) {
+      tintedHitcirclesRef.current = {}
+      return
+    }
+    const res: Record<number, HTMLCanvasElement | null> = {}
+    for (let i = 0; i < 3; i++) {
+      const colStr = colors[i % colors.length] || '255, 192, 0'
+      const rgb = rgbStringToRgb(colStr)
+      res[i] = tintHitcircleSprite(img, rgb)
+    }
+    tintedHitcirclesRef.current = res
+  }
+
+  // Load Hitcircle sprite
+  useEffect(() => {
+    if (!hitcircleUrl) {
+      hitcircleImgRef.current = null
+      tintedHitcirclesRef.current = {}
+      return
+    }
+    const img = new Image()
+    const handleLoaded = () => {
+      hitcircleImgRef.current = img
+      reTintHitcircles(img, effectiveColors)
+    }
+    img.onload = handleLoaded
+    img.src = hitcircleUrl
+    if (img.complete) handleLoaded()
+  }, [hitcircleUrl])
+
+  useEffect(() => {
+    if (hitcircleImgRef.current) {
+      reTintHitcircles(hitcircleImgRef.current, effectiveColors)
+    }
+  }, [effectiveColors])
+
+  // Load Hitcircle Overlay sprite
+  useEffect(() => {
+    if (!overlayUrl) {
+      overlayImgRef.current = null
+      return
+    }
+    const img = new Image()
+    img.onload = () => {
+      overlayImgRef.current = img
+    }
+    img.src = overlayUrl
+    if (img.complete) overlayImgRef.current = img
+  }, [overlayUrl])
+
+  // Load Approach Circle sprite
+  useEffect(() => {
+    if (!approachCircleUrl) {
+      approachCircleImgRef.current = null
+      tintedApproachRef.current = null
+      return
+    }
+    const img = new Image()
+    const handleLoaded = () => {
+      approachCircleImgRef.current = img
+      const firstCol = effectiveColors[0] || '255, 192, 0'
+      tintedApproachRef.current = tintHitcircleSprite(img, rgbStringToRgb(firstCol))
+    }
+    img.onload = handleLoaded
+    img.src = approachCircleUrl
+    if (img.complete) handleLoaded()
+  }, [approachCircleUrl, effectiveColors])
+
+  // Load digit sprites 1..3
+  useEffect(() => {
+    const nextMap: Record<number, HTMLImageElement | null> = {}
+    for (let d = 1; d <= 8; d++) {
+      const url = digitImages?.[d] || (d === 1 ? default1Url : null)
+      if (url) {
+        const img = new Image()
+        img.onload = () => {
+          nextMap[d] = img
+        }
+        img.src = url
+        nextMap[d] = img
+      } else {
+        nextMap[d] = null
+      }
+    }
+    digitImgsRef.current = nextMap
+  }, [digitImages, default1Url])
+
+  // Canvas render loop
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const container = containerRef.current
+    if (!canvas || !container) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    let animId: number
+    const startTime = performance.now()
+
+    const render = (time: number) => {
+      const rect = container.getBoundingClientRect()
+      const dpr = window.devicePixelRatio || 1
+      const w = Math.round(rect.width)
+      const h = Math.round(rect.height)
+
+      if (w <= 0 || h <= 0) {
+        animId = requestAnimationFrame(render)
+        return
+      }
+
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+        canvas.width = Math.round(w * dpr)
+        canvas.height = Math.round(h * dpr)
+      }
+
+      ctx.save()
+      ctx.scale(dpr, dpr)
+      ctx.clearRect(0, 0, w, h)
+
+      const noteRadius = Math.min(36, Math.max(26, w * 0.08))
+      const c1 = {
+        x: w * 0.16,
+        y: h * 0.68,
+        r: noteRadius,
+        comboNumber: 1,
+        colorStr: effectiveColors[0] || '255, 192, 0',
+        isNext: true,
+      }
+      const c2 = {
+        x: w * 0.50,
+        y: h * 0.32,
+        r: noteRadius,
+        comboNumber: 2,
+        colorStr: effectiveColors[1 % effectiveColors.length] || '0, 202, 0',
+        isNext: false,
+      }
+      const c3 = {
+        x: w * 0.84,
+        y: h * 0.68,
+        r: noteRadius,
+        comboNumber: 3,
+        colorStr: effectiveColors[2 % effectiveColors.length] || '18, 124, 255',
+        isNext: false,
+      }
+
+      const elapsed = (time - startTime) / 1000
+
+      // Helper to draw follow point guides between two notes
+      const drawFollowPoints = (
+        p1: { x: number; y: number; r: number },
+        p2: { x: number; y: number; r: number },
+        segIdx: number
+      ) => {
+        const dx = p2.x - p1.x
+        const dy = p2.y - p1.y
+        const dist = Math.hypot(dx, dy)
+        const angle = Math.atan2(dy, dx)
+
+        const startMargin = p1.r + 12 * Math.max(0.7, Math.min(1.4, scale))
+        const endMargin = dist - p2.r - 12 * Math.max(0.7, Math.min(1.4, scale))
+        const availableDist = endMargin - startMargin
+        if (availableDist <= 10) return
+
+        const spacing = Math.max(26, Math.min(52, 34 * Math.max(0.75, Math.min(1.25, scale))))
+        const numPoints = Math.max(2, Math.floor(availableDist / spacing))
+        const step = availableDist / (numPoints + 1)
+        const segPhase = segIdx * 0.45
+
+        for (let i = 1; i <= numPoints; i++) {
+          const d = startMargin + step * i
+          const px = p1.x + Math.cos(angle) * d
+          const py = p1.y + Math.sin(angle) * d
+
+          const normDist = i / (numPoints + 1)
+          const wave = Math.sin((elapsed * 3.5 - normDist * 2.8 - segPhase) * Math.PI)
+          const waveIntensity = Math.max(0, wave)
+          const pulse = 1 + 0.16 * waveIntensity
+          const dotAlpha = Math.max(0.4, Math.min(1.0, 0.65 + 0.35 * waveIntensity))
+
+          ctx.save()
+          ctx.translate(px, py)
+          ctx.rotate(angle)
+
+          const fpDrawable = tintedFpRef.current || fpImgRef.current
+          if (fpDrawable) {
+            const rawW = (fpDrawable as any).naturalWidth || (fpDrawable as any).width || 32
+            const rawH = (fpDrawable as any).naturalHeight || (fpDrawable as any).height || 32
+
+            let drawW: number
+            let drawH: number
+            if (rawW > rawH * 1.5) {
+              // Authentic horizontal stripe / dashed pill sprite (e.g. WhiteCat 128x20)
+              const aspect = rawW / rawH
+              drawW = Math.max(16, Math.min(36, 28 * scale * pulse))
+              drawH = Math.max(3, drawW / aspect)
+            } else {
+              // Dot / chevron sprite
+              drawW = Math.max(6, 16 * scale * pulse)
+              drawH = drawW / (rawW / rawH)
+            }
+
+            const [hr, hg, hb] = hslToRgb(hue, 0.88, 0.55)
+            ctx.shadowColor = `rgba(${hr}, ${hg}, ${hb}, ${0.55 * dotAlpha})`
+            ctx.shadowBlur = 6 * scale
+            ctx.globalAlpha = (opacity / 100) * dotAlpha
+            ctx.drawImage(fpDrawable, -drawW / 2, -drawH / 2, drawW, drawH)
+          } else {
+            // Fallback authentic dashed stripe (полоска), sleek and clean
+            const [hr, hg, hb] = hslToRgb(hue, 0.88, 0.55)
+            const curAlpha = (opacity / 100) * dotAlpha
+            const stripeW = Math.max(12, Math.min(26, 18 * scale * pulse))
+            const stripeH = Math.max(3.5, 4.5 * scale)
+
+            ctx.shadowColor = `rgba(${hr}, ${hg}, ${hb}, ${0.65 * curAlpha})`
+            ctx.shadowBlur = 6 * scale
+            ctx.fillStyle = `rgba(${hr}, ${hg}, ${hb}, ${curAlpha})`
+
+            ctx.beginPath()
+            if (typeof (ctx as any).roundRect === 'function') {
+              ;(ctx as any).roundRect(-stripeW / 2, -stripeH / 2, stripeW, stripeH, stripeH / 2)
+            } else {
+              ctx.rect(-stripeW / 2, -stripeH / 2, stripeW, stripeH)
+            }
+            ctx.fill()
+          }
+
+          ctx.restore()
+        }
+      }
+
+      // Draw lines: 1 -> 2 and 2 -> 3
+      drawFollowPoints(c1, c2, 0)
+      drawFollowPoints(c2, c3, 1)
+
+      // Helper to draw hitcircle note
+      const drawHitcircleNote = (c: {
+        x: number
+        y: number
+        r: number
+        comboNumber: number
+        colorStr: string
+        isNext: boolean
+      }) => {
+        const noteSize = c.r * 2
+        const [cr, cg, cb] = rgbStringToRgb(c.colorStr)
+
+        // 1. Approach circle on the active note (Note 1)
+        if (c.isNext) {
+          const phase = (elapsed * 1.1) % 1
+          const approachScale = 1.0 + 1.2 * (1 - phase)
+          const appAlpha = Math.min(1.0, 1.6 * phase)
+
+          ctx.save()
+          const appDrawable = tintedApproachRef.current || approachCircleImgRef.current
+          if (appDrawable) {
+            const appSize = noteSize * approachScale
+            ctx.globalAlpha = appAlpha
+            ctx.drawImage(appDrawable, c.x - appSize / 2, c.y - appSize / 2, appSize, appSize)
+          } else {
+            ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, ${appAlpha})`
+            ctx.lineWidth = 2.5
+            ctx.beginPath()
+            ctx.arc(c.x, c.y, (noteSize / 2) * approachScale, 0, Math.PI * 2)
+            ctx.stroke()
+          }
+          ctx.restore()
+        }
+
+        // 2. Hitcircle body (tinted texture from current skin or fallback radial gradient)
+        const hitcircleDrawable = tintedHitcirclesRef.current[c.comboNumber - 1] || hitcircleImgRef.current
+        if (hitcircleDrawable) {
+          ctx.save()
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
+          ctx.shadowBlur = 8
+          ctx.shadowOffsetY = 2
+          const rawW = (hitcircleDrawable as any).naturalWidth || (hitcircleDrawable as any).width || 128
+          const rawH = (hitcircleDrawable as any).naturalHeight || (hitcircleDrawable as any).height || 128
+          const aspect = rawW / rawH
+          const dw = aspect >= 1 ? noteSize : noteSize * aspect
+          const dh = aspect >= 1 ? noteSize / aspect : noteSize
+          ctx.drawImage(hitcircleDrawable, c.x - dw / 2, c.y - dh / 2, dw, dh)
+          ctx.restore()
+        } else {
+          ctx.save()
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
+          ctx.shadowBlur = 8
+          ctx.shadowOffsetY = 3
+
+          const grad = ctx.createRadialGradient(
+            c.x - noteSize * 0.12,
+            c.y - noteSize * 0.12,
+            noteSize * 0.05,
+            c.x,
+            c.y,
+            noteSize / 2
+          )
+          grad.addColorStop(0, `rgba(${Math.min(255, cr + 45)}, ${Math.min(255, cg + 45)}, ${Math.min(255, cb + 45)}, 0.95)`)
+          grad.addColorStop(0.7, `rgba(${cr}, ${cg}, ${cb}, 0.95)`)
+          grad.addColorStop(1, `rgba(${Math.round(cr * 0.7)}, ${Math.round(cg * 0.7)}, ${Math.round(cb * 0.7)}, 1)`)
+
+          ctx.fillStyle = grad
+          ctx.beginPath()
+          ctx.arc(c.x, c.y, noteSize / 2, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.restore()
+        }
+
+        // 3. Hitcircle overlay (texture from current skin or fallback outline)
+        const overlayDrawable = overlayImgRef.current
+        if (overlayDrawable && overlayDrawable.naturalWidth > 1) {
+          ctx.save()
+          const aspect = overlayDrawable.naturalWidth / overlayDrawable.naturalHeight
+          const dw = aspect >= 1 ? noteSize : noteSize * aspect
+          const dh = aspect >= 1 ? noteSize / aspect : noteSize
+          ctx.drawImage(overlayDrawable, c.x - dw / 2, c.y - dh / 2, dw, dh)
+          ctx.restore()
+        } else if (!hitcircleDrawable) {
+          ctx.save()
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)'
+          ctx.lineWidth = 3
+          ctx.beginPath()
+          ctx.arc(c.x, c.y, noteSize / 2 - 1.5, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.restore()
+        }
+
+        // 4. Combo number (texture from current skin or fallback font)
+        const digitDrawable = digitImgsRef.current[c.comboNumber]
+        if (digitDrawable && digitDrawable.naturalWidth > 1 && digitDrawable.naturalHeight > 1) {
+          ctx.save()
+          const digitH = noteSize * 0.46
+          const aspect = digitDrawable.naturalWidth / digitDrawable.naturalHeight
+          const digitW = digitH * aspect
+          ctx.drawImage(digitDrawable, c.x - digitW / 2, c.y - digitH / 2, digitW, digitH)
+          ctx.restore()
+        } else if (digitDrawable && (digitDrawable.naturalWidth <= 1 || digitDrawable.naturalHeight <= 1)) {
+          // Blank 1x1 sprite (no numbers)
+        } else {
+          ctx.save()
+          ctx.fillStyle = '#ffffff'
+          ctx.font = '700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
+          ctx.shadowBlur = 4
+          ctx.shadowOffsetY = 1
+          ctx.fillText(String(c.comboNumber), c.x, c.y + 1)
+          ctx.restore()
+        }
+      }
+
+      // Draw notes in reverse order so note 1 is on top
+      drawHitcircleNote(c3)
+      drawHitcircleNote(c2)
+      drawHitcircleNote(c1)
+
+      ctx.restore()
+      animId = requestAnimationFrame(render)
+    }
+
+    animId = requestAnimationFrame(render)
+    return () => cancelAnimationFrame(animId)
+  }, [hue, scale, opacity, effectiveColors])
+
+  return (
+    <div ref={containerRef} className="combo-preview-container" style={{ minHeight: 280, height: '100%' }}>
+      <canvas ref={canvasRef} className="combo-preview-canvas" />
+      <span className="combo-preview-hint">Интерактивный вид в игре</span>
+      <span className="customizer-preview-overlay-badge">
+        Follow Point: {scale.toFixed(2)}x • {opacity}%
+      </span>
+    </div>
+  )
+}
+
+// --- Skin Optimizer Component ---
+
+interface SkinOptimizerStudioProps {
+  data: SkinOptimizerSummary | null
+  isLoading: boolean
+  isBusy: boolean
+  onOptimizeBatch: () => void
+  onRestoreAll: () => void
+  onOptimizeSingle: (fileName: string) => void
+  onRestoreSingle: (fileName: string) => void
+}
+
+function SkinOptimizerStudio({
+  data,
+  isLoading,
+  isBusy,
+  onOptimizeBatch,
+  onRestoreAll,
+  onOptimizeSingle,
+  onRestoreSingle,
+}: SkinOptimizerStudioProps) {
+  const { t } = useI18n()
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<'all' | '2x' | 'optimized'>('all')
+  const [displayLimit, setDisplayLimit] = useState<number>(60)
+
+  useEffect(() => {
+    setDisplayLimit(60)
+  }, [filter, search])
+
+  const filteredSprites = useMemo(() => {
+    if (!data) return []
+    return data.sprites.filter((s) => {
+      if (filter === '2x' && !s.is2x) return false
+      if (filter === 'optimized' && !s.optimized) return false
+      if (search) {
+        return s.fileName.toLowerCase().includes(search.toLowerCase())
+      }
+      return true
+    })
+  }, [data, filter, search])
+
+  if (isLoading && !data) {
+    return (
+      <div className="customizer-empty">
+        <Loader2 size={28} className="spin" />
+        <span>{t('skinCustomizer.readingElements')}</span>
+      </div>
+    )
+  }
+
+  if (!data) {
+    return (
+      <div className="customizer-empty">
+        <p>{t('skinCustomizer.noSkinsInFolder')}</p>
+      </div>
+    )
+  }
+
+  const totalMb = (data.totalSizeBytes / (1024 * 1024)).toFixed(1)
+
+  return (
+    <div className="optimizer-panel">
+      {/* Header Summary Box */}
+      <div className="optimizer-summary-box">
+        <div className="optimizer-stats-grid">
+          <div className="optimizer-stat-card">
+            <span className="optimizer-stat-val">{data.totalSprites}</span>
+            <span className="optimizer-stat-label">{t('skinCustomizer.optimizerTotalSprites')}</span>
+          </div>
+          <div className="optimizer-stat-card">
+            <span className="optimizer-stat-val -highlight">{data.at2xCount}</span>
+            <span className="optimizer-stat-label">{t('skinCustomizer.optimizerHdCount')}</span>
+          </div>
+          <div className="optimizer-stat-card">
+            <span className="optimizer-stat-val">{totalMb} MB</span>
+            <span className="optimizer-stat-label">{t('skinCustomizer.optimizerTotalSize')}</span>
+          </div>
+          <div className="optimizer-stat-card">
+            <span className="optimizer-stat-val -accent">{data.optimizedCount}</span>
+            <span className="optimizer-stat-label">{t('skinCustomizer.optimizerOptimizedCount')}</span>
+          </div>
+        </div>
+
+        <div className="optimizer-actions-bar">
+          <button
+            type="button"
+            className="customizer-btn -primary"
+            onClick={onOptimizeBatch}
+            disabled={isBusy || (data.at2xCount === 0 && data.optimizedCount === data.totalSprites)}
+            style={{ padding: '8px 16px', fontSize: '13px' }}
+          >
+            {isBusy ? <Loader2 size={16} className="spin" /> : <Zap size={16} />}
+            <span>{t('skinCustomizer.optimizerFpsBoost')}</span>
+          </button>
+
+          <button
+            type="button"
+            className="customizer-btn"
+            onClick={onRestoreAll}
+            disabled={isBusy || !data.canRevertAll}
+            style={{ padding: '8px 16px', fontSize: '13px' }}
+          >
+            <RotateCcw size={16} />
+            <span>{t('skinCustomizer.optimizerRestoreAll')}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="optimizer-filter-bar">
+        <div className="optimizer-search-box">
+          <Search size={14} style={{ opacity: 0.5 }} />
+          <input
+            type="text"
+            placeholder={t('skinCustomizer.optimizerSearchPlaceholder')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="optimizer-search-input"
+          />
+        </div>
+
+        <div className="customizer-tabs">
+          <button
+            type="button"
+            className={`customizer-tab ${filter === 'all' ? '-active' : ''}`}
+            onClick={() => setFilter('all')}
+          >
+            {t('skinCustomizer.optimizerFilterAll')}
+            <span className="customizer-tab-count">{data.totalSprites}</span>
+          </button>
+          <button
+            type="button"
+            className={`customizer-tab ${filter === '2x' ? '-active' : ''}`}
+            onClick={() => setFilter('2x')}
+          >
+            {t('skinCustomizer.optimizerFilter2x')}
+            <span className="customizer-tab-count">{data.at2xCount}</span>
+          </button>
+          <button
+            type="button"
+            className={`customizer-tab ${filter === 'optimized' ? '-active' : ''}`}
+            onClick={() => setFilter('optimized')}
+          >
+            {t('skinCustomizer.optimizerFilterOptimized')}
+            <span className="customizer-tab-count">{data.optimizedCount}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Sprites Grid */}
+      <div className="optimizer-grid">
+        {filteredSprites.slice(0, displayLimit).map((sprite) => {
+          const isSmall = sprite.width > 0 && (sprite.width <= 64 || sprite.height <= 64)
+          const sizeKb = (sprite.sizeBytes / 1024).toFixed(1)
+          return (
+            <div
+              key={sprite.fileName}
+              className={`optimizer-card ${sprite.optimized ? '-optimized' : ''}`}
+            >
+              <div className="optimizer-card-thumb">
+                {sprite.previewUrl ? (
+                  <img
+                    src={sprite.previewUrl}
+                    alt={sprite.fileName}
+                    className={`optimizer-thumb-img ${isSmall ? '-pixelated' : ''}`}
+                    draggable={false}
+                  />
+                ) : (
+                  <div className="optimizer-thumb-placeholder">PNG</div>
+                )}
+                {sprite.is2x && <span className="optimizer-badge-2x">@2x</span>}
+                {sprite.optimized ? (
+                  <span className="optimizer-badge-status -done">
+                    {t('skinCustomizer.optimizerOptimizedBadge')}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="optimizer-card-info">
+                <span className="optimizer-card-filename" title={sprite.fileName}>
+                  {sprite.fileName}
+                </span>
+                <span className="optimizer-card-specs">
+                  {sprite.width > 0 ? `${sprite.width}×${sprite.height} • ` : ''}
+                  {sizeKb} KB
+                </span>
+              </div>
+
+              <div className="optimizer-card-action">
+                {sprite.optimized ? (
+                  <button
+                    type="button"
+                    className="customizer-btn -secondary"
+                    onClick={() => onRestoreSingle(sprite.fileName)}
+                    disabled={isBusy}
+                    title={t('skinCustomizer.optimizerRevertBtn')}
+                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                  >
+                    <Sparkles size={11} />
+                    <span>{t('skinCustomizer.optimizerRevertBtn')}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="customizer-btn -secondary"
+                    onClick={() => onOptimizeSingle(sprite.fileName)}
+                    disabled={isBusy}
+                    title={t('skinCustomizer.optimizerOptimizeBtn')}
+                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                  >
+                    <Zap size={11} />
+                    <span>{t('skinCustomizer.optimizerOptimizeBtn')}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {filteredSprites.length > displayLimit && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, marginBottom: 8 }}>
+          <button
+            type="button"
+            className="customizer-btn -secondary"
+            onClick={() => setDisplayLimit((prev) => prev + 60)}
+            style={{ padding: '8px 24px', fontSize: '12px' }}
+          >
+            {t('skinCustomizer.showMore')} ({filteredSprites.length - displayLimit})
+          </button>
+        </div>
       )}
     </div>
   )

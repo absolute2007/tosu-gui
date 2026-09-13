@@ -19,7 +19,7 @@ import {
   type MapSearchParams,
 } from './beatmap-maps'
 import { fetchOsuAccount, loginWithOsuWindow } from './osu-session'
-import { readGuiSettings } from './gui-settings'
+import { readGuiSettings, writeGuiSettings } from './gui-settings'
 import { osuAudio } from './osu-audio'
 
 const MIME: Record<string, string> = {
@@ -157,7 +157,24 @@ async function handleApi(
       overlayKeybind: layoutKeybind,
       port: MAPS_HTTP_PORT,
       muteOsuOnPreview: osuAudio.getState().autoMute,
+      language: gui.language || 'ru',
     })
+    return
+  }
+
+  if (pathName === '/api/maps/ui-lang' && req.method === 'POST') {
+    try {
+      const raw = await readBody(req)
+      const body = raw ? (JSON.parse(raw) as { language?: string }) : {}
+      if (body.language === 'ru' || body.language === 'en') {
+        const next = writeGuiSettings({ language: body.language })
+        sendJson(res, 200, { ok: true, language: next.language })
+        return
+      }
+      sendJson(res, 400, { error: 'Invalid language' })
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) })
+    }
     return
   }
 

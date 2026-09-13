@@ -18,6 +18,7 @@ import { useAppUpdate } from './hooks/useAppUpdate'
 import { useGuiSettings } from './hooks/useGuiSettings'
 import { useOsuAuth } from './hooks/useOsuAuth'
 import { UpdateBanner } from './components/UpdateBanner'
+import { useI18n } from './i18n/context'
 import type { TosuStatus } from '../electron/preload'
 import './styles/app.css'
 
@@ -30,6 +31,7 @@ interface ToastState {
 }
 
 export default function App() {
+  const { lang } = useI18n()
   const [page, setPage] = useState<Page>('status')
   const [tosuStatus, setTosuStatus] = useState<TosuStatus | null>(null)
   const [restarting, setRestarting] = useState(false)
@@ -37,6 +39,10 @@ export default function App() {
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type })
+  }, [])
+
+  const handleCloseToast = useCallback(() => {
+    setToast(null)
   }, [])
 
   const refreshStatus = useCallback(async () => {
@@ -100,12 +106,22 @@ export default function App() {
     const appInfo = await appUpdate.checkForUpdate(true, { notify: false })
 
     if (appInfo?.updateAvailable) {
-      showToast(`Доступно обновление tosu GUI v${appInfo.latestVersion}`, 'success')
+      showToast(
+        lang === 'en'
+          ? `Update available: tosu GUI v${appInfo.latestVersion}`
+          : `Доступно обновление tosu GUI v${appInfo.latestVersion}`,
+        'success'
+      )
       return
     }
 
     if (appInfo?.unsupported) {
-      showToast(appInfo.error || 'Автообновление GUI только в установленной версии', 'error')
+      showToast(
+        lang === 'en'
+          ? 'Auto-update is only available in the installed version'
+          : (appInfo.error || 'Автообновление доступно только в установленной версии'),
+        'error'
+      )
       return
     }
 
@@ -114,24 +130,32 @@ export default function App() {
       return
     }
 
-    showToast(`tosu GUI актуален (v${appInfo?.currentVersion ?? '—'})`, 'success')
+    showToast(
+      lang === 'en'
+        ? `tosu GUI is up to date (v${appInfo?.currentVersion ?? '—'})`
+        : `tosu GUI актуален (v${appInfo?.currentVersion ?? '—'})`,
+      'success'
+    )
   }
 
   const handleRestart = async () => {
     if (appUpdate.installing) {
-      showToast('Дождитесь окончания обновления', 'error')
+      showToast(
+        lang === 'en' ? 'Please wait for update to finish' : 'Дождитесь окончания обновления',
+        'error'
+      )
       return
     }
     setRestarting(true)
     try {
       await window.tosuGui.restart()
       await refreshStatus()
-      showToast('tosu перезапущен', 'success')
+      showToast(lang === 'en' ? 'tosu restarted' : 'tosu перезапущен', 'success')
     } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err ?? 'Ошибка перезапуска')
+      const raw = err instanceof Error ? err.message : String(err ?? (lang === 'en' ? 'Restart error' : 'Ошибка перезапуска'))
       // Electron wraps invoke errors: "Error invoking remote method 'x': Error: actual"
       const msg = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
-      showToast(msg || 'Ошибка перезапуска', 'error')
+      showToast(msg || (lang === 'en' ? 'Restart error' : 'Ошибка перезапуска'), 'error')
     } finally {
       setRestarting(false)
     }
@@ -154,13 +178,13 @@ export default function App() {
         <main className="app-content">
           {appUpdate.visible && appUpdate.updateInfo?.updateAvailable && (
             <UpdateBanner
-              title="Доступно обновление tosu GUI"
+              title={lang === 'en' ? 'tosu GUI update available' : 'Доступно обновление tosu GUI'}
               fromVersion={appUpdate.updateInfo.currentVersion}
               toVersion={appUpdate.updateInfo.latestVersion}
               installing={appUpdate.installing}
               progress={appUpdate.progress}
               releaseUrl={appUpdate.updateInfo.releaseUrl}
-              installLabel="Обновить GUI"
+              installLabel={lang === 'en' ? 'Update GUI' : 'Обновить GUI'}
               onInstall={() => void appUpdate.install()}
               onDismiss={() => void appUpdate.dismiss()}
               onOpenRelease={() => {
@@ -197,9 +221,6 @@ export default function App() {
               onToast={showToast}
               onOpenSettings={() => setPage('settings')}
               account={osuAuth.account}
-              authBusy={osuAuth.authBusy}
-              onLogin={osuAuth.login}
-              onLogout={osuAuth.logout}
             />
           </div>
           {guiSettings.skinsBrowserEnabled ? (
@@ -238,7 +259,7 @@ export default function App() {
             <div className="page">
               <div className="empty-state">
                 <Loader2 size={20} className="spin" />
-                <span>Загрузка оверлея…</span>
+                <span>{lang === 'en' ? 'Loading overlay…' : 'Загрузка оверлея…'}</span>
               </div>
             </div>
           )}
@@ -284,7 +305,7 @@ export default function App() {
         <Toast
           message={toast.message}
           type={toast.type}
-          onClose={() => setToast(null)}
+          onClose={handleCloseToast}
         />
       )}
     </div>

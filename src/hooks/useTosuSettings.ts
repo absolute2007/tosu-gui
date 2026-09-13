@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import type { TosuAppSettings } from '../../electron/tosu-api'
 import type { TosuStatus } from '../../electron/preload'
 import { settingsToPayload } from '../lib/settings-payload'
+import { useI18n } from '../i18n/context'
 
 export function useTosuSettings(
   tosuStatus: TosuStatus | null,
   onToast: (msg: string, type: 'success' | 'error') => void
 ) {
+  const { lang } = useI18n()
   const [settings, setSettings] = useState<TosuAppSettings | null>(null)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -32,23 +34,26 @@ export function useTosuSettings(
   }, [])
 
   const saveSnapshot = useCallback(
-    async (snapshot: TosuAppSettings, successMessage = 'Настройки сохранены. Перезапуск tosu...') => {
+    async (snapshot: TosuAppSettings, successMessage?: string) => {
+      const defaultSuccessMsg = lang === 'en'
+        ? 'Settings saved. Restarting tosu...'
+        : 'Настройки сохранены. Перезапуск tosu...'
       setSaving(true)
       try {
         await window.tosuGui.saveSettings(settingsToPayload(snapshot))
-        onToast(successMessage, 'success')
+        onToast(successMessage || defaultSuccessMsg, 'success')
         setDirty(false)
         await window.tosuGui.restart()
         await load()
         return true
       } catch {
-        onToast('Ошибка сохранения', 'error')
+        onToast(lang === 'en' ? 'Failed to save settings' : 'Ошибка сохранения', 'error')
         return false
       } finally {
         setSaving(false)
       }
     },
-    [load, onToast]
+    [lang, load, onToast]
   )
 
   const save = useCallback(async () => {
