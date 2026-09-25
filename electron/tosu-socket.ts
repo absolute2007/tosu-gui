@@ -99,8 +99,20 @@ export class TosuSocketBridge {
     }, 2000)
   }
 
+  private lastEmitTime = 0
+
   private emit(event: TosuSocketEvent) {
     if (!this.window || this.window.isDestroyed()) return
+    if (event.type === 'message') {
+      if (!this.window.isVisible() || this.window.isMinimized()) {
+        return
+      }
+      const now = Date.now()
+      if (now - this.lastEmitTime < 100) {
+        return
+      }
+      this.lastEmitTime = now
+    }
     this.window.webContents.send('tosu:socket-event', event)
   }
 }

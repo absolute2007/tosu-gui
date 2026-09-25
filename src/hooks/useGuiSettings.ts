@@ -10,6 +10,7 @@ export function useGuiSettings() {
   const [skinsPathResolved, setSkinsPathResolved] = useState<string | null>(null)
   const [skinsBrowserEnabled, setSkinsBrowserEnabled] = useState(true)
   const [mapsOverlayKeybind, setMapsOverlayKeybind] = useState('Control + Shift + M')
+  const [disableHardwareAcceleration, setDisableHardwareAcceleration] = useState(true)
   const [ready, setReady] = useState(false)
 
   const load = useCallback(async () => {
@@ -24,6 +25,7 @@ export function useGuiSettings() {
       setSkinsPath(settings.skinsPath || '')
       setSkinsBrowserEnabled(settings.skinsBrowserEnabled !== false)
       setMapsOverlayKeybind(settings.mapsOverlayKeybind || 'Control + Shift + M')
+      setDisableHardwareAcceleration(settings.disableHardwareAcceleration !== false)
       const [songsInfo, skinsInfo] = await Promise.all([
         window.tosuGui.getSongsPath(),
         window.tosuGui.getSkinsPath(),
@@ -96,6 +98,11 @@ export function useGuiSettings() {
     await window.tosuGui.saveGuiSettings({ language: lang })
   }, [])
 
+  const setDisableHardwareAccelerationSetting = useCallback(async (enabled: boolean) => {
+    setDisableHardwareAcceleration(enabled)
+    await window.tosuGui.saveGuiSettings({ disableHardwareAcceleration: enabled })
+  }, [])
+
   return {
     ready,
     language,
@@ -108,9 +115,11 @@ export function useGuiSettings() {
     skinsPathResolved,
     skinsBrowserEnabled,
     mapsOverlayKeybind,
+    disableHardwareAcceleration,
     setCloseToTraySetting,
     setShowBeatmapPanelSetting,
     setMapsOverlayKeybindSetting,
+    setDisableHardwareAccelerationSetting,
     pickSongsPath,
     clearSongsPath,
     pickSkinsPath,

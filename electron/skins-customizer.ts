@@ -42,6 +42,7 @@ export interface SkinCustomizationData {
 }
 
 export interface FollowPointsCustomOptions {
+  recolor?: boolean
   hue: number
   scale: number
   opacity: number
@@ -721,48 +722,45 @@ function countVisiblePngPixels(filePath: string): number {
   }
 }
 
-function findFollowPointSpriteBase64(skinPath: string, backupFilesDir?: string): string | null {
-  // 1. Check static followpoint.png / followpoint@2x.png (must have visible content)
-  for (const name of ['followpoint@2x.png', 'followpoint.png']) {
-    const sPath = path.join(skinPath, name)
-    const bPath = backupFilesDir ? path.join(backupFilesDir, name) : null
-    if (fs.existsSync(sPath) && countVisiblePngPixels(sPath) > 0) {
-      const url = getFileAsBase64Url(sPath, false)
-      if (url) return url
-    }
-    if (bPath && fs.existsSync(bPath) && countVisiblePngPixels(bPath) > 0) {
-      const url = getFileAsBase64Url(bPath, false)
-      if (url) return url
-    }
+export interface FollowPointPreviewFrame {
+  image: string
+  originalImage: string
+  pixelRatio: number
+  fileName: string
+}
+
+export function readFollowPointFrames(skinPath: string, backupFilesDir?: string): FollowPointPreviewFrame[] {
+  const resolve = (base: string) => [base + '@2x.png', base + '.png'].find((name) => fs.existsSync(path.join(skinPath, name)))
+  // This is a static preview, so include visible frames even after numbering gaps.
+  const indices = Array.from(new Set(findMatchingFilesInDir(skinPath, [/^followpoint-\d+(?:@2x)?\.png$/i])
+    .map(name => Number(name.match(/^followpoint-(\d+)/i)![1])))).sort((a, b) => a - b)
+  const names = indices.map(index => resolve('followpoint-' + index)).filter((name): name is string => Boolean(name))
+  if (!names.length) {
+    const name = resolve('followpoint')
+    if (name) names.push(name)
   }
+  return names.flatMap((fileName) => {
+    // Transparent and 1px sprites are intentional skin assets too.
+    const image = getFileAsBase64Url(path.join(skinPath, fileName))
+    if (!image) return []
+    const originalImage = backupFilesDir ? getFileAsBase64Url(path.join(backupFilesDir, fileName)) : null
+    return [{ image, originalImage: originalImage || image, pixelRatio: /@2x\.png$/i.test(fileName) ? 2 : 1, fileName }]
+  })
+}
 
-  // 2. Animated followpoint-*.png: find frame with maximum visible pixels
-  const pattern = /^followpoint.*\.png$/i
-  const inSkin = findMatchingFilesInDir(skinPath, [pattern])
-  const inBackup = backupFilesDir && fs.existsSync(backupFilesDir) ? findMatchingFilesInDir(backupFilesDir, [pattern]) : []
-  const all = Array.from(new Set([...inSkin, ...inBackup]))
-
-  let best = ''
-  let maxVisible = 0
-  for (const f of all) {
-    const pSkin = path.join(skinPath, f)
-    const pBackup = backupFilesDir ? path.join(backupFilesDir, f) : ''
-    const target = fs.existsSync(pSkin) ? pSkin : pBackup
-    const visible = countVisiblePngPixels(target)
-    if (visible > maxVisible) {
-      maxVisible = visible
-      best = f
-    }
+export function selectFollowPointPreviewFrame(frames: FollowPointPreviewFrame[]): FollowPointPreviewFrame | null {
+  let best: FollowPointPreviewFrame | null = null
+  let bestCoverage = -1
+  for (const frame of frames) {
+    try {
+      const png = PNG.sync.read(Buffer.from(frame.image.split(',')[1], 'base64'))
+      let coverage = 0
+      for (let i = 3; i < png.data.length; i += 4) coverage += png.data[i]
+      coverage /= frame.pixelRatio ** 2
+      if (coverage > bestCoverage) { best = frame; bestCoverage = coverage }
+    } catch { /* Ignore corrupt textures; the rest of the preview remains usable. */ }
   }
-
-  if (best) {
-    const pSkin = path.join(skinPath, best)
-    const pBackup = backupFilesDir ? path.join(backupFilesDir, best) : ''
-    const target = fs.existsSync(pSkin) ? pSkin : pBackup
-    return getFileAsBase64Url(target, false)
-  }
-
-  return null
+  return best
 }
 
 function getFollowPointFileCandidates(skinPath: string, backupFilesDir?: string): string[] {
@@ -1162,10 +1160,9 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
       subtitle = `skin.ini: [Colours] (${activeColors.length} комбо)`
       affectedFiles = ['skin.ini']
     } else if (cfg.id === 'follow-points') {
-      const followPointImage = findFollowPointSpriteBase64(skinPath, backupFilesDir)
-      if (followPointImage) {
-        previewImage = followPointImage
-      }
+      const followPointFrame = selectFollowPointPreviewFrame(readFollowPointFrames(skinPath, backupFilesDir))
+      const followPointFrames = followPointFrame ? [followPointFrame] : []
+      previewImage = followPointFrames[0]?.image || null
       const hitcircleImage = findSpriteBase64(skinPath, ['hitcircle.png', 'hitcircle@2x.png'], backupFilesDir)
       const hitcircleOverlayImage = findSpriteBase64(
         skinPath,
@@ -1189,7 +1186,8 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
       meta = {
         ...meta,
         ...(tweakRecord?.meta || {}),
-        followPointImage: followPointImage || previewImage,
+        followPointFrames,
+        followPointImage: previewImage,
         hitcircleImage,
         hitcircleOverlayImage,
         approachCircleImage,
@@ -2218,7 +2216,7 @@ export async function customizeSkinFollowPoints(
     throw new Error(`Папка скина не найдена: ${skinPath}`)
   }
 
-  const { hue, scale = 1.0, opacity = 100 } = options
+  const { hue, scale = 1.0, opacity = 100, recolor = true } = options
   const targetHue = ((hue % 360) + 360) % 360
   const clampedScale = Math.max(0.4, Math.min(2.5, scale))
   const clampedOpacity = Math.max(10, Math.min(100, opacity)) / 100
@@ -2310,9 +2308,9 @@ export async function customizeSkinFollowPoints(
     try {
       const srcPng = PNG.sync.read(srcBuf)
       let scaledPng = srcPng
-      if (Math.abs(clampedScale - 1.0) > 0.02 && srcPng.width > 1 && srcPng.height > 1) {
-        const newW = Math.max(4, Math.round(srcPng.width * clampedScale))
-        const newH = Math.max(4, Math.round(srcPng.height * clampedScale))
+      if (clampedScale !== 1 && srcPng.width > 1 && srcPng.height > 1) {
+        const newW = Math.max(1, Math.round(srcPng.width * clampedScale))
+        const newH = Math.max(1, Math.round(srcPng.height * clampedScale))
         scaledPng = new PNG({ width: newW, height: newH })
         const scaleX = srcPng.width / newW
         const scaleY = srcPng.height / newH
@@ -2341,10 +2339,12 @@ export async function customizeSkinFollowPoints(
         const b = data[i + 2]
         const [, , l] = rgbToHsl(r, g, b)
 
-        const [nr, ng, nb] = hslToRgb(targetHue, 0.88, l)
-        data[i] = nr
-        data[i + 1] = ng
-        data[i + 2] = nb
+        if (recolor) {
+          const [nr, ng, nb] = hslToRgb(targetHue, 0.88, l * 0.55)
+          data[i] = nr
+          data[i + 1] = ng
+          data[i + 2] = nb
+        }
         data[i + 3] = Math.round(a * clampedOpacity)
       }
 
@@ -2361,6 +2361,7 @@ export async function customizeSkinFollowPoints(
     files: backedUpFiles,
     meta: {
       hue: targetHue,
+      recolor,
       scale: clampedScale,
       opacity: Math.round(clampedOpacity * 100),
       isCustomized: true,

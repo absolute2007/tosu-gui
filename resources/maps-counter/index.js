@@ -722,7 +722,7 @@
       setLine(sets.length ? t('cardsCount', { n: sets.length }) : t('emptyNoResults'))
     } catch (err) {
       setLine(err.message || t('searchError'))
-      if (!append) sets = []
+      if (!append && !sets.length) sets = []
     } finally {
       loading = false
       render()

@@ -18,10 +18,12 @@ interface Props {
   skinsPathResolved: string | null
   skinsBrowserEnabled: boolean
   mapsOverlayKeybind: string
+  disableHardwareAcceleration: boolean
   onCheckAppUpdatesChange: (enabled: boolean) => void
   onCloseToTrayChange: (enabled: boolean) => void
   onShowBeatmapPanelChange: (enabled: boolean) => void
   onMapsOverlayKeybindChange: (bind: string) => void
+  onDisableHardwareAccelerationChange: (enabled: boolean) => void
   onPickSongsPath: () => Promise<string | null>
   onClearSongsPath: () => Promise<void>
   onPickSkinsPath: () => Promise<string | null>
@@ -44,10 +46,12 @@ export function SettingsPage({
   skinsPathResolved,
   skinsBrowserEnabled,
   mapsOverlayKeybind,
+  disableHardwareAcceleration,
   onCheckAppUpdatesChange,
   onCloseToTrayChange,
   onShowBeatmapPanelChange,
   onMapsOverlayKeybindChange,
+  onDisableHardwareAccelerationChange,
   onPickSongsPath,
   onClearSongsPath,
   onPickSkinsPath,
@@ -207,6 +211,17 @@ export function SettingsPage({
               <Toggle checked={showBeatmapPanel} onChange={onShowBeatmapPanelChange} />
             </div>
           </div>
+          <div className="setting-row">
+            <div className="setting-info">
+              <div className="setting-label">{t('settings.disableHardwareAcceleration')}</div>
+              <div className="setting-desc">
+                {t('settings.disableHardwareAccelerationDesc')}
+              </div>
+            </div>
+            <div className="setting-control">
+              <Toggle checked={disableHardwareAcceleration} onChange={onDisableHardwareAccelerationChange} />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -249,9 +264,9 @@ export function SettingsPage({
               <NumberInput
                 value={settings.POLL_RATE}
                 onChange={(v) => onUpdate('POLL_RATE', v)}
-                min={100}
+                min={1}
                 max={5000}
-                fallback={500}
+                fallback={100}
               />
             </div>
           </div>

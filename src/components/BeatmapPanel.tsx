@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { Music2 } from 'lucide-react'
 import type { BeatmapPlayerScore, GameState } from '../hooks/useTosuSocket'
 import { useI18n } from '../i18n/context'
 import './BeatmapPanel.css'
@@ -87,23 +88,8 @@ function EmptyArt({ kind }: { kind: EmptyKind }) {
   return (
     <div className={`beatmap-panel-empty-art -${kind}`} aria-hidden>
       <div className="bm-empty-visual">
-        {kind === 'no-tosu' && (
-          <>
-            <span className="bm-empty-ring" />
-            <span className="bm-empty-dot -offline" />
-          </>
-        )}
-        {kind === 'no-osu' && (
-          <>
-            <span className="bm-empty-ring -pulse" />
-            <span className="bm-empty-dot -waiting" />
-          </>
-        )}
-        {kind === 'no-map' && (
-          <span className="bm-empty-bars" aria-hidden>
-            <i /><i /><i /><i />
-          </span>
-        )}
+        <Music2 size={32} strokeWidth={1.4} className="bm-empty-icon" />
+        <span className={`bm-empty-badge -${kind}`} />
       </div>
     </div>
   )
@@ -278,7 +264,7 @@ function BeatmapPanelInner({ game }: Props) {
           </div>
 
           <div className="beatmap-stats">
-            <StatCell label="★" value={game.stars || '—'} />
+            <StatCell label="Stars" value={game.stars || '—'} />
             <StatCell label="BPM" value={game.bpm || '—'} />
             <StatCell label="AR" value={game.ar || '—'} />
             <StatCell label="CS" value={game.cs || '—'} />

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ChevronLeft,
+  ChevronRight,
   FolderOpen,
   Loader2,
   Palette,
@@ -10,7 +12,6 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
-  Sparkles,
   Trash2,
   Undo2,
   Upload,
@@ -26,6 +27,7 @@ import type {
   SkinOptimizerSummary,
   FollowPointsCustomOptions,
 } from '../../electron/preload'
+import type { FollowPointPreviewFrame } from '../../electron/skins-customizer'
 import './SkinCustomizerPage.css'
 
 interface Props {
@@ -35,6 +37,34 @@ interface Props {
 }
 
 type FilterCategory = 'all' | SkinTweakCategory
+
+function ArrowScroller({ className, children }: { className: string; children: React.ReactNode }) {
+  const { lang } = useI18n()
+  const ref = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ left: false, right: false })
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const update = () => setEdges({ left: el.scrollLeft > 1, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 })
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    if (el.firstElementChild) observer.observe(el.firstElementChild)
+    el.addEventListener('scroll', update)
+    update()
+    return () => { observer.disconnect(); el.removeEventListener('scroll', update) }
+  }, [])
+  const move = (direction: number) => {
+    const el = ref.current
+    if (el) el.scrollBy({ left: direction * el.clientWidth * 0.75, behavior: 'smooth' })
+  }
+  return (
+    <div className="customizer-arrow-scroller">
+      <button type="button" className="customizer-scroll-arrow" disabled={!edges.left} onClick={() => move(-1)} aria-label={lang === 'ru' ? 'Прокрутить влево' : 'Scroll left'}><ChevronLeft size={18} /></button>
+      <div ref={ref} className={className}>{children}</div>
+      <button type="button" className="customizer-scroll-arrow" disabled={!edges.right} onClick={() => move(1)} aria-label={lang === 'ru' ? 'Прокрутить вправо' : 'Scroll right'}><ChevronRight size={18} /></button>
+    </div>
+  )
+}
 
 export function SkinCustomizerPage({ visible, onToast }: Props) {
   const { t, lang } = useI18n()
@@ -483,7 +513,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         </div>
 
         {/* Top-Level Mode Switcher: Tweaks vs Color Studio vs Optimizer */}
-        <div className="customizer-mode-switch-row">
+        <ArrowScroller className="customizer-mode-switch-row">
           <div className="customizer-mode-switch">
             <button
               type="button"
@@ -521,11 +551,11 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
               ) : null}
             </button>
           </div>
-        </div>
+        </ArrowScroller>
 
         {/* Category Filter Pills (when in tweaks mode) */}
         {mainView === 'tweaks' && (
-          <div className="customizer-filter-row">
+          <ArrowScroller className="customizer-filter-row">
             <div className="customizer-tabs">
               {CATEGORIES.map((cat) => {
                 const count = getCategoryCount(cat.id)
@@ -541,12 +571,12 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
                 )
               })}
             </div>
-          </div>
+          </ArrowScroller>
         )}
 
         {/* Sub-Navigation (when in colors mode) */}
         {mainView === 'colors' && (
-          <div className="color-studio-nav-row">
+          <ArrowScroller className="color-studio-nav-row">
             <div className="color-studio-tabs">
               <button
                 type="button"
@@ -584,7 +614,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
                 )}
               </button>
             </div>
-          </div>
+          </ArrowScroller>
         )}
       </div>
 
@@ -2906,7 +2936,7 @@ function AudioTweakPreview({
 
 function tintFollowpointSprite(
   img: HTMLImageElement,
-  hue: number,
+  hue: number | null,
   opacity: number
 ): HTMLCanvasElement | null {
   const w = img.naturalWidth || img.width
@@ -2933,10 +2963,12 @@ function tintFollowpointSprite(
     const b = data[i + 2]
     const [, , l] = rgbToHsl(r, g, b)
 
-    const [nr, ng, nb] = hslToRgb(hue, 0.88, l)
-    data[i] = nr
-    data[i + 1] = ng
-    data[i + 2] = nb
+    if (hue !== null) {
+      const [nr, ng, nb] = hslToRgb(hue, 0.88, l * 0.55)
+      data[i] = nr
+      data[i + 1] = ng
+      data[i + 2] = nb
+    }
     data[i + 3] = Math.round(a * alphaFactor)
   }
 
@@ -2967,17 +2999,21 @@ function FollowPointsStudio({
   const [hue, setHue] = useState<number>(initialHue)
   const [scale, setScale] = useState<number>(initialScale)
   const [opacity, setOpacity] = useState<number>(initialOpacity)
+  const initialRecolor = Boolean(tweak.meta?.isCustomized) && tweak.meta?.recolor !== false
+  const [recolor, setRecolor] = useState(initialRecolor)
   const [hasChanged, setHasChanged] = useState<boolean>(false)
 
   useEffect(() => {
-    if (typeof tweak.meta?.hue === 'number') setHue(tweak.meta.hue)
-    if (typeof tweak.meta?.scale === 'number') setScale(tweak.meta.scale)
-    if (typeof tweak.meta?.opacity === 'number') setOpacity(tweak.meta.opacity)
+    setHue(initialHue)
+    setScale(initialScale)
+    setOpacity(initialOpacity)
+    setRecolor(initialRecolor)
     setHasChanged(false)
   }, [tweak.meta])
 
   const handleHueChange = (newHue: number) => {
     setHue(newHue)
+    setRecolor(true)
     setHasChanged(true)
   }
 
@@ -2992,14 +3028,14 @@ function FollowPointsStudio({
   }
 
   const handleApply = () => {
-    void onCustomize({ hue, scale, opacity })
-    setHasChanged(false)
+    void onCustomize({ hue, scale, opacity, recolor })
   }
 
   const handleCancel = () => {
     setHue(initialHue)
     setScale(initialScale)
     setOpacity(initialOpacity)
+    setRecolor(initialRecolor)
     setHasChanged(false)
   }
 
@@ -3014,7 +3050,7 @@ function FollowPointsStudio({
     (tweak.meta?.comboColors as string[]) ||
     (comboTweak?.meta?.colors as string[]) ||
     ['255, 192, 0', '0, 202, 0', '18, 124, 255', '242, 24, 57']
-  const followPointUrl = tweak.meta?.followPointImage || tweak.previewImage
+  const followPointFrames = tweak.meta?.followPointFrames as FollowPointPreviewFrame[] | undefined
 
   return (
     <div className="color-studio-pane">
@@ -3055,7 +3091,9 @@ function FollowPointsStudio({
               hue={hue}
               scale={scale}
               opacity={opacity}
-              followPointUrl={followPointUrl}
+              frames={followPointFrames}
+              editing={hasChanged}
+              recolor={recolor}
               hitcircleUrl={hitcircleUrl}
               overlayUrl={overlayUrl}
               approachCircleUrl={approachCircleUrl}
@@ -3090,29 +3128,32 @@ function FollowPointsStudio({
               </span>
               <span className="color-studio-stat-pill">
                 <span className="color-studio-stat-pill-label">Hue:</span>
-                <span className="color-studio-stat-pill-val" style={{ color: activeHex }}>{hue}°</span>
+                <span className="color-studio-stat-pill-val" style={{ color: recolor ? activeHex : undefined }}>{recolor ? `${hue}°` : (lang === 'ru' ? 'Исходный' : 'Original')}</span>
               </span>
             </div>
           </div>
         </div>
 
         <div className="color-studio-controls-col">
-          <div className="color-ctrl-card">
-            {/* Presets Swatches */}
-            <div className="color-ctrl-section-title">
-              {t('skinCustomizer.followPointsHue')}:
-              <span className="color-hue-val" style={{ color: activeHex, marginLeft: 8 }}>
-                {hue}°
+          <p className="color-studio-header-desc">
+            {lang === 'ru' ? '1× — исходный размер. 100% — прозрачность из PNG, без усиления. Цвет сохраняется, пока вы не выберете новый.' : '1× is the original size. 100% preserves the PNG opacity. Colours stay unchanged until you choose a new colour.'}
+          </p>
+          {/* Presets Swatches */}
+          <div className="color-studio-section">
+            <div className="color-studio-section-title">
+              <span>{t('skinCustomizer.followPointsHue')}</span>
+              <span className="cursor-hue-badge" style={{ color: recolor ? activeHex : undefined }}>
+                {recolor ? `${hue}°` : (lang === 'ru' ? 'Исходный' : 'Original')}
               </span>
             </div>
-            <div className="cursor-color-palette" style={{ marginBottom: 14 }}>
+            <div className="cursor-color-palette">
               {COLOR_PRESETS.map((preset) => {
                 const displayName = t(`skinCustomizer.colorNames.${preset.id}` as any) || preset.name
                 return (
                   <button
                     key={preset.id}
                     type="button"
-                    className={`cursor-color-swatch ${hue === preset.hue ? '-active' : ''}`}
+                    className={`cursor-color-swatch ${recolor && hue === preset.hue ? '-active' : ''}`}
                     onClick={() => handleHueChange(preset.hue)}
                     style={{ backgroundColor: preset.hex }}
                     title={displayName}
@@ -3121,9 +3162,11 @@ function FollowPointsStudio({
                 )
               })}
             </div>
+          </div>
 
-            {/* Hue Slider */}
-            <div className="cursor-slider-wrapper" style={{ marginBottom: 18 }}>
+          {/* Hue Slider */}
+          <div className="color-studio-section">
+            <div className="cursor-slider-wrapper">
               <input
                 type="range"
                 min="0"
@@ -3134,13 +3177,15 @@ function FollowPointsStudio({
                 disabled={isBusy}
               />
             </div>
+          </div>
 
-            {/* Scale Slider */}
-            <div className="color-ctrl-section-title" style={{ marginTop: 4 }}>
-              {t('skinCustomizer.followPointsThickness')}:
-              <span className="color-hue-val" style={{ marginLeft: 8 }}>{scale.toFixed(2)}x</span>
+          {/* Scale Slider */}
+          <div className="color-studio-section">
+            <div className="color-studio-section-title">
+              <span>{t('skinCustomizer.followPointsThickness')}</span>
+              <span className="cursor-hue-badge">{scale.toFixed(2)}x</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <input
                 type="range"
                 min="0.5"
@@ -3152,15 +3197,19 @@ function FollowPointsStudio({
                 disabled={isBusy}
                 style={{ flex: 1 }}
               />
-              <span style={{ fontSize: 12, fontWeight: 'bold', width: 44 }}>{Math.round(scale * 100)}%</span>
+              <span style={{ fontSize: 12, fontWeight: 600, width: 44, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {Math.round(scale * 100)}%
+              </span>
             </div>
+          </div>
 
-            {/* Opacity Slider */}
-            <div className="color-ctrl-section-title" style={{ marginTop: 4 }}>
-              {t('skinCustomizer.followPointsOpacity')}:
-              <span className="color-hue-val" style={{ marginLeft: 8 }}>{opacity}%</span>
+          {/* Opacity Slider */}
+          <div className="color-studio-section">
+            <div className="color-studio-section-title">
+              <span>{t('skinCustomizer.followPointsOpacity')}</span>
+              <span className="cursor-hue-badge">{opacity}%</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <input
                 type="range"
                 min="20"
@@ -3172,45 +3221,37 @@ function FollowPointsStudio({
                 disabled={isBusy}
                 style={{ flex: 1 }}
               />
-              <span style={{ fontSize: 12, fontWeight: 'bold', width: 44 }}>{opacity}%</span>
+              <span style={{ fontSize: 12, fontWeight: 600, width: 44, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {opacity}%
+              </span>
             </div>
+          </div>
 
-            {/* Actions */}
-            <div className="color-studio-footer-actions">
+          {/* Actions */}
+          <div className="color-studio-actions">
+            <button
+              type="button"
+              className="color-studio-apply-btn"
+              onClick={handleApply}
+              disabled={isBusy || !hasChanged || !followPointFrames?.length}
+              title={t('skinCustomizer.applyFollowPoints')}
+            >
+              {isBusy ? <Loader2 size={14} className="spin" /> : <Palette size={14} />}
+              {t('skinCustomizer.applyFollowPoints')}
+            </button>
+
+            {hasChanged && (
               <button
                 type="button"
-                className="customizer-btn -primary"
-                onClick={handleApply}
-                disabled={isBusy || (!hasChanged && !Boolean(tweak.meta?.isCustomized))}
+                className="color-studio-cancel-btn"
+                onClick={handleCancel}
+                disabled={isBusy}
+                title={t('skinCustomizer.cancelChanges')}
               >
-                {isBusy ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
-                {t('skinCustomizer.applyFollowPoints')}
+                <RotateCcw size={13} />
+                {t('skinCustomizer.cancelChanges')}
               </button>
-
-              {Boolean(tweak.meta?.isCustomized) && (
-                <button
-                  type="button"
-                  className="customizer-btn -danger"
-                  onClick={onReset}
-                  disabled={isBusy}
-                  title={t('skinCustomizer.revertBackupTooltip')}
-                >
-                  <RotateCcw size={14} />
-                  {t('skinCustomizer.revertFollowPoints')}
-                </button>
-              )}
-
-              {hasChanged && (
-                <button
-                  type="button"
-                  className="customizer-btn -secondary"
-                  onClick={handleCancel}
-                  disabled={isBusy}
-                >
-                  {t('skinCustomizer.cancelChanges')}
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -3218,11 +3259,29 @@ function FollowPointsStudio({
   )
 }
 
+function loadSkinPreviewImage(url?: string | null): Promise<HTMLImageElement | null> {
+  if (!url) return Promise.resolve(null)
+  return new Promise(resolve => {
+    const img = new Image()
+    const finish = () => {
+      img.onload = null
+      img.onerror = null
+      resolve(img.complete && img.naturalWidth > 0 && img.naturalHeight > 0 ? img : null)
+    }
+    img.onload = finish
+    img.onerror = () => { img.onload = null; img.onerror = null; resolve(null) }
+    img.src = url
+    if (img.complete) finish()
+  })
+}
+
 interface FollowPointsInteractivePreviewProps {
   hue: number
   scale: number
   opacity: number
-  followPointUrl?: string | null
+  frames?: FollowPointPreviewFrame[]
+  editing: boolean
+  recolor: boolean
   hitcircleUrl?: string | null
   overlayUrl?: string | null
   approachCircleUrl?: string | null
@@ -3235,7 +3294,9 @@ function FollowPointsInteractivePreview({
   hue,
   scale,
   opacity,
-  followPointUrl,
+  frames,
+  editing,
+  recolor,
   hitcircleUrl,
   overlayUrl,
   approachCircleUrl,
@@ -3246,8 +3307,7 @@ function FollowPointsInteractivePreview({
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  const fpImgRef = useRef<HTMLImageElement | null>(null)
-  const tintedFpRef = useRef<HTMLCanvasElement | null>(null)
+  const fpFramesRef = useRef<{ drawable: HTMLImageElement | HTMLCanvasElement; pixelRatio: number }[]>([])
 
   const hitcircleImgRef = useRef<HTMLImageElement | null>(null)
   const tintedHitcirclesRef = useRef<Record<number, HTMLCanvasElement | null>>({})
@@ -3263,125 +3323,52 @@ function FollowPointsInteractivePreview({
       : ['255, 192, 0', '0, 202, 0', '18, 124, 255', '242, 24, 57']
   }, [comboColors])
 
-  // Load Follow Point sprite (do NOT set crossOrigin on data URLs)
+  const [loaded, setLoaded] = useState<{
+    current: HTMLImageElement | null; original: HTMLImageElement | null; pixelRatio: number
+    hitcircle: HTMLImageElement | null; overlay: HTMLImageElement | null
+    approach: HTMLImageElement | null; digits: (HTMLImageElement | null)[]
+  } | null>(null)
+
+  // Decode only when the skin assets change, never while dragging a parameter.
   useEffect(() => {
-    if (!followPointUrl) {
-      fpImgRef.current = null
-      tintedFpRef.current = null
-      return
-    }
-    const img = new Image()
-    const handleLoaded = () => {
-      if (img.naturalWidth > 1 && img.naturalHeight > 1) {
-        fpImgRef.current = img
-        tintedFpRef.current = tintFollowpointSprite(img, hue, opacity)
-      } else {
-        fpImgRef.current = null
-        tintedFpRef.current = null
+    let cancelled = false
+    const frame = frames?.[0]
+    void Promise.all([
+      loadSkinPreviewImage(frame?.image),
+      loadSkinPreviewImage(frame?.originalImage),
+      loadSkinPreviewImage(hitcircleUrl),
+      loadSkinPreviewImage(overlayUrl),
+      loadSkinPreviewImage(approachCircleUrl),
+      ...Array.from({ length: 8 }, (_, i) => loadSkinPreviewImage(digitImages?.[i + 1] || (i === 0 ? default1Url : null))),
+    ]).then(([current, original, hitcircle, overlay, approach, ...digits]) => {
+      if (!cancelled) setLoaded({ current, original, pixelRatio: frame?.pixelRatio || 1, hitcircle, overlay, approach, digits })
+    })
+    return () => { cancelled = true }
+  }, [frames, hitcircleUrl, overlayUrl, approachCircleUrl, digitImages, default1Url])
+
+  const followPointDrawable = useMemo(() => {
+    if (!loaded) return null
+    const original = loaded.original || loaded.current
+    return editing && original ? tintFollowpointSprite(original, recolor ? hue : null, opacity) : loaded.current
+  }, [loaded, editing, recolor, hue, opacity])
+
+  useEffect(() => {
+    fpFramesRef.current = followPointDrawable ? [{ drawable: followPointDrawable, pixelRatio: loaded?.pixelRatio || 1 }] : []
+  }, [followPointDrawable, loaded])
+
+  useEffect(() => {
+    hitcircleImgRef.current = loaded?.hitcircle || null
+    overlayImgRef.current = loaded?.overlay || null
+    approachCircleImgRef.current = loaded?.approach || null
+    tintedHitcirclesRef.current = {}
+    if (loaded?.hitcircle) {
+      for (let i = 0; i < 3; i++) {
+        tintedHitcirclesRef.current[i] = tintHitcircleSprite(loaded.hitcircle, rgbStringToRgb(effectiveColors[i % effectiveColors.length]))
       }
     }
-    img.onload = handleLoaded
-    img.src = followPointUrl
-    if (img.complete) {
-      handleLoaded()
-    }
-  }, [followPointUrl])
-
-  // Re-tint Follow Point sprite when hue/opacity change
-  useEffect(() => {
-    if (fpImgRef.current && fpImgRef.current.naturalWidth > 1) {
-      tintedFpRef.current = tintFollowpointSprite(fpImgRef.current, hue, opacity)
-    }
-  }, [hue, opacity])
-
-  // Retint hitcircles
-  const reTintHitcircles = (img: HTMLImageElement | null, colors: string[]) => {
-    if (!img || img.naturalWidth <= 1) {
-      tintedHitcirclesRef.current = {}
-      return
-    }
-    const res: Record<number, HTMLCanvasElement | null> = {}
-    for (let i = 0; i < 3; i++) {
-      const colStr = colors[i % colors.length] || '255, 192, 0'
-      const rgb = rgbStringToRgb(colStr)
-      res[i] = tintHitcircleSprite(img, rgb)
-    }
-    tintedHitcirclesRef.current = res
-  }
-
-  // Load Hitcircle sprite
-  useEffect(() => {
-    if (!hitcircleUrl) {
-      hitcircleImgRef.current = null
-      tintedHitcirclesRef.current = {}
-      return
-    }
-    const img = new Image()
-    const handleLoaded = () => {
-      hitcircleImgRef.current = img
-      reTintHitcircles(img, effectiveColors)
-    }
-    img.onload = handleLoaded
-    img.src = hitcircleUrl
-    if (img.complete) handleLoaded()
-  }, [hitcircleUrl])
-
-  useEffect(() => {
-    if (hitcircleImgRef.current) {
-      reTintHitcircles(hitcircleImgRef.current, effectiveColors)
-    }
-  }, [effectiveColors])
-
-  // Load Hitcircle Overlay sprite
-  useEffect(() => {
-    if (!overlayUrl) {
-      overlayImgRef.current = null
-      return
-    }
-    const img = new Image()
-    img.onload = () => {
-      overlayImgRef.current = img
-    }
-    img.src = overlayUrl
-    if (img.complete) overlayImgRef.current = img
-  }, [overlayUrl])
-
-  // Load Approach Circle sprite
-  useEffect(() => {
-    if (!approachCircleUrl) {
-      approachCircleImgRef.current = null
-      tintedApproachRef.current = null
-      return
-    }
-    const img = new Image()
-    const handleLoaded = () => {
-      approachCircleImgRef.current = img
-      const firstCol = effectiveColors[0] || '255, 192, 0'
-      tintedApproachRef.current = tintHitcircleSprite(img, rgbStringToRgb(firstCol))
-    }
-    img.onload = handleLoaded
-    img.src = approachCircleUrl
-    if (img.complete) handleLoaded()
-  }, [approachCircleUrl, effectiveColors])
-
-  // Load digit sprites 1..3
-  useEffect(() => {
-    const nextMap: Record<number, HTMLImageElement | null> = {}
-    for (let d = 1; d <= 8; d++) {
-      const url = digitImages?.[d] || (d === 1 ? default1Url : null)
-      if (url) {
-        const img = new Image()
-        img.onload = () => {
-          nextMap[d] = img
-        }
-        img.src = url
-        nextMap[d] = img
-      } else {
-        nextMap[d] = null
-      }
-    }
-    digitImgsRef.current = nextMap
-  }, [digitImages, default1Url])
+    tintedApproachRef.current = loaded?.approach ? tintHitcircleSprite(loaded.approach, rgbStringToRgb(effectiveColors[0])) : null
+    digitImgsRef.current = Object.fromEntries((loaded?.digits || []).map((img, i) => [i + 1, img]))
+  }, [loaded, effectiveColors])
 
   // Canvas render loop
   useEffect(() => {
@@ -3445,89 +3432,47 @@ function FollowPointsInteractivePreview({
       // Helper to draw follow point guides between two notes
       const drawFollowPoints = (
         p1: { x: number; y: number; r: number },
-        p2: { x: number; y: number; r: number },
-        segIdx: number
+        p2: { x: number; y: number; r: number }
       ) => {
         const dx = p2.x - p1.x
         const dy = p2.y - p1.y
         const dist = Math.hypot(dx, dy)
         const angle = Math.atan2(dy, dx)
 
-        const startMargin = p1.r + 12 * Math.max(0.7, Math.min(1.4, scale))
-        const endMargin = dist - p2.r - 12 * Math.max(0.7, Math.min(1.4, scale))
+        const startMargin = p1.r + 12
+        const endMargin = dist - p2.r - 12
         const availableDist = endMargin - startMargin
         if (availableDist <= 10) return
 
-        const spacing = Math.max(26, Math.min(52, 34 * Math.max(0.75, Math.min(1.25, scale))))
+        const spacing = 32
         const numPoints = Math.max(2, Math.floor(availableDist / spacing))
         const step = availableDist / (numPoints + 1)
-        const segPhase = segIdx * 0.45
+        const loadedFrames = fpFramesRef.current
+        if (!loadedFrames.length) return
 
         for (let i = 1; i <= numPoints; i++) {
           const d = startMargin + step * i
           const px = p1.x + Math.cos(angle) * d
           const py = p1.y + Math.sin(angle) * d
-
-          const normDist = i / (numPoints + 1)
-          const wave = Math.sin((elapsed * 3.5 - normDist * 2.8 - segPhase) * Math.PI)
-          const waveIntensity = Math.max(0, wave)
-          const pulse = 1 + 0.16 * waveIntensity
-          const dotAlpha = Math.max(0.4, Math.min(1.0, 0.65 + 0.35 * waveIntensity))
-
+          const { drawable, pixelRatio } = loadedFrames[0]
+          const rawW = drawable instanceof HTMLImageElement ? drawable.naturalWidth : drawable.width
+          const rawH = drawable instanceof HTMLImageElement ? drawable.naturalHeight : drawable.height
+          const drawW = (editing ? Math.max(1, Math.round(rawW * scale)) : rawW) / pixelRatio
+          const drawH = (editing ? Math.max(1, Math.round(rawH * scale)) : rawH) / pixelRatio
           ctx.save()
           ctx.translate(px, py)
           ctx.rotate(angle)
-
-          const fpDrawable = tintedFpRef.current || fpImgRef.current
-          if (fpDrawable) {
-            const rawW = (fpDrawable as any).naturalWidth || (fpDrawable as any).width || 32
-            const rawH = (fpDrawable as any).naturalHeight || (fpDrawable as any).height || 32
-
-            let drawW: number
-            let drawH: number
-            if (rawW > rawH * 1.5) {
-              // Authentic horizontal stripe / dashed pill sprite (e.g. WhiteCat 128x20)
-              const aspect = rawW / rawH
-              drawW = Math.max(16, Math.min(36, 28 * scale * pulse))
-              drawH = Math.max(3, drawW / aspect)
-            } else {
-              // Dot / chevron sprite
-              drawW = Math.max(6, 16 * scale * pulse)
-              drawH = drawW / (rawW / rawH)
-            }
-
-            const [hr, hg, hb] = hslToRgb(hue, 0.88, 0.55)
-            ctx.shadowColor = `rgba(${hr}, ${hg}, ${hb}, ${0.55 * dotAlpha})`
-            ctx.shadowBlur = 6 * scale
-            ctx.globalAlpha = (opacity / 100) * dotAlpha
-            ctx.drawImage(fpDrawable, -drawW / 2, -drawH / 2, drawW, drawH)
-          } else {
-            // Fallback authentic dashed stripe (полоска), sleek and clean
-            const [hr, hg, hb] = hslToRgb(hue, 0.88, 0.55)
-            const curAlpha = (opacity / 100) * dotAlpha
-            const stripeW = Math.max(12, Math.min(26, 18 * scale * pulse))
-            const stripeH = Math.max(3.5, 4.5 * scale)
-
-            ctx.shadowColor = `rgba(${hr}, ${hg}, ${hb}, ${0.65 * curAlpha})`
-            ctx.shadowBlur = 6 * scale
-            ctx.fillStyle = `rgba(${hr}, ${hg}, ${hb}, ${curAlpha})`
-
-            ctx.beginPath()
-            if (typeof (ctx as any).roundRect === 'function') {
-              ;(ctx as any).roundRect(-stripeW / 2, -stripeH / 2, stripeW, stripeH, stripeH / 2)
-            } else {
-              ctx.rect(-stripeW / 2, -stripeH / 2, stripeW, stripeH)
-            }
-            ctx.fill()
-          }
+          ctx.globalAlpha = 1
+          ctx.imageSmoothingEnabled = !editing || scale === 1
+          ctx.drawImage(drawable, -drawW / 2, -drawH / 2, drawW, drawH)
 
           ctx.restore()
         }
       }
 
       // Draw lines: 1 -> 2 and 2 -> 3
-      drawFollowPoints(c1, c2, 0)
-      drawFollowPoints(c2, c3, 1)
+      drawFollowPoints(c1, c2)
+      drawFollowPoints(c2, c3)
 
       // Helper to draw hitcircle note
       const drawHitcircleNote = (c: {
@@ -3657,7 +3602,7 @@ function FollowPointsInteractivePreview({
 
     animId = requestAnimationFrame(render)
     return () => cancelAnimationFrame(animId)
-  }, [hue, scale, opacity, effectiveColors])
+  }, [scale, editing, effectiveColors])
 
   return (
     <div ref={containerRef} className="combo-preview-container" style={{ minHeight: 280, height: '100%' }}>
@@ -3869,7 +3814,7 @@ function SkinOptimizerStudio({
                     title={t('skinCustomizer.optimizerRevertBtn')}
                     style={{ fontSize: '11px', padding: '4px 8px' }}
                   >
-                    <Sparkles size={11} />
+                    <RotateCcw size={11} />
                     <span>{t('skinCustomizer.optimizerRevertBtn')}</span>
                   </button>
                 ) : (

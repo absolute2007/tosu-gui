@@ -21,59 +21,64 @@ export function TitleBar() {
   return (
     <header className="titlebar">
       <div className="titlebar-side -left">
-        <div className="traffic-lights">
+        <div className="titlebar-brand">
+          <AppIcon size={16} />
+          <span className="titlebar-title">tosu</span>
+        </div>
+      </div>
+
+      <div className="titlebar-center" aria-hidden="true" />
+
+      <div className="titlebar-side -right">
+        <div className="window-controls">
           <button
             type="button"
-            className="tl-btn -close"
-            onClick={() => window.tosuGui.close()}
-            aria-label={lang === 'en' ? 'Close' : 'Закрыть'}
-          >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M3 3l6 6M9 3L3 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="tl-btn -minimize"
+            className="win-btn -minimize"
             onClick={() => window.tosuGui.minimize()}
             aria-label={lang === 'en' ? 'Minimize' : 'Свернуть'}
+            title={lang === 'en' ? 'Minimize' : 'Свернуть'}
           >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M2.5 6h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <svg viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M1 5h8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
             </svg>
           </button>
           <button
             type="button"
-            className="tl-btn -maximize"
+            className="win-btn -maximize"
             onClick={() => window.tosuGui.maximize()}
             aria-label={maximized ? (lang === 'en' ? 'Restore' : 'Восстановить') : (lang === 'en' ? 'Maximize' : 'Развернуть')}
+            title={maximized ? (lang === 'en' ? 'Restore' : 'Восстановить') : (lang === 'en' ? 'Maximize' : 'Развернуть')}
           >
             {maximized ? (
-              <svg viewBox="0 0 12 12" aria-hidden="true">
+              <svg viewBox="0 0 10 10" aria-hidden="true">
                 <path
-                  d="M4 2.5h5.5V8M8 4H2.5v5.5"
+                  d="M3 1.5h5.5V7M7 3H1.5v5.5"
                   stroke="currentColor"
-                  strokeWidth="1.4"
+                  strokeWidth="1.1"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   fill="none"
                 />
               </svg>
             ) : (
-              <svg viewBox="0 0 12 12" aria-hidden="true">
-                <rect x="2.5" y="2.5" width="7" height="7" rx="1" stroke="currentColor" strokeWidth="1.4" fill="none" />
+              <svg viewBox="0 0 10 10" aria-hidden="true">
+                <rect x="1.5" y="1.5" width="7" height="7" rx="0.5" stroke="currentColor" strokeWidth="1.1" fill="none" />
               </svg>
             )}
           </button>
+          <button
+            type="button"
+            className="win-btn -close"
+            onClick={() => window.tosuGui.close()}
+            aria-label={lang === 'en' ? 'Close' : 'Закрыть'}
+            title={lang === 'en' ? 'Close' : 'Закрыть'}
+          >
+            <svg viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M2 2l6 6M8 2L2 8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
       </div>
-
-      <div className="titlebar-center">
-        <AppIcon size={15} />
-        <span className="titlebar-title">tosu</span>
-      </div>
-
-      <div className="titlebar-side -right" aria-hidden="true" />
     </header>
   )
 }

@@ -214,6 +214,15 @@ class OverlayProcess {
     this.event = new EventEmitter();
     this.keybind = new Keybind([]);
     this.mapsKeybind = new Keybind(readMapsKeybindKeys());
+    this.refreshMapsKeybind = () => {
+      const keys = readMapsKeybindKeys();
+      if (keys.join("+") !== this.mapsKeybind.keys.join("+")) {
+        this.mapsKeybind = new Keybind(keys);
+      }
+    };
+    for (const file of MAPS_KEYBIND_FILES) {
+      fs.watchFile(file, { interval: 150, persistent: false }, this.refreshMapsKeybind);
+    }
     this.inputs = [];
     this.configurationEnabled = false;
     this.mapsEnabled = false;
@@ -345,6 +354,7 @@ class OverlayProcess {
   }
 
   onDisconnected() {
+    for (const file of MAPS_KEYBIND_FILES) fs.unwatchFile(file, this.refreshMapsKeybind);
     this.window.destroy();
     this.event.emit("destroyed");
   }
@@ -480,7 +490,7 @@ class OverlayManager {
   constructor() {
     this.map = new Map();
     this.keybindKeys = ["Control", "Shift", "Space"];
-    this.maxFps = 60;
+    this.maxFps = 240;
   }
 
   async runIpc() {
@@ -597,8 +607,8 @@ function setupCustomProtocol() {
 }
 
 app.commandLine.appendSwitch("force_high_performance_gpu");
-app.commandLine.appendSwitch("in-process-gpu");
-app.commandLine.appendSwitch("disable-direct-composition");
+// app.commandLine.appendSwitch("in-process-gpu");
+// app.commandLine.appendSwitch("disable-direct-composition");
 app.commandLine.appendSwitch("disable-features", "ThirdPartyStoragePartitioning");
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 

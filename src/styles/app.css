@@ -366,14 +366,6 @@ html.window-maximized .app-shell {
   background: var(--warning);
 }
 
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -783,18 +775,14 @@ html.window-maximized .app-shell {
   border-top: 1px solid var(--separator);
 }
 
-.overlay-step-num {
+.overlay-step-index {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
-  font-size: 11px;
+  width: 18px;
+  font-size: 13px;
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
 }
 
 .overlay-step strong {

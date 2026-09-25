@@ -963,7 +963,7 @@
     } catch (err) {
       if (seq !== searchSeq) return
       setLine(err.message || t('errSearch'))
-      if (!append) sets = []
+      if (!append && !sets.length) sets = []
     } finally {
       if (seq === searchSeq) {
         setLoadingUi(false)
@@ -1613,7 +1613,7 @@
       clearTimeout(debounceTimer)
       debounceTimer = setTimeout(function () {
         void search(false)
-      }, 400)
+      }, 500)
     })
 
     if (els.qClear) {

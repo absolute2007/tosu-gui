@@ -437,7 +437,16 @@ export class TosuApi {
         content += `${content.endsWith('\n') || content === '' ? '' : '\n'}${key}=${value}\n`
       }
     }
-    fs.writeFileSync(this.envPath, content, 'utf8')
+    try {
+      fs.writeFileSync(this.envPath, content, 'utf8')
+    } catch (err: any) {
+      if (err?.code === 'EPERM' || err?.code === 'EACCES') {
+        throw new Error(
+          'Нет прав на запись в папку программы (C:\\Program Files). Запустите tosu-gui от имени администратора или переустановите в папку пользователя (%LOCALAPPDATA%).'
+        )
+      }
+      throw err
+    }
   }
 
   async saveSettings(updates: Record<string, string>) {

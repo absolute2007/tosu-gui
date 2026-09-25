@@ -35,12 +35,10 @@
 .beatmap-panel-empty-art {
   position: relative;
   width: 100%;
-  max-width: 200px;
+  max-width: 160px;
   aspect-ratio: 1;
   border-radius: var(--radius-group);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    var(--bg-grouped);
+  background: var(--bg-grouped);
   border: 1px solid var(--hairline);
   margin-bottom: 16px;
   overflow: hidden;
@@ -51,77 +49,40 @@
 
 .bm-empty-visual {
   position: relative;
-  width: 72px;
-  height: 72px;
+  width: 56px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-fill);
 }
 
-.bm-empty-ring {
+.bm-empty-icon {
+  color: var(--text-tertiary);
+}
+
+.bm-empty-badge {
   position: absolute;
-  inset: 0;
+  bottom: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.12);
-}
-
-.bm-empty-ring.-pulse {
-  border-color: rgba(255, 214, 10, 0.35);
-  animation: bm-ring-pulse 1.6s var(--ease-out) infinite;
-}
-
-.bm-empty-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
+  border: 2px solid var(--bg-grouped);
   background: var(--text-tertiary);
 }
 
-.bm-empty-dot.-offline {
+.bm-empty-badge.-no-tosu {
   background: var(--danger);
-  opacity: 0.85;
-  animation: bm-dot-breathe 2.2s ease-in-out infinite;
 }
 
-.bm-empty-dot.-waiting {
+.bm-empty-badge.-no-osu {
   background: var(--warning);
-  animation: bm-dot-breathe 1.4s ease-in-out infinite;
 }
 
-.bm-empty-bars {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 5px;
-  height: 36px;
-}
-
-.bm-empty-bars i {
-  display: block;
-  width: 5px;
-  border-radius: 3px;
-  background: rgba(10, 132, 255, 0.55);
-  animation: bm-bar 1.1s ease-in-out infinite;
-}
-
-.bm-empty-bars i:nth-child(1) { height: 12px; animation-delay: 0s; }
-.bm-empty-bars i:nth-child(2) { height: 22px; animation-delay: 0.12s; }
-.bm-empty-bars i:nth-child(3) { height: 30px; animation-delay: 0.24s; }
-.bm-empty-bars i:nth-child(4) { height: 16px; animation-delay: 0.36s; }
-
-@keyframes bm-ring-pulse {
-  0%, 100% { transform: scale(0.92); opacity: 0.55; }
-  50% { transform: scale(1.06); opacity: 1; }
-}
-
-@keyframes bm-dot-breathe {
-  0%, 100% { transform: scale(0.9); opacity: 0.55; }
-  50% { transform: scale(1.15); opacity: 1; }
-}
-
-@keyframes bm-bar {
-  0%, 100% { transform: scaleY(0.45); opacity: 0.45; }
-  50% { transform: scaleY(1); opacity: 1; }
+.bm-empty-badge.-no-map {
+  background: var(--accent);
 }
 
 .beatmap-panel-empty-title {
@@ -172,9 +133,7 @@
 .beatmap-cover-fallback {
   width: 100%;
   height: 100%;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
-    var(--bg-grouped);
+  background: var(--bg-elevated);
 }
 
 .beatmap-meta {
@@ -238,11 +197,9 @@
 }
 
 .bm-stat-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-tertiary);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 
 .bm-stat-value {
@@ -300,11 +257,9 @@
 }
 
 .beatmap-player-status-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 
 .beatmap-player-status-value {

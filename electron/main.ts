@@ -2,7 +2,12 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } from
 import type { Tray } from 'electron'
 import fs from 'fs'
 import path from 'path'
-import { TosuProcess } from './tosu-process'
+import {
+  TosuProcess,
+  syncTosuEnvToPersistent,
+  syncCounterSettingsBackup,
+  syncStaticCountersBackup,
+} from './tosu-process'
 import { TosuApi, savePersistentTosuEnv } from './tosu-api'
 import { readGuiSettings, writeGuiSettings } from './gui-settings'
 import { setOverlayAntialiasing } from './overlay-style'
@@ -25,6 +30,7 @@ import {
   downloadMapSet,
   DownloadCancelledError,
   fetchBeatmapOsuFile,
+  invalidateLocalSetIdsCache,
   pickSongsDirectory,
   resolveSongsPath,
   scanLocalSetIds,
@@ -38,7 +44,7 @@ import {
   loginWithOsuWindow,
 } from './osu-session'
 import { emitMapsHttpProgress, startMapsHttpServer, stopMapsHttpServer } from './maps-http-server'
-import { ensureMapsCounter } from './ensure-maps-counter'
+import { ensureMapsCounter, isProtectedMapsCounter } from './ensure-maps-counter'
 import { writeMapsKeybindFile } from './maps-keybind-file'
 import { searchOsuckSkins, getOsuckSkinDetail, osuckImageHeaders, OSUCK_ORIGIN } from './skins-osuck'
 import {
@@ -87,6 +93,51 @@ if (isDevBuild) {
 if (isWin) {
   app.setAppUserModelId(isDevBuild ? 'app.tosu.gui.dev' : 'app.tosu.gui')
 }
+
+// Migrate settings from legacy userData folder (tosu-gui vs tosu GUI) if needed
+function migrateLegacyUserData() {
+  try {
+    const current = app.getPath('userData')
+    const appData = app.getPath('appData')
+    const candidates = [
+      path.join(appData, 'tosu-gui'),
+      path.join(appData, 'tosu GUI'),
+    ].filter((p) => path.resolve(p).toLowerCase() !== path.resolve(current).toLowerCase())
+
+    for (const legacy of candidates) {
+      if (!fs.existsSync(legacy)) continue
+      const filesToMigrate = ['gui-settings.json', 'saved-tosu-env.json', 'osu-account.json']
+      for (const file of filesToMigrate) {
+        const src = path.join(legacy, file)
+        const dst = path.join(current, file)
+        if (fs.existsSync(src) && !fs.existsSync(dst)) {
+          fs.mkdirSync(current, { recursive: true })
+          fs.copyFileSync(src, dst)
+        }
+      }
+      const dirsToMigrate = ['tosu-counter-settings-backup', 'tosu-static-backup']
+      for (const dir of dirsToMigrate) {
+        const srcDir = path.join(legacy, dir)
+        const dstDir = path.join(current, dir)
+        if (fs.existsSync(srcDir) && !fs.existsSync(dstDir)) {
+          fs.cpSync(srcDir, dstDir, { recursive: true })
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[app] userData migration error:', err)
+  }
+}
+migrateLegacyUserData()
+
+// Disable GPU hardware acceleration only if explicitly enabled by user in settings
+const earlyGuiSettings = readGuiSettings()
+if (earlyGuiSettings.disableHardwareAcceleration === true) {
+  app.disableHardwareAcceleration()
+}
+
+// Prevent Cloudflare Turnstile infinite challenge loops by removing AutomationControlled flag
+app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -518,15 +569,23 @@ ipcMain.handle('tosu:get-counter-settings', async (_e, name: string) => {
 })
 
 ipcMain.handle('tosu:save-counter-settings', async (_e, name: string, settings: unknown[]) => {
-  return tosuApi.saveCounterSettings(name, settings)
+  const result = await tosuApi.saveCounterSettings(name, settings)
+  syncCounterSettingsBackup(tosuProcess.getTosuDir())
+  return result
 })
 
 ipcMain.handle('tosu:delete-counter', async (_e, name: string) => {
-  const { isProtectedMapsCounter } = await import('./ensure-maps-counter')
   if (isProtectedMapsCounter(String(name || ''))) {
     throw new Error('Счётчик Maps Browser нельзя удалить — только выключить оверлей или убрать с экрана в игре')
   }
-  return tosuApi.deleteCounter(name)
+  const result = await tosuApi.deleteCounter(name)
+  try {
+    const backupFolder = path.join(app.getPath('userData'), 'tosu-static-backup', name)
+    if (fs.existsSync(backupFolder)) {
+      fs.rmSync(backupFolder, { recursive: true, force: true })
+    }
+  } catch {}
+  return result
 })
 
 ipcMain.handle('tosu:open-counter-folder', async (_e, name: string) => {
@@ -534,7 +593,9 @@ ipcMain.handle('tosu:open-counter-folder', async (_e, name: string) => {
 })
 
 ipcMain.handle('tosu:download-counter', async (_e, url: string, name: string, update?: boolean) => {
-  return tosuApi.downloadCounter(url, name, update)
+  const result = await tosuApi.downloadCounter(url, name, update)
+  syncStaticCountersBackup(tosuProcess.getTosuDir())
+  return result
 })
 
 ipcMain.handle('tosu:search-available', async (_e, query: string) => {
@@ -663,6 +724,7 @@ ipcMain.handle(
           title: typeof payload?.title === 'string' ? payload.title : '',
         }
       )
+      invalidateLocalSetIdsCache()
       try {
         await shell.openPath(result.filePath)
       } catch (openErr) {
@@ -988,33 +1050,10 @@ ipcMain.handle('app:install-update', async () => {
     tosuSocket.disconnect()
 
     try {
-      const envPath = tosuProcess.getEnvPath()
-      if (fs.existsSync(envPath)) {
-        const content = fs.readFileSync(envPath, 'utf8')
-        const currentSaved: Record<string, string> = {}
-        for (const line of content.split('\n')) {
-          const trimmed = line.trim()
-          if (!trimmed || trimmed.startsWith('#')) continue
-          const m = trimmed.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/)
-          if (m) currentSaved[m[1]] = m[2].trim()
-        }
-        if (Object.keys(currentSaved).length > 0) {
-          savePersistentTosuEnv(currentSaved)
-        }
-      }
-
-      const settingsDir = path.join(tosuProcess.getTosuDir(), 'settings')
-      const backupDir = path.join(app.getPath('userData'), 'tosu-counter-settings-backup')
-      if (fs.existsSync(settingsDir)) {
-        fs.mkdirSync(backupDir, { recursive: true })
-        for (const f of fs.readdirSync(settingsDir)) {
-          const src = path.join(settingsDir, f)
-          const dst = path.join(backupDir, f)
-          if (fs.statSync(src).isFile()) {
-            fs.copyFileSync(src, dst)
-          }
-        }
-      }
+      const tosuDir = tosuProcess.getTosuDir()
+      syncTosuEnvToPersistent(tosuDir)
+      syncCounterSettingsBackup(tosuDir)
+      syncStaticCountersBackup(tosuDir)
     } catch (backupErr) {
       console.warn('[app-updater] failed to back up tosu settings before update:', backupErr)
     }

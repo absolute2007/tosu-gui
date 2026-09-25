@@ -443,16 +443,6 @@
   color: var(--text-primary);
 }
 
-.spin {
-  animation: skins-spin 0.8s linear infinite;
-}
-
-@keyframes skins-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* Screenshot gallery */
 .skin-gallery {
   position: fixed;

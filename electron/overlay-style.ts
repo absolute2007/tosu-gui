@@ -52,7 +52,11 @@ export function setOverlayAntialiasing(tosuDir: string, enabled: boolean) {
       content = `${content.trimEnd()}\n\n${AA_OFF_CSS}\n`
     }
 
-    fs.writeFileSync(file, content, 'utf8')
+    try {
+      fs.writeFileSync(file, content, 'utf8')
+    } catch {
+      // Ignore write errors if running from read-only folder
+    }
   }
 
   return cssFiles.length
