@@ -196,7 +196,7 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
         <div className="card-header">{t('overlay.guideHeader')}</div>
         <div className="card-body overlay-guide">
           <div className="overlay-step">
-            <span className="overlay-step-num">1</span>
+            <span className="overlay-step-index">1.</span>
             <div>
               {lang === 'en' ? (
                 <><strong>Enable overlay</strong> and click «Save and restart»</>
@@ -206,7 +206,7 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
             </div>
           </div>
           <div className="overlay-step">
-            <span className="overlay-step-num">2</span>
+            <span className="overlay-step-index">2.</span>
             <div>
               {lang === 'en' ? (
                 <><strong>Launch osu!</strong> — counters will appear automatically</>
@@ -216,7 +216,7 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
             </div>
           </div>
           <div className="overlay-step">
-            <span className="overlay-step-num">3</span>
+            <span className="overlay-step-index">3.</span>
             <div>
               {lang === 'en' ? (
                 <>Press <span className="hotkey-hint">{settings.INGAME_OVERLAY_KEYBIND}</span> to enter edit mode</>
@@ -226,7 +226,7 @@ export function OverlayPage({ baseUrl, tosuStatus, settings, dirty, saving, onUp
             </div>
           </div>
           <div className="overlay-step">
-            <span className="overlay-step-num">4</span>
+            <span className="overlay-step-index">4.</span>
             <div>
               {lang === 'en' ? (
                 <>Drag counters with mouse, resize — <strong>Esc</strong> to exit</>

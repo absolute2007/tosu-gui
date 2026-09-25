@@ -11,9 +11,18 @@ export function useOsuAuth(onToast?: (msg: string, type: 'success' | 'error') =>
       const raw = localStorage.getItem(CACHE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw) as OsuAccountInfo
-        if (parsed && typeof parsed.loggedIn === 'boolean') {
+        if (
+          parsed &&
+          parsed.loggedIn === true &&
+          typeof parsed.userId === 'number' &&
+          parsed.userId > 0 &&
+          typeof parsed.username === 'string' &&
+          parsed.username.trim().length > 0 &&
+          parsed.username.trim().toLowerCase() !== 'osu!'
+        ) {
           return parsed
         }
+        localStorage.removeItem(CACHE_KEY)
       }
     } catch {
       /* ignore */
@@ -24,10 +33,23 @@ export function useOsuAuth(onToast?: (msg: string, type: 'success' | 'error') =>
   const [authReady, setAuthReady] = useState(false)
 
   const syncAccountState = useCallback((info: OsuAccountInfo) => {
-    setAccount(info)
+    const isReal =
+      info &&
+      info.loggedIn === true &&
+      typeof info.userId === 'number' &&
+      info.userId > 0 &&
+      typeof info.username === 'string' &&
+      info.username.trim().length > 0 &&
+      info.username.trim().toLowerCase() !== 'osu!'
+
+    const validAccount: OsuAccountInfo = isReal
+      ? info
+      : { loggedIn: false, userId: null, username: null, avatarUrl: null }
+
+    setAccount(validAccount)
     try {
-      if (info.loggedIn) {
-        localStorage.setItem(CACHE_KEY, JSON.stringify(info))
+      if (validAccount.loggedIn) {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(validAccount))
       } else {
         localStorage.removeItem(CACHE_KEY)
       }

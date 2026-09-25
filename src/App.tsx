@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { TitleBar } from './components/TitleBar'
 import { Sidebar } from './components/Sidebar'
@@ -6,9 +6,6 @@ import { BeatmapPanel } from './components/BeatmapPanel'
 import { Toast } from './components/Toast'
 import { StatusPage } from './pages/StatusPage'
 import { CountersPage } from './pages/CountersPage'
-import { MapsPage } from './pages/MapsPage'
-import { SkinsPage } from './pages/SkinsPage'
-import { SkinCustomizerPage } from './pages/SkinCustomizerPage'
 import { OverlayPage } from './pages/OverlayPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { useTosuSocket } from './hooks/useTosuSocket'
@@ -22,6 +19,22 @@ import { useI18n } from './i18n/context'
 import type { TosuStatus } from '../electron/preload'
 import './styles/app.css'
 
+const MapsPage = lazy(() => import('./pages/MapsPage').then((m) => ({ default: m.MapsPage })))
+const SkinsPage = lazy(() => import('./pages/SkinsPage').then((m) => ({ default: m.SkinsPage })))
+const SkinCustomizerPage = lazy(() =>
+  import('./pages/SkinCustomizerPage').then((m) => ({ default: m.SkinCustomizerPage }))
+)
+
+function PageFallback() {
+  return (
+    <div className="page">
+      <div className="empty-state">
+        <Loader2 size={22} className="spin" />
+      </div>
+    </div>
+  )
+}
+
 export type Page = 'status' | 'counters' | 'maps' | 'skins' | 'skin-customizer' | 'overlay' | 'settings'
 
 
@@ -33,9 +46,19 @@ interface ToastState {
 export default function App() {
   const { lang } = useI18n()
   const [page, setPage] = useState<Page>('status')
+  const [visitedPages, setVisitedPages] = useState<Set<Page>>(() => new Set(['status']))
   const [tosuStatus, setTosuStatus] = useState<TosuStatus | null>(null)
   const [restarting, setRestarting] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
+
+  useEffect(() => {
+    setVisitedPages((prev) => {
+      if (prev.has(page)) return prev
+      const next = new Set(prev)
+      next.add(page)
+      return next
+    })
+  }, [page])
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type })
@@ -215,32 +238,40 @@ export default function App() {
               onToast={showToast}
             />
           </div>
-          <div className="page-slot" hidden={page !== 'maps'}>
-            <MapsPage
-              visible={page === 'maps'}
-              onToast={showToast}
-              onOpenSettings={() => setPage('settings')}
-              account={osuAuth.account}
-            />
-          </div>
-          {guiSettings.skinsBrowserEnabled ? (
+          {visitedPages.has('maps') && (
+            <div className="page-slot" hidden={page !== 'maps'}>
+              <Suspense fallback={<PageFallback />}>
+                <MapsPage
+                  visible={page === 'maps'}
+                  onToast={showToast}
+                  onOpenSettings={() => setPage('settings')}
+                  account={osuAuth.account}
+                />
+              </Suspense>
+            </div>
+          )}
+          {guiSettings.skinsBrowserEnabled && visitedPages.has('skins') && (
             <div className="page-slot" hidden={page !== 'skins'}>
-              <SkinsPage
-                visible={page === 'skins'}
-                onToast={showToast}
-                onOpenSettings={() => setPage('settings')}
-              />
+              <Suspense fallback={<PageFallback />}>
+                <SkinsPage
+                  visible={page === 'skins'}
+                  onToast={showToast}
+                  onOpenSettings={() => setPage('settings')}
+                />
+              </Suspense>
             </div>
-          ) : null}
-          {guiSettings.skinsBrowserEnabled ? (
+          )}
+          {guiSettings.skinsBrowserEnabled && visitedPages.has('skin-customizer') && (
             <div className="page-slot" hidden={page !== 'skin-customizer'}>
-              <SkinCustomizerPage
-                visible={page === 'skin-customizer'}
-                onToast={showToast}
-                onOpenSettings={() => setPage('settings')}
-              />
+              <Suspense fallback={<PageFallback />}>
+                <SkinCustomizerPage
+                  visible={page === 'skin-customizer'}
+                  onToast={showToast}
+                  onOpenSettings={() => setPage('settings')}
+                />
+              </Suspense>
             </div>
-          ) : null}
+          )}
 
           {page === 'overlay' && tosuSettings.settings && (
             <OverlayPage
@@ -277,10 +308,12 @@ export default function App() {
               skinsPathResolved={guiSettings.skinsPathResolved}
               skinsBrowserEnabled={guiSettings.skinsBrowserEnabled}
               mapsOverlayKeybind={guiSettings.mapsOverlayKeybind}
+              disableHardwareAcceleration={guiSettings.disableHardwareAcceleration}
               onCheckAppUpdatesChange={appUpdate.setCheckAppUpdates}
               onCloseToTrayChange={guiSettings.setCloseToTraySetting}
               onShowBeatmapPanelChange={guiSettings.setShowBeatmapPanelSetting}
               onMapsOverlayKeybindChange={guiSettings.setMapsOverlayKeybindSetting}
+              onDisableHardwareAccelerationChange={guiSettings.setDisableHardwareAccelerationSetting}
               onPickSongsPath={guiSettings.pickSongsPath}
               onClearSongsPath={guiSettings.clearSongsPath}
               onPickSkinsPath={guiSettings.pickSkinsPath}

@@ -12,6 +12,7 @@ import {
 } from './overlay-cleanup'
 import { patchIngameOverlay } from './overlay-patch'
 import { getInstalledVersion, installMatchingOverlay } from './tosu-updater'
+import { savePersistentTosuEnv } from './tosu-api'
 
 const DEFAULT_PORT = 24050
 const DEFAULT_STARTUP_TIMEOUT_MS = 20000
@@ -28,6 +29,103 @@ function hiddenSpawnOptions() {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export function syncTosuEnvToPersistent(tosuDir: string): void {
+  try {
+    const envPath = path.join(tosuDir, 'tosu.env')
+    if (!fs.existsSync(envPath)) return
+    const content = fs.readFileSync(envPath, 'utf8')
+    const currentSaved: Record<string, string> = {}
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const m = trimmed.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/)
+      if (m) currentSaved[m[1]] = m[2].trim()
+    }
+    if (Object.keys(currentSaved).length > 0) {
+      savePersistentTosuEnv(currentSaved)
+    }
+  } catch (err) {
+    console.warn('[tosu-process] syncTosuEnvToPersistent error:', err)
+  }
+}
+
+export function syncCounterSettingsBackup(tosuDir: string): void {
+  try {
+    const settingsDir = path.join(tosuDir, 'settings')
+    const backupDir = path.join(app.getPath('userData'), 'tosu-counter-settings-backup')
+    if (fs.existsSync(settingsDir)) {
+      fs.mkdirSync(backupDir, { recursive: true })
+      for (const f of fs.readdirSync(settingsDir)) {
+        const src = path.join(settingsDir, f)
+        const dst = path.join(backupDir, f)
+        if (fs.statSync(src).isFile()) {
+          fs.copyFileSync(src, dst)
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[tosu-process] syncCounterSettingsBackup error:', err)
+  }
+}
+
+export function restoreCounterSettingsBackup(tosuDir: string): void {
+  try {
+    const counterBackupDir = path.join(app.getPath('userData'), 'tosu-counter-settings-backup')
+    const counterDestDir = path.join(tosuDir, 'settings')
+    if (fs.existsSync(counterBackupDir)) {
+      fs.mkdirSync(counterDestDir, { recursive: true })
+      for (const f of fs.readdirSync(counterBackupDir)) {
+        const src = path.join(counterBackupDir, f)
+        const dst = path.join(counterDestDir, f)
+        if (fs.statSync(src).isFile()) {
+          // Unconditionally overwrite default templates from fresh updates
+          fs.copyFileSync(src, dst)
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[tosu-process] restoreCounterSettingsBackup error:', err)
+  }
+}
+
+export function syncStaticCountersBackup(tosuDir: string): void {
+  try {
+    const staticDir = path.join(tosuDir, 'static')
+    const backupDir = path.join(app.getPath('userData'), 'tosu-static-backup')
+    if (fs.existsSync(staticDir)) {
+      fs.mkdirSync(backupDir, { recursive: true })
+      for (const f of fs.readdirSync(staticDir)) {
+        const src = path.join(staticDir, f)
+        const dst = path.join(backupDir, f)
+        if (fs.statSync(src).isDirectory()) {
+          fs.cpSync(src, dst, { recursive: true })
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[tosu-process] syncStaticCountersBackup error:', err)
+  }
+}
+
+export function restoreStaticCountersBackup(tosuDir: string): void {
+  try {
+    const backupDir = path.join(app.getPath('userData'), 'tosu-static-backup')
+    const staticDir = path.join(tosuDir, 'static')
+    if (fs.existsSync(backupDir)) {
+      fs.mkdirSync(staticDir, { recursive: true })
+      for (const f of fs.readdirSync(backupDir)) {
+        const src = path.join(backupDir, f)
+        const dst = path.join(staticDir, f)
+        if (!fs.existsSync(dst) && fs.statSync(src).isDirectory()) {
+          fs.cpSync(src, dst, { recursive: true })
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[tosu-process] restoreStaticCountersBackup error:', err)
+  }
 }
 
 export class TosuProcess {
@@ -176,29 +274,24 @@ export class TosuProcess {
       }
     }
 
-    // tosu clamps POLL_RATE to min 100 — keep env clean
-    content = content.replace(/^POLL_RATE=\s*([0-9]+)\s*$/m, (_m, n: string) => {
-      const v = parseInt(n, 10)
-      return `POLL_RATE=${Number.isFinite(v) && v < 100 ? 100 : n}`
-    })
-
-    fs.writeFileSync(envPath, content, 'utf8')
-
-    // Restore any backed up counter settings (e.g. __ingame__.values.json) if missing
     try {
-      const counterBackupDir = path.join(app.getPath('userData'), 'tosu-counter-settings-backup')
-      const counterDestDir = path.join(tosuDir, 'settings')
-      if (fs.existsSync(counterBackupDir)) {
-        fs.mkdirSync(counterDestDir, { recursive: true })
-        for (const f of fs.readdirSync(counterBackupDir)) {
-          const src = path.join(counterBackupDir, f)
-          const dst = path.join(counterDestDir, f)
-          if (!fs.existsSync(dst) && fs.statSync(src).isFile()) {
-            fs.copyFileSync(src, dst)
-          }
-        }
+      fs.writeFileSync(envPath, content, 'utf8')
+    } catch (err: any) {
+      if (err?.code === 'EPERM' || err?.code === 'EACCES') {
+        console.warn(
+          `[tosu-process] No write permission to update ${envPath} (running from protected directory):`,
+          err?.message
+        )
+      } else {
+        throw err
       }
-    } catch {}
+    }
+
+    // Restore any backed up counter settings (overwriting installer defaults)
+    restoreCounterSettingsBackup(tosuDir)
+
+    // Restore any custom downloaded counter skins
+    restoreStaticCountersBackup(tosuDir)
   }
 
   private isProcessImageRunning(imageName: string) {
@@ -490,6 +583,10 @@ export class TosuProcess {
     this.intentionalStop = true
     this.clearRestartTimer()
 
+    syncTosuEnvToPersistent(this.getTosuDir())
+    syncCounterSettingsBackup(this.getTosuDir())
+    syncStaticCountersBackup(this.getTosuDir())
+
     if (this.process) {
       if (process.platform === 'win32' && this.process.pid) {
         spawn('taskkill', ['/pid', String(this.process.pid), '/f', '/t'], hiddenSpawnOptions())
@@ -509,6 +606,11 @@ export class TosuProcess {
       this.updating = true
       this.intentionalStop = true
       this.clearRestartTimer()
+
+      syncTosuEnvToPersistent(this.getTosuDir())
+      syncCounterSettingsBackup(this.getTosuDir())
+      syncStaticCountersBackup(this.getTosuDir())
+
       await this.killTrackedProcess()
 
       if (process.platform !== 'win32') {

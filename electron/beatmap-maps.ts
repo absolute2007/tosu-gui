@@ -3,13 +3,12 @@
  * Cancelable downloads; no community mirrors.
  */
 import fs from 'fs'
-import http from 'http'
-import https from 'https'
 import path from 'path'
+import { Readable } from 'stream'
 import { app, dialog, BrowserWindow } from 'electron'
-import type { ClientRequest, IncomingMessage } from 'http'
 import {
   buildOsuHeaders,
+  getOsuSession,
   hasOsuSessionCookie,
   OSU_ORIGIN,
   osuJsonGet,
@@ -319,75 +318,204 @@ export async function fetchBeatmapOsuFile(beatmapId: number): Promise<{
   throw new Error('Не удалось загрузить .osu файл карты для предпросмотра')
 }
 
+interface SearchCacheEntry {
+  timestamp: number
+  data: MapSearchResult
+}
+
+const searchCache = new Map<string, SearchCacheEntry>()
+const SEARCH_CACHE_TTL_MS = 60_000
+
+function getSearchCacheKey(params: MapSearchParams): string {
+  return [
+    params.query ?? '',
+    params.mode ?? 'any',
+    params.status ?? 'any',
+    params.language ?? 'any',
+    params.page ?? 0,
+    params.cursor ?? '',
+    params.limit ?? 24,
+  ].join('|')
+}
+
+export async function searchMapSetsMirror(params: MapSearchParams): Promise<MapSearchResult> {
+  const page = Math.max(params.page ?? 0, 0)
+  const q = (params.query ?? '').trim()
+  const modeInt = params.mode && params.mode !== 'any' ? MODE_INT[params.mode] : undefined
+  const statusStr = params.status && params.status !== 'any' ? STATUS_PARAM[params.status] : 'ranked'
+
+  // 1. Try Nerinyan search mirror
+  try {
+    const sp = new URLSearchParams()
+    if (q) sp.set('q', q)
+    if (modeInt != null) sp.set('m', String(modeInt))
+    if (statusStr && statusStr !== 'any') sp.set('s', statusStr)
+    sp.set('p', String(page))
+    sp.set('limit', String(params.limit || 24))
+
+    const res = await fetch(`https://api.nerinyan.moe/search?${sp.toString()}`, {
+      headers: { 'User-Agent': 'tosu-gui' },
+      signal: AbortSignal.timeout(6000),
+    })
+    if (res.ok) {
+      const data = (await res.json()) as unknown
+      const rawList: Record<string, unknown>[] = Array.isArray(data)
+        ? (data as Record<string, unknown>[])
+        : data && typeof data === 'object' && Array.isArray((data as { data?: unknown[] }).data)
+          ? ((data as { data: Record<string, unknown>[] }).data)
+          : []
+      const sets: MapSetSummary[] = []
+      for (const item of rawList) {
+        const norm = normalizeSet(item)
+        if (norm) sets.push(norm)
+      }
+      if (sets.length > 0 || !q) {
+        return {
+          sets,
+          cursor: null,
+          hasMore: sets.length >= (params.limit || 24),
+          total: null,
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[maps] nerinyan mirror search failed:', err)
+  }
+
+  // 2. Try Mino (catboy.best) search mirror
+  try {
+    const sp = new URLSearchParams()
+    if (q) sp.set('q', q)
+    if (modeInt != null) sp.set('mode', String(modeInt))
+    if (statusStr && statusStr !== 'any') sp.set('status', statusStr)
+    sp.set('p', String(page))
+
+    const res = await fetch(`https://catboy.best/api/v2/search?${sp.toString()}`, {
+      headers: { 'User-Agent': 'tosu-gui' },
+      signal: AbortSignal.timeout(6000),
+    })
+    if (res.ok) {
+      const data = (await res.json()) as unknown
+      const rawList: Record<string, unknown>[] = Array.isArray(data)
+        ? (data as Record<string, unknown>[])
+        : data && typeof data === 'object' && Array.isArray((data as { sets?: unknown[] }).sets)
+          ? ((data as { sets: Record<string, unknown>[] }).sets)
+          : []
+      const sets: MapSetSummary[] = []
+      for (const item of rawList) {
+        const norm = normalizeSet(item)
+        if (norm) sets.push(norm)
+      }
+      return {
+        sets,
+        cursor: null,
+        hasMore: sets.length >= 20,
+        total: null,
+      }
+    }
+  } catch (err) {
+    console.warn('[maps] catboy mirror search failed:', err)
+  }
+
+  return { sets: [], cursor: null, hasMore: false, total: 0 }
+}
+
 export async function searchMapSets(params: MapSearchParams): Promise<MapSearchResult> {
-  if (!(await hasOsuSessionCookie())) {
+  const cacheKey = getSearchCacheKey(params)
+  const cached = searchCache.get(cacheKey)
+  if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL_MS) {
+    return cached.data
+  }
+
+  const isLogged = await hasOsuSessionCookie()
+
+  // If not logged in, try mirror search
+  if (!isLogged) {
+    const mirrorResult = await searchMapSetsMirror(params)
+    if (mirrorResult.sets.length > 0) {
+      searchCache.set(cacheKey, { timestamp: Date.now(), data: mirrorResult })
+      return mirrorResult
+    }
     throw new Error('Войдите в osu!, чтобы искать карты')
   }
 
-  const page = Math.max(params.page ?? 0, 0)
-  const sp = new URLSearchParams()
-  sp.set('q', (params.query ?? '').trim())
-  if (params.mode && params.mode !== 'any') {
-    sp.set('m', String(MODE_INT[params.mode]))
-  }
-  if (params.status && params.status !== 'any') {
-    sp.set('s', STATUS_PARAM[params.status] ?? 'any')
-  } else {
-    sp.set('s', 'any')
-  }
-  if (params.language && params.language !== 'any') {
-    const langId = LANGUAGE_PARAM[params.language]
-    if (langId != null) sp.set('l', String(langId))
-  }
+  try {
+    const page = Math.max(params.page ?? 0, 0)
+    const sp = new URLSearchParams()
+    sp.set('q', (params.query ?? '').trim())
+    if (params.mode && params.mode !== 'any') {
+      sp.set('m', String(MODE_INT[params.mode]))
+    }
+    if (params.status && params.status !== 'any') {
+      sp.set('s', STATUS_PARAM[params.status] ?? 'any')
+    } else {
+      sp.set('s', 'any')
+    }
+    if (params.language && params.language !== 'any') {
+      const langId = LANGUAGE_PARAM[params.language]
+      if (langId != null) sp.set('l', String(langId))
+    }
 
-  // Pagination: prefer opaque cursor_string; else page number (1-based on wire).
-  // Do NOT JSON.stringify the cursor object into cursor_string — API rejects it.
-  if (params.cursor) {
-    if (params.cursor.startsWith('{')) {
-      try {
-        appendCursorObject(sp, JSON.parse(params.cursor) as unknown)
-      } catch {
+    // Pagination: prefer opaque cursor_string; else page number (1-based on wire).
+    // Do NOT JSON.stringify the cursor object into cursor_string — API rejects it.
+    if (params.cursor) {
+      if (params.cursor.startsWith('{')) {
+        try {
+          appendCursorObject(sp, JSON.parse(params.cursor) as unknown)
+        } catch {
+          sp.set('cursor_string', params.cursor)
+        }
+      } else {
         sp.set('cursor_string', params.cursor)
       }
-    } else {
-      sp.set('cursor_string', params.cursor)
+    } else if (page > 0) {
+      sp.set('page', String(page + 1))
     }
-  } else if (page > 0) {
-    sp.set('page', String(page + 1))
-  }
 
-  const data = (await osuJsonGet(`${OSU_ORIGIN}/beatmapsets/search?${sp.toString()}`)) as Record<
-    string,
-    unknown
-  >
+    const data = (await osuJsonGet(`${OSU_ORIGIN}/beatmapsets/search?${sp.toString()}`)) as Record<
+      string,
+      unknown
+    >
 
-  const rawList = Array.isArray(data.beatmapsets)
-    ? (data.beatmapsets as Record<string, unknown>[])
-    : Array.isArray(data)
-      ? (data as Record<string, unknown>[])
-      : []
+    const rawList = Array.isArray(data.beatmapsets)
+      ? (data.beatmapsets as Record<string, unknown>[])
+      : Array.isArray(data)
+        ? (data as Record<string, unknown>[])
+        : []
 
-  const sets = rawList.map(normalizeSet).filter((s): s is MapSetSummary => s != null)
-  let cursor = extractCursorString(data)
-  // Keep structured cursor for next request if string missing
-  if (!cursor && data.cursor && typeof data.cursor === 'object') {
-    try {
-      cursor = JSON.stringify(data.cursor)
-    } catch {
-      cursor = null
+    const sets = rawList.map(normalizeSet).filter((s): s is MapSetSummary => s != null)
+    let cursor = extractCursorString(data)
+    // Keep structured cursor for next request if string missing
+    if (!cursor && data.cursor && typeof data.cursor === 'object') {
+      try {
+        cursor = JSON.stringify(data.cursor)
+      } catch {
+        cursor = null
+      }
     }
-  }
 
-  const total = num(data.total, -1)
-  // Full page ≈ more results exist (osu default page size is often 50)
-  const looksFull = sets.length >= 20
-  const hasMore = Boolean(cursor) || looksFull
+    const total = num(data.total, -1)
+    // Full page ≈ more results exist (osu default page size is often 50)
+    const looksFull = sets.length >= 20
+    const hasMore = Boolean(cursor) || looksFull
 
-  return {
-    sets,
-    cursor,
-    hasMore,
-    total: total >= 0 ? total : null,
+    const result: MapSearchResult = {
+      sets,
+      cursor,
+      hasMore,
+      total: total >= 0 ? total : null,
+    }
+
+    searchCache.set(cacheKey, { timestamp: Date.now(), data: result })
+    return result
+  } catch (err) {
+    console.warn('[maps] osu.ppy.sh search failed, falling back to mirrors:', err)
+    const mirrorResult = await searchMapSetsMirror(params)
+    if (mirrorResult.sets.length > 0) {
+      searchCache.set(cacheKey, { timestamp: Date.now(), data: mirrorResult })
+      return mirrorResult
+    }
+    throw err
   }
 }
 
@@ -396,8 +524,7 @@ export async function searchMapSets(params: MapSearchParams): Promise<MapSearchR
 interface ActiveDownload {
   setId: number
   cancelled: boolean
-  req: ClientRequest | null
-  res: IncomingMessage | null
+  abortController: AbortController | null
   tempPath: string | null
   file: fs.WriteStream | null
 }
@@ -409,12 +536,7 @@ export function cancelMapDownload(setId: number): boolean {
   if (!active) return false
   active.cancelled = true
   try {
-    active.req?.destroy()
-  } catch {
-    /* ignore */
-  }
-  try {
-    active.res?.destroy()
+    active.abortController?.abort()
   } catch {
     /* ignore */
   }
@@ -453,7 +575,7 @@ class DownloadCancelledError extends Error {
   }
 }
 
-function downloadToFileCancelable(
+async function downloadToFileCancelable(
   url: string,
   dest: string,
   headers: Record<string, string>,
@@ -461,156 +583,136 @@ function downloadToFileCancelable(
   onProgress: (pct: number) => void,
   timeoutMs = 600_000
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const follow = (fetchUrl: string, redirects = 0) => {
-      if (active.cancelled) {
-        reject(new DownloadCancelledError())
-        return
-      }
-      if (redirects > 12) {
-        reject(new Error('Слишком много редиректов'))
-        return
-      }
+  const controller = new AbortController()
+  active.abortController = controller
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
 
-      const parsed = new URL(fetchUrl)
-      const lib = parsed.protocol === 'https:' ? https : http
+  try {
+    if (active.cancelled) {
+      throw new DownloadCancelledError()
+    }
 
-      const req = lib.get(
-        fetchUrl,
-        {
-          headers: {
-            ...headers,
-            Accept: '*/*',
-            // download endpoints sometimes want browser-like accept
-            'User-Agent': headers['User-Agent'] || USER_AGENT,
-          },
-          timeout: timeoutMs,
-        },
-        (res) => {
+    const ses = getOsuSession()
+    const res = await ses.fetch(url, {
+      method: 'GET',
+      headers: {
+        ...headers,
+        Accept: '*/*',
+        'User-Agent': headers['User-Agent'] || USER_AGENT,
+      },
+      signal: controller.signal,
+    })
+
+    if (active.cancelled) {
+      throw new DownloadCancelledError()
+    }
+
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        throw new Error('Нужно войти в osu! или нет доступа к скачиванию')
+      }
+      if (res.status === 429) {
+        throw new Error('Лимит скачиваний osu! — подождите')
+      }
+      throw new Error(`HTTP ${res.status}`)
+    }
+
+    const contentType = String(res.headers.get('content-type') || '')
+    if (contentType.includes('text/html')) {
+      throw new Error('osu! вернул страницу вместо файла — войдите заново')
+    }
+
+    if (!res.body) {
+      throw new Error('Пустой ответ от сервера osu!')
+    }
+
+    const total = parseInt(res.headers.get('content-length') || '0', 10)
+    let received = 0
+    const file = fs.createWriteStream(dest)
+    active.file = file
+    active.tempPath = dest
+
+    const nodeStream = Readable.fromWeb(res.body as import('stream/web').ReadableStream)
+
+    await new Promise<void>((resolve, reject) => {
+      nodeStream.on('data', (chunk: Buffer) => {
+        if (active.cancelled) {
+          nodeStream.destroy()
+          file.destroy()
+          return
+        }
+        received += chunk.length
+        if (total > 0) onProgress(Math.min(96, (received / total) * 96))
+        else onProgress(Math.min(90, received / (512 * 1024)))
+      })
+
+      nodeStream.pipe(file)
+
+      file.on('finish', () => {
+        file.close(() => {
           if (active.cancelled) {
-            res.resume()
-            reject(new DownloadCancelledError())
-            return
-          }
-
-          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            res.resume()
-            follow(new URL(res.headers.location, fetchUrl).href, redirects + 1)
-            return
-          }
-
-          if (!res.statusCode || res.statusCode >= 400) {
-            res.resume()
-            if (res.statusCode === 401 || res.statusCode === 403) {
-              reject(new Error('Нужно войти в osu! или нет доступа к скачиванию'))
-              return
-            }
-            if (res.statusCode === 429) {
-              reject(new Error('Лимит скачиваний osu! — подождите'))
-              return
-            }
-            reject(new Error(`HTTP ${res.statusCode ?? '?'}`))
-            return
-          }
-
-          const contentType = String(res.headers['content-type'] || '')
-          if (contentType.includes('text/html')) {
-            res.resume()
-            reject(new Error('osu! вернул страницу вместо файла — войдите заново'))
-            return
-          }
-
-          active.res = res
-          const total = parseInt(res.headers['content-length'] || '0', 10)
-          let received = 0
-          const file = fs.createWriteStream(dest)
-          active.file = file
-          active.tempPath = dest
-
-          res.on('data', (chunk: Buffer) => {
-            if (active.cancelled) {
-              res.destroy()
-              file.destroy()
-              return
-            }
-            received += chunk.length
-            if (total > 0) onProgress(Math.min(96, (received / total) * 96))
-            else onProgress(Math.min(90, received / (512 * 1024)))
-          })
-
-          res.pipe(file)
-
-          file.on('finish', () => {
-            file.close(() => {
-              if (active.cancelled) {
-                try {
-                  fs.unlinkSync(dest)
-                } catch {
-                  /* ignore */
-                }
-                reject(new DownloadCancelledError())
-                return
-              }
-              try {
-                const size = fs.statSync(dest).size
-                if (size < MIN_OSZ_BYTES) {
-                  try {
-                    fs.unlinkSync(dest)
-                  } catch {
-                    /* ignore */
-                  }
-                  reject(new Error('Файл слишком маленький — скачивание не удалось'))
-                  return
-                }
-                onProgress(98)
-                resolve()
-              } catch (err) {
-                reject(err)
-              }
-            })
-          })
-
-          file.on('error', (err) => {
             try {
-              fs.unlinkSync(dest)
+              if (fs.existsSync(dest)) fs.unlinkSync(dest)
             } catch {
               /* ignore */
             }
-            if (active.cancelled) reject(new DownloadCancelledError())
-            else reject(err)
-          })
-
-          res.on('error', (err) => {
-            if (active.cancelled) reject(new DownloadCancelledError())
-            else reject(err)
-          })
-
-          res.on('close', () => {
-            if (active.cancelled) {
+            reject(new DownloadCancelledError())
+            return
+          }
+          try {
+            const size = fs.statSync(dest).size
+            if (size < MIN_OSZ_BYTES) {
               try {
-                if (fs.existsSync(dest)) fs.unlinkSync(dest)
+                fs.unlinkSync(dest)
               } catch {
                 /* ignore */
               }
+              reject(new Error('Файл слишком маленький — скачивание не удалось'))
+              return
             }
-          })
-        }
-      )
+            onProgress(98)
+            resolve()
+          } catch (err) {
+            reject(err)
+          }
+        })
+      })
 
-      active.req = req
-      req.on('error', (err) => {
+      nodeStream.on('error', (err) => {
+        try {
+          file.destroy()
+          if (fs.existsSync(dest)) fs.unlinkSync(dest)
+        } catch {
+          /* ignore */
+        }
         if (active.cancelled) reject(new DownloadCancelledError())
         else reject(err)
       })
-      req.on('timeout', () => {
-        req.destroy()
-        if (active.cancelled) reject(new DownloadCancelledError())
-        else reject(new Error('Превышено время ожидания загрузки'))
-      })
-    }
 
-    follow(url)
-  })
+      file.on('error', (err) => {
+        try {
+          nodeStream.destroy()
+          if (fs.existsSync(dest)) fs.unlinkSync(dest)
+        } catch {
+          /* ignore */
+        }
+        if (active.cancelled) reject(new DownloadCancelledError())
+        else reject(err)
+      })
+    })
+  } catch (err) {
+    if (active.cancelled || (err instanceof Error && err.name === 'AbortError' && active.cancelled)) {
+      try {
+        if (fs.existsSync(dest)) fs.unlinkSync(dest)
+      } catch {
+        /* ignore */
+      }
+      throw new DownloadCancelledError()
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export async function downloadMapSet(
@@ -633,8 +735,7 @@ export async function downloadMapSet(
   const active: ActiveDownload = {
     setId,
     cancelled: false,
-    req: null,
-    res: null,
+    abortController: null,
     tempPath: null,
     file: null,
   }
@@ -649,18 +750,53 @@ export async function downloadMapSet(
   const url = `${OSU_ORIGIN}/beatmapsets/${setId}/download${noVideo ? '?noVideo=1' : ''}`
 
   try {
+    let downloadSource = 'osu.ppy.sh'
     onProgress({ setId, phase: 'downloading', progress: 0, message: 'Скачивание с osu.ppy.sh…' })
 
-    const headers = await buildOsuHeaders({
-      Accept: 'application/octet-stream,application/x-osu-beatmap-archive,*/*',
-      Referer: `${OSU_ORIGIN}/beatmapsets/${setId}`,
-    })
+    try {
+      const headers = await buildOsuHeaders({
+        Accept: 'application/octet-stream,application/x-osu-beatmap-archive,*/*',
+        Referer: `${OSU_ORIGIN}/beatmapsets/${setId}`,
+      })
 
-    await downloadToFileCancelable(url, tempPath, headers, active, (pct) => {
-      if (!active.cancelled) {
-        onProgress({ setId, phase: 'downloading', progress: pct, message: 'Скачивание…' })
+      await downloadToFileCancelable(url, tempPath, headers, active, (pct) => {
+        if (!active.cancelled) {
+          onProgress({ setId, phase: 'downloading', progress: pct, message: 'Скачивание…' })
+        }
+      })
+    } catch (officialErr) {
+      if (active.cancelled || officialErr instanceof DownloadCancelledError) throw officialErr
+      console.warn('[maps] osu.ppy.sh download failed, trying mirrors:', officialErr)
+
+      const mirrorUrls = [
+        `https://api.nerinyan.moe/d/${setId}${noVideo ? '?noVideo=true' : ''}`,
+        `https://catboy.best/d/${setId}`,
+      ]
+
+      let downloaded = false
+      for (const mUrl of mirrorUrls) {
+        if (active.cancelled) throw new DownloadCancelledError()
+        try {
+          const mirrorName = mUrl.includes('nerinyan') ? 'Nerinyan' : 'Catboy'
+          onProgress({ setId, phase: 'downloading', progress: 0, message: `Скачивание с зеркала (${mirrorName})…` })
+          await downloadToFileCancelable(mUrl, tempPath, { 'User-Agent': 'tosu-gui' }, active, (pct) => {
+            if (!active.cancelled) {
+              onProgress({ setId, phase: 'downloading', progress: pct, message: `Скачивание (${mirrorName})…` })
+            }
+          })
+          downloaded = true
+          downloadSource = mirrorName
+          break
+        } catch (mErr) {
+          if (active.cancelled || mErr instanceof DownloadCancelledError) throw mErr
+          console.warn('[maps] mirror download failed:', mUrl, mErr)
+        }
       }
-    })
+
+      if (!downloaded) {
+        throw officialErr
+      }
+    }
 
     if (active.cancelled) throw new DownloadCancelledError()
 
@@ -702,7 +838,7 @@ export async function downloadMapSet(
       filePath: finalPath,
     })
 
-    return { filePath: finalPath, source: 'osu.ppy.sh' }
+    return { filePath: finalPath, source: downloadSource }
   } catch (err) {
     if (err instanceof DownloadCancelledError || active.cancelled) {
       onProgress({ setId, phase: 'cancelled', progress: 0, message: 'Отменено' })
@@ -762,21 +898,38 @@ export function resolveSongsPath(configured: string | null | undefined): string 
   return detectDefaultSongsPath()
 }
 
+let cachedSongsPath = ''
+let cachedMtimeMs = 0
+let cachedSetIds: number[] = []
+
+export function invalidateLocalSetIdsCache(): void {
+  cachedSongsPath = ''
+  cachedMtimeMs = 0
+  cachedSetIds = []
+}
+
 export function scanLocalSetIds(songsPath: string): number[] {
-  const ids = new Set<number>()
   try {
     if (!songsPath || !fs.existsSync(songsPath)) return []
+    const stat = fs.statSync(songsPath)
+    if (cachedSongsPath === songsPath && cachedMtimeMs === stat.mtimeMs && cachedSetIds.length > 0) {
+      return cachedSetIds
+    }
     const entries = fs.readdirSync(songsPath, { withFileTypes: true })
+    const ids = new Set<number>()
     for (const ent of entries) {
       const m = ent.name.match(/^(\d{1,9})(?:\s|[._-]|$)/)
       if (!m) continue
       const id = parseInt(m[1], 10)
       if (id > 0) ids.add(id)
     }
+    cachedSongsPath = songsPath
+    cachedMtimeMs = stat.mtimeMs
+    cachedSetIds = [...ids]
+    return cachedSetIds
   } catch {
     return []
   }
-  return [...ids]
 }
 
 export async function pickSongsDirectory(parent: BrowserWindow | null): Promise<string | null> {

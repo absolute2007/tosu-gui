@@ -26,6 +26,10 @@ export interface GuiSettings {
    * Mute osu! audio while previewing beatmaps (mini-player or gameplay preview).
    */
   muteOsuOnPreview: boolean
+  /**
+   * Disable GPU hardware acceleration in Electron (recommended for osu! to minimize frametime/latency).
+   */
+  disableHardwareAcceleration: boolean
 }
 
 const DEFAULTS: GuiSettings = {
@@ -40,6 +44,7 @@ const DEFAULTS: GuiSettings = {
   skinsBrowserEnabled: true,
   mapsOverlayKeybind: 'Control + Shift + M',
   muteOsuOnPreview: true,
+  disableHardwareAcceleration: false,
 }
 
 function getSettingsPath() {

@@ -6,14 +6,21 @@ import { BrowserWindow, app, session, shell } from 'electron'
 import type { Session } from 'electron'
 import fs from 'fs'
 import path from 'path'
-import http from 'http'
-import https from 'https'
-import { URL } from 'url'
 
 const OSU_ORIGIN = 'https://osu.ppy.sh'
 const PARTITION = 'persist:osu-official'
-const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 tosu-gui'
+export function getCleanUserAgent(ses?: Session): string {
+  try {
+    const target = ses || session.fromPartition(PARTITION)
+    const raw = target.getUserAgent()
+    return raw.replace(/Electron\/\S+\s*/g, '').replace(/tosu-gui\S*\s*/g, '').trim()
+  } catch {
+    return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
+  }
+}
+
+export const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
 
 export interface OsuAccountInfo {
   loggedIn: boolean
@@ -22,8 +29,27 @@ export interface OsuAccountInfo {
   avatarUrl: string | null
 }
 
+export function isValidAccount(account: unknown): account is OsuAccountInfo {
+  if (!account || typeof account !== 'object') return false
+  const a = account as Record<string, unknown>
+  return (
+    a.loggedIn === true &&
+    typeof a.userId === 'number' &&
+    a.userId > 0 &&
+    typeof a.username === 'string' &&
+    a.username.trim().length > 0 &&
+    a.username.trim().toLowerCase() !== 'osu!'
+  )
+}
+
 function getOsuSession(): Session {
-  return session.fromPartition(PARTITION)
+  const ses = session.fromPartition(PARTITION)
+  try {
+    ses.setUserAgent(getCleanUserAgent(ses))
+  } catch {
+    /* ignore */
+  }
+  return ses
 }
 
 export async function getCookieHeader(): Promise<string> {
@@ -48,10 +74,12 @@ async function getCsrfToken(): Promise<string | null> {
 }
 
 export async function buildOsuHeaders(extra?: Record<string, string>): Promise<Record<string, string>> {
+  const ses = getOsuSession()
+  const ua = getCleanUserAgent(ses)
   const cookie = await getCookieHeader()
   const csrf = await getCsrfToken()
   const headers: Record<string, string> = {
-    'User-Agent': USER_AGENT,
+    'User-Agent': ua,
     Accept: 'application/json',
     'Accept-Language': 'en-US,en;q=0.9',
     Referer: `${OSU_ORIGIN}/beatmapsets`,
@@ -64,47 +92,6 @@ export async function buildOsuHeaders(extra?: Record<string, string>): Promise<R
     headers['X-XSRF-TOKEN'] = csrf
   }
   return headers
-}
-
-function requestJson(url: string, headers: Record<string, string>, timeoutMs = 25_000): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url)
-    const lib = parsed.protocol === 'https:' ? https : http
-    const req = lib.get(
-      url,
-      {
-        headers,
-        timeout: timeoutMs,
-      },
-      (res) => {
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          res.resume()
-          requestJson(new URL(res.headers.location, url).href, headers, timeoutMs).then(resolve, reject)
-          return
-        }
-        const chunks: Buffer[] = []
-        res.on('data', (c: Buffer) => chunks.push(c))
-        res.on('end', () => {
-          const text = Buffer.concat(chunks).toString('utf8')
-          if (!res.statusCode || res.statusCode >= 400) {
-            reject(new Error(parseErrorMessage(text, res.statusCode)))
-            return
-          }
-          try {
-            resolve(JSON.parse(text))
-          } catch {
-            reject(new Error('Некорректный JSON от osu.ppy.sh'))
-          }
-        })
-        res.on('error', reject)
-      }
-    )
-    req.on('error', reject)
-    req.on('timeout', () => {
-      req.destroy()
-      reject(new Error('Таймаут запроса к osu.ppy.sh'))
-    })
-  })
 }
 
 function parseErrorMessage(body: string, status?: number): string {
@@ -121,34 +108,56 @@ function parseErrorMessage(body: string, status?: number): string {
   return `osu.ppy.sh HTTP ${status ?? '?'}`
 }
 
-function requestText(url: string, headers: Record<string, string>, timeoutMs = 25_000): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url)
-    const lib = parsed.protocol === 'https:' ? https : http
-    const req = lib.get(url, { headers, timeout: timeoutMs }, (res) => {
-      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume()
-        requestText(new URL(res.headers.location, url).href, headers, timeoutMs).then(resolve, reject)
-        return
-      }
-      const chunks: Buffer[] = []
-      res.on('data', (c: Buffer) => chunks.push(c))
-      res.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf8')
-        if (!res.statusCode || res.statusCode >= 400) {
-          reject(new Error(parseErrorMessage(text, res.statusCode)))
-          return
-        }
-        resolve(text)
-      })
-      res.on('error', reject)
+async function requestJson(url: string, headers: Record<string, string>, timeoutMs = 25_000): Promise<unknown> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await getOsuSession().fetch(url, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
     })
-    req.on('error', reject)
-    req.on('timeout', () => {
-      req.destroy()
-      reject(new Error('Таймаут запроса к osu.ppy.sh'))
+    const text = await res.text()
+    if (!res.ok) {
+      throw new Error(parseErrorMessage(text, res.status))
+    }
+    try {
+      return JSON.parse(text)
+    } catch {
+      throw new Error('Некорректный JSON от osu.ppy.sh')
+    }
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Таймаут запроса к osu.ppy.sh')
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function requestText(url: string, headers: Record<string, string>, timeoutMs = 25_000): Promise<string> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await getOsuSession().fetch(url, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
     })
-  })
+    const text = await res.text()
+    if (!res.ok) {
+      throw new Error(parseErrorMessage(text, res.status))
+    }
+    return text
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Таймаут запроса к osu.ppy.sh')
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 function parseUserFromHtml(html: string): Pick<OsuAccountInfo, 'userId' | 'username' | 'avatarUrl'> | null {
@@ -160,28 +169,21 @@ function parseUserFromHtml(html: string): Pick<OsuAccountInfo, 'userId' | 'usern
     try {
       const data = JSON.parse(scriptMatch[1]) as Record<string, unknown>
       const id = Number(data.id) || 0
-      if (id) {
+      const username = typeof data.username === 'string' ? data.username.trim() : null
+      if (id > 0 && username && username.toLowerCase() !== 'osu!') {
         return {
           userId: id,
-          username: typeof data.username === 'string' ? data.username : null,
+          username,
           avatarUrl: typeof data.avatar_url === 'string' ? data.avatar_url : null,
         }
       }
+      // If script is present with {} or id=0, this is definitively a guest page
+      return null
     } catch {
-      /* fall through */
+      return null
     }
   }
 
-  const userMatch = html.match(/"username"\s*:\s*"([^"\\]+)"/)
-  const idMatch = html.match(/"id"\s*:\s*(\d{1,12})/)
-  const avatarMatch = html.match(/"avatar_url"\s*:\s*"([^"\\]+)"/)
-  if (userMatch || idMatch) {
-    return {
-      userId: idMatch ? parseInt(idMatch[1], 10) : null,
-      username: userMatch ? userMatch[1] : null,
-      avatarUrl: avatarMatch ? avatarMatch[1].replace(/\\u002F/g, '/') : null,
-    }
-  }
   return null
 }
 
@@ -196,14 +198,22 @@ function getAccountCachePath(): string {
 let memoryAccountCache: OsuAccountInfo | null = null
 
 function readPersistedAccountCache(): OsuAccountInfo | null {
-  if (memoryAccountCache) return memoryAccountCache
+  if (memoryAccountCache) {
+    if (isValidAccount(memoryAccountCache)) return memoryAccountCache
+    memoryAccountCache = null
+  }
   try {
     const p = getAccountCachePath()
     if (p && fs.existsSync(p)) {
-      const parsed = JSON.parse(fs.readFileSync(p, 'utf8')) as OsuAccountInfo
-      if (parsed && typeof parsed.loggedIn === 'boolean') {
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8')) as unknown
+      if (isValidAccount(parsed)) {
         memoryAccountCache = parsed
         return parsed
+      }
+      try {
+        fs.unlinkSync(p)
+      } catch {
+        /* ignore */
       }
     }
   } catch {
@@ -213,28 +223,39 @@ function readPersistedAccountCache(): OsuAccountInfo | null {
 }
 
 function writePersistedAccountCache(account: OsuAccountInfo | null): void {
-  memoryAccountCache = account
-  try {
-    const p = getAccountCachePath()
-    if (!p) return
-    if (!account || !account.loggedIn) {
-      if (fs.existsSync(p)) fs.unlinkSync(p)
-    } else {
+  if (isValidAccount(account)) {
+    memoryAccountCache = account
+    try {
+      const p = getAccountCachePath()
+      if (!p) return
       fs.mkdirSync(path.dirname(p), { recursive: true })
       fs.writeFileSync(p, JSON.stringify(account, null, 2), 'utf8')
+    } catch {
+      /* ignore */
     }
-  } catch {
-    /* ignore */
+  } else {
+    memoryAccountCache = null
+    try {
+      const p = getAccountCachePath()
+      if (p && fs.existsSync(p)) fs.unlinkSync(p)
+    } catch {
+      /* ignore */
+    }
   }
 }
 
 let backgroundRefreshInFlight = false
+let lastAccountRefreshOnlineAt = 0
+const ACCOUNT_REFRESH_TTL_MS = 5 * 60 * 1000
+
 async function refreshOsuAccountInBackground(): Promise<void> {
   if (backgroundRefreshInFlight) return
+  if (Date.now() - lastAccountRefreshOnlineAt < ACCOUNT_REFRESH_TTL_MS) return
   backgroundRefreshInFlight = true
   try {
     if (await hasOsuSessionCookie()) {
       await queryOsuAccountOnline()
+      lastAccountRefreshOnlineAt = Date.now()
     }
   } catch {
     /* ignore background errors */
@@ -254,7 +275,7 @@ async function queryOsuAccountOnline(): Promise<OsuAccountInfo> {
     const headers = await buildOsuHeaders({ Accept: 'text/html,application/xhtml+xml' })
     const html = await requestText(`${OSU_ORIGIN}/home`, headers, 12_000)
     const parsed = parseUserFromHtml(html)
-    if (parsed?.username || parsed?.userId) {
+    if (parsed?.username && parsed?.userId) {
       const account: OsuAccountInfo = {
         loggedIn: true,
         userId: parsed.userId,
@@ -262,21 +283,18 @@ async function queryOsuAccountOnline(): Promise<OsuAccountInfo> {
         avatarUrl: parsed.avatarUrl,
       }
       writePersistedAccountCache(account)
+      lastAccountRefreshOnlineAt = Date.now()
       return account
     }
   } catch {
-    /* cookie may still be valid for downloads */
+    const cached = readPersistedAccountCache()
+    if (cached && isValidAccount(cached)) {
+      return cached
+    }
   }
 
-  const cached = readPersistedAccountCache()
-  if (cached && cached.loggedIn) {
-    return cached
-  }
-
-  // Session cookie present — enough for downloads
-  const fallback: OsuAccountInfo = { loggedIn: true, userId: null, username: 'osu!', avatarUrl: null }
-  writePersistedAccountCache(fallback)
-  return fallback
+  writePersistedAccountCache(null)
+  return empty
 }
 
 export async function fetchOsuAccount(options?: { forceRefresh?: boolean }): Promise<OsuAccountInfo> {
@@ -287,12 +305,12 @@ export async function fetchOsuAccount(options?: { forceRefresh?: boolean }): Pro
   }
 
   const cached = readPersistedAccountCache()
-  if (!options?.forceRefresh && cached && cached.loggedIn) {
-    // Session cookie exists and we have cached account info!
-    // Return cached account immediately to prevent slow UI / "Log In" button flash
-    setTimeout(() => {
-      void refreshOsuAccountInBackground()
-    }, 1200)
+  if (!options?.forceRefresh && cached && isValidAccount(cached)) {
+    if (Date.now() - lastAccountRefreshOnlineAt >= ACCOUNT_REFRESH_TTL_MS) {
+      setTimeout(() => {
+        void refreshOsuAccountInBackground()
+      }, 1200)
+    }
     return cached
   }
 
@@ -330,16 +348,15 @@ export async function clearOsuSession(): Promise<void> {
 let loginWindow: BrowserWindow | null = null
 
 /**
- * Open a login window. Resolves when user is logged in (osu_session cookie) or window closed.
+ * Open a login window. Resolves when user is logged in or window closed.
  */
 export function loginWithOsuWindow(parent: BrowserWindow | null): Promise<OsuAccountInfo> {
   return new Promise((resolve) => {
     if (loginWindow && !loginWindow.isDestroyed()) {
       loginWindow.focus()
-      // Wait for the existing window to finish
       const prevClosed = loginWindow
       prevClosed.once('closed', () => {
-        void fetchOsuAccount().then(resolve)
+        void fetchOsuAccount({ forceRefresh: true }).then(resolve)
       })
       return
     }
@@ -357,23 +374,19 @@ export function loginWithOsuWindow(parent: BrowserWindow | null): Promise<OsuAcc
       backgroundColor: '#1a1a1a',
       webPreferences: {
         session: ses,
-        contextIsolation: true,
+        contextIsolation: false,
         nodeIntegration: false,
-        sandbox: true,
+        sandbox: false,
       },
     })
 
     let settled = false
-    const finish = async () => {
+    const finish = (account: OsuAccountInfo) => {
       if (settled) return
       settled = true
       stopPoll()
-      try {
-        const account = await fetchOsuAccount({ forceRefresh: true })
-        resolve(account)
-      } catch {
-        resolve({ loggedIn: false, userId: null, username: null, avatarUrl: null })
-      }
+      writePersistedAccountCache(isValidAccount(account) ? account : null)
+      resolve(account)
       if (loginWindow && !loginWindow.isDestroyed()) {
         loginWindow.close()
       }
@@ -388,25 +401,64 @@ export function loginWithOsuWindow(parent: BrowserWindow | null): Promise<OsuAcc
       }
     }
 
-    const checkLoggedIn = async () => {
-      if (await hasOsuSessionCookie()) {
-        // Give site a moment to set all cookies after login redirect
-        const account = await fetchOsuAccount({ forceRefresh: true })
-        if (account.loggedIn) {
-          await finish()
+    const checkWindowLogin = async () => {
+      if (!loginWindow || loginWindow.isDestroyed()) return
+      const currentUrl = loginWindow.webContents.getURL()
+      if (currentUrl.includes('challenges.cloudflare.com')) return
+      try {
+        const user = await loginWindow.webContents.executeJavaScript(`
+          (() => {
+            const el = document.getElementById('json-current-user');
+            if (el) {
+              try {
+                const data = JSON.parse(el.textContent || '{}');
+                if (data && Number(data.id) > 0 && typeof data.username === 'string' && data.username.trim() && data.username.trim().toLowerCase() !== 'osu!') {
+                  return {
+                    loggedIn: true,
+                    userId: Number(data.id),
+                    username: String(data.username).trim(),
+                    avatarUrl: data.avatar_url ? String(data.avatar_url) : null
+                  };
+                }
+              } catch {}
+            }
+            return null;
+          })()
+        `)
+        if (user && isValidAccount(user)) {
+          finish(user)
         }
+      } catch {
+        /* page might be navigating, ignore */
       }
     }
 
+    loginWindow.webContents.on('dom-ready', () => {
+      loginWindow?.webContents
+        .executeJavaScript(
+          `try {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+          } catch {}`
+        )
+        .catch(() => {})
+    })
+
+    loginWindow.webContents.on('did-navigate', () => {
+      void checkWindowLogin()
+    })
+    loginWindow.webContents.on('did-navigate-in-page', () => {
+      void checkWindowLogin()
+    })
+
     pollTimer = setInterval(() => {
-      void checkLoggedIn()
-    }, 800)
+      void checkWindowLogin()
+    }, 2000)
 
     loginWindow.on('closed', () => {
       stopPoll()
       if (!settled) {
         settled = true
-        void fetchOsuAccount({ forceRefresh: true }).then(resolve)
+        void queryOsuAccountOnline().then(resolve)
       }
       loginWindow = null
     })
@@ -417,9 +469,7 @@ export function loginWithOsuWindow(parent: BrowserWindow | null): Promise<OsuAcc
     })
 
     void loginWindow.loadURL(`${OSU_ORIGIN}/home`)
-    // If already logged in in this partition
-    void checkLoggedIn()
   })
 }
 
-export { OSU_ORIGIN, USER_AGENT, getOsuSession }
+export { OSU_ORIGIN, getOsuSession }
