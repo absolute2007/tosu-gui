@@ -22,9 +22,9 @@ This is a standalone application window (not a browser tab) that provides status
 
 ### Screenshots
 
-![Status](docs/assets/screenshots/Status.png)
-![Editor](docs/assets/screenshots/Editor.png)
-![Skins](docs/assets/screenshots/Skins.png)
+![Status](docs/assets/screenshots/Status_en.png)
+![Editor](docs/assets/screenshots/Editor_en.png)
+![Skins](docs/assets/screenshots/Skins_en.png)
 
 ---
 
