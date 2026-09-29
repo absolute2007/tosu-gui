@@ -38,6 +38,16 @@ interface Props {
 
 type FilterCategory = 'all' | SkinTweakCategory
 
+const STABLE_ONLY_TWEAKS = new Set([
+  'instafade',
+  'continuous-cursor-trail',
+  'cursor-trail',
+  'hit-300',
+  'slider-end',
+  'cursor-expand',
+  'cursor-rotate',
+])
+
 function ArrowScroller({ className, children }: { className: string; children: React.ReactNode }) {
   const { lang } = useI18n()
   const ref = useRef<HTMLDivElement>(null)
@@ -696,7 +706,15 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
           <p>{t('skinCustomizer.noTweaksInCategory')}</p>
         </div>
       ) : (
-        <div className="customizer-grid">
+        <div className="customizer-tweaks-content">
+          <div className="customizer-platform-banner">
+            <span className="customizer-platform-badge">osu!stable</span>
+            <div className="customizer-platform-info">
+              <span className="customizer-platform-title">{t('skinCustomizer.stableNoticeTitle')}</span>
+              <span className="customizer-platform-desc">{t('skinCustomizer.stableNoticeDesc')}</span>
+            </div>
+          </div>
+          <div className="customizer-grid">
           {(() => {
             const isTrailDisabled = Boolean(
               toggleTweaks.find((t) => t.id === 'cursor-trail')?.applied
@@ -738,6 +756,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
               />
             ))
           })()}
+          </div>
         </div>
       )}
 
@@ -1020,10 +1039,57 @@ function TweakCard({
   const [localTrailThickness, setLocalTrailThickness] = useState<number>(
     typeof tweak.meta?.trailThickness === 'number' ? tweak.meta.trailThickness : 15
   )
+  const [localInstafadeStyle, setLocalInstafadeStyle] = useState<'numbers' | 'dot' | 'blank'>(
+    tweak.meta?.style || 'numbers'
+  )
+  const [localInstafadeColorMode, setLocalInstafadeColorMode] = useState<'combo1' | 'original' | 'custom'>(
+    tweak.meta?.colorMode || 'combo1'
+  )
+  const [localInstafadeCustomColor, setLocalInstafadeCustomColor] = useState<string>(
+    tweak.meta?.customColor || '#1e88e5'
+  )
+
+  useEffect(() => {
+    if (tweak.id === 'instafade' && tweak.meta) {
+      if (tweak.meta.style) setLocalInstafadeStyle(tweak.meta.style)
+      if (tweak.meta.colorMode) setLocalInstafadeColorMode(tweak.meta.colorMode)
+      if (tweak.meta.customColor) setLocalInstafadeCustomColor(tweak.meta.customColor)
+    }
+  }, [tweak.id, tweak.meta])
+
+  const handleUpdateInstafade = (
+    opts: Partial<{
+      style: 'numbers' | 'dot' | 'blank'
+      colorMode: 'combo1' | 'original' | 'custom'
+      customColor: string
+    }>
+  ) => {
+    const nextStyle = opts.style !== undefined ? opts.style : localInstafadeStyle
+    const nextColorMode = opts.colorMode !== undefined ? opts.colorMode : localInstafadeColorMode
+    const nextCustomColor = opts.customColor !== undefined ? opts.customColor : localInstafadeCustomColor
+
+    setLocalInstafadeStyle(nextStyle)
+    setLocalInstafadeColorMode(nextColorMode)
+    setLocalInstafadeCustomColor(nextCustomColor)
+
+    if (tweak.applied && onUpdateOptions) {
+      onUpdateOptions({
+        style: nextStyle,
+        colorMode: nextColorMode,
+        customColor: nextCustomColor,
+      })
+    }
+  }
 
   const handleToggleWrapper = () => {
     if (tweak.id === 'continuous-cursor-trail') {
       onToggle({ cursorSize: localCursorSize, trailThickness: localTrailThickness })
+    } else if (tweak.id === 'instafade') {
+      onToggle({
+        style: localInstafadeStyle,
+        colorMode: localInstafadeColorMode,
+        customColor: localInstafadeCustomColor,
+      })
     } else {
       onToggle()
     }
@@ -1087,6 +1153,14 @@ function TweakCard({
           <span className="customizer-card-category">
             {categoryLabels[tweak.category] || tweak.category}
           </span>
+          {STABLE_ONLY_TWEAKS.has(tweak.id) && (
+            <span
+              className="customizer-card-stable-badge"
+              title={t('skinCustomizer.stableBadgeTooltip')}
+            >
+              {t('skinCustomizer.stableBadge')}
+            </span>
+          )}
           {tweak.fileDetails?.badgeText && (
             <span className="customizer-card-meta-badge" title={tweak.fileDetails.badgeText}>
               {tweak.fileDetails.badgeText}
@@ -1138,7 +1212,20 @@ function TweakCard({
             <span>{t('skinCustomizer.dropToReplace')}</span>
           </div>
         )}
-        {tweak.previewType === 'cursor' ? (
+        {tweak.id === 'instafade' ? (
+          <InstafadeInteractivePreview
+            hitcircleUrl={tweak.meta?.hitcircleImage}
+            overlayUrl={tweak.meta?.hitcircleOverlayImage}
+            approachCircleUrl={tweak.meta?.approachCircleImage}
+            default0Url={tweak.meta?.default0Image}
+            default1Url={tweak.meta?.default1Image}
+            comboColor={tweak.meta?.comboColor}
+            applied={tweak.applied}
+            style={localInstafadeStyle}
+            colorMode={localInstafadeColorMode}
+            customColor={localInstafadeCustomColor}
+          />
+        ) : tweak.previewType === 'cursor' ? (
           <CursorInteractivePreview
             key={`card-preview-${tweak.id}-${tweak.applied ? 'applied' : 'clean'}-${tweak.previewImage?.length || 0}`}
             cursorUrl={tweak.previewCursorImage}
@@ -1176,6 +1263,84 @@ function TweakCard({
         </span>
         <p className="customizer-card-desc">{desc}</p>
 
+        {tweak.id === 'instafade' && (
+          <div className="customizer-instafade-options">
+            <div className="instafade-option-group">
+              <span className="instafade-option-label">{t('skinCustomizer.instafadeCenterStyle')}</span>
+              <div className="instafade-pills">
+                <button
+                  type="button"
+                  className={`instafade-pill ${localInstafadeStyle === 'numbers' ? '-active' : ''}`}
+                  onClick={() => handleUpdateInstafade({ style: 'numbers' })}
+                  disabled={isBusy}
+                >
+                  {t('skinCustomizer.instafadeStyleNumbers')}
+                </button>
+                <button
+                  type="button"
+                  className={`instafade-pill ${localInstafadeStyle === 'dot' ? '-active' : ''}`}
+                  onClick={() => handleUpdateInstafade({ style: 'dot' })}
+                  disabled={isBusy}
+                >
+                  {t('skinCustomizer.instafadeStyleDot')}
+                </button>
+                <button
+                  type="button"
+                  className={`instafade-pill ${localInstafadeStyle === 'blank' ? '-active' : ''}`}
+                  onClick={() => handleUpdateInstafade({ style: 'blank' })}
+                  disabled={isBusy}
+                >
+                  {t('skinCustomizer.instafadeStyleBlank')}
+                </button>
+              </div>
+            </div>
+
+            <div className="instafade-option-group">
+              <span className="instafade-option-label">{t('skinCustomizer.instafadeCircleColor')}</span>
+              <div className="instafade-pills">
+                <button
+                  type="button"
+                  className={`instafade-pill ${localInstafadeColorMode === 'combo1' ? '-active' : ''}`}
+                  onClick={() => handleUpdateInstafade({ colorMode: 'combo1' })}
+                  disabled={isBusy}
+                >
+                  {t('skinCustomizer.instafadeColorCombo1')}
+                </button>
+                <button
+                  type="button"
+                  className={`instafade-pill ${localInstafadeColorMode === 'original' ? '-active' : ''}`}
+                  onClick={() => handleUpdateInstafade({ colorMode: 'original' })}
+                  disabled={isBusy}
+                >
+                  {t('skinCustomizer.instafadeColorWhite')}
+                </button>
+                <button
+                  type="button"
+                  className={`instafade-pill ${localInstafadeColorMode === 'custom' ? '-active' : ''}`}
+                  onClick={() => handleUpdateInstafade({ colorMode: 'custom' })}
+                  disabled={isBusy}
+                >
+                  {t('skinCustomizer.instafadeColorCustom')}
+                </button>
+              </div>
+            </div>
+
+            {localInstafadeColorMode === 'custom' && (
+              <div className="instafade-color-picker-row">
+                <input
+                  type="color"
+                  className="instafade-color-input"
+                  value={localInstafadeCustomColor}
+                  onChange={(e) => handleUpdateInstafade({ customColor: e.target.value })}
+                  disabled={isBusy}
+                  title={t('skinCustomizer.nativePickerTitle')}
+                />
+                <span className="instafade-color-hex">{localInstafadeCustomColor.toUpperCase()}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {tweak.id === 'follow-points' && onOpenStudio && (
           <div style={{ marginTop: '10px' }}>
             <button
@@ -1189,7 +1354,7 @@ function TweakCard({
             </button>
           </div>
         )}
-        
+
         {tweak.id === 'continuous-cursor-trail' && (
           <div className="customizer-tweak-options" style={{ marginTop: '12px' }}>
             <div className="combo-slider-row" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2302,6 +2467,329 @@ function ComboInteractivePreview({
       <span className="customizer-preview-overlay-badge">
         Комбо #{selectedComboIndex + 1}: {rgbStringToHex(activeColorStr).toUpperCase()}
       </span>
+    </div>
+  )
+}
+
+interface InstafadeInteractivePreviewProps {
+  hitcircleUrl?: string | null
+  overlayUrl?: string | null
+  approachCircleUrl?: string | null
+  default0Url?: string | null
+  default1Url?: string | null
+  comboColor?: string | null
+  applied: boolean
+  style: 'numbers' | 'dot' | 'blank'
+  colorMode: 'combo1' | 'original' | 'custom'
+  customColor: string
+}
+
+function InstafadeInteractivePreview({
+  hitcircleUrl,
+  overlayUrl,
+  approachCircleUrl,
+  default0Url: _default0Url,
+  default1Url,
+  comboColor,
+  applied,
+  style,
+  colorMode,
+  customColor,
+}: InstafadeInteractivePreviewProps) {
+  const { t } = useI18n()
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+
+  const hitcircleImgRef = useRef<HTMLImageElement | null>(null)
+  const overlayImgRef = useRef<HTMLImageElement | null>(null)
+  const default1ImgRef = useRef<HTMLImageElement | null>(null)
+  const approachImgRef = useRef<HTMLImageElement | null>(null)
+
+  const stateRef = useRef<{
+    spawnTime: number
+    duration: number
+    hitTime: number | null
+    isHit: boolean
+  }>({
+    spawnTime: performance.now(),
+    duration: 800,
+    hitTime: null,
+    isHit: false,
+  })
+
+  useEffect(() => {
+    if (!hitcircleUrl) {
+      hitcircleImgRef.current = null
+      return
+    }
+    const img = new Image()
+    img.src = hitcircleUrl
+    img.onload = () => {
+      hitcircleImgRef.current = img
+    }
+  }, [hitcircleUrl])
+
+  useEffect(() => {
+    if (!overlayUrl) {
+      overlayImgRef.current = null
+      return
+    }
+    const img = new Image()
+    img.src = overlayUrl
+    img.onload = () => {
+      overlayImgRef.current = img
+    }
+  }, [overlayUrl])
+
+  useEffect(() => {
+    if (!default1Url) {
+      default1ImgRef.current = null
+      return
+    }
+    const img = new Image()
+    img.src = default1Url
+    img.onload = () => {
+      default1ImgRef.current = img
+    }
+  }, [default1Url])
+
+  useEffect(() => {
+    if (!approachCircleUrl) {
+      approachImgRef.current = null
+      return
+    }
+    const img = new Image()
+    img.src = approachCircleUrl
+    img.onload = () => {
+      approachImgRef.current = img
+    }
+  }, [approachCircleUrl])
+
+  const effectiveRgb: [number, number, number] = useMemo(() => {
+    if (colorMode === 'custom') {
+      return hexToRgb(customColor || '#38bdf8')
+    }
+    if (colorMode === 'combo1') {
+      return rgbStringToRgb(comboColor || '255, 192, 0')
+    }
+    return [255, 255, 255]
+  }, [colorMode, customColor, comboColor])
+
+  const tintedHitcircleRef = useRef<HTMLCanvasElement | null>(null)
+  useEffect(() => {
+    if (!hitcircleImgRef.current) {
+      tintedHitcircleRef.current = null
+      return
+    }
+    if (colorMode === 'original' && applied) {
+      tintedHitcircleRef.current = null
+    } else {
+      tintedHitcircleRef.current = tintHitcircleSprite(hitcircleImgRef.current, effectiveRgb)
+    }
+  }, [hitcircleUrl, effectiveRgb, colorMode, applied])
+
+  const triggerHit = useCallback(() => {
+    const s = stateRef.current
+    if (s.isHit) return
+    s.isHit = true
+    s.hitTime = performance.now()
+  }, [])
+
+  useEffect(() => {
+    let animId: number
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const render = () => {
+      const rect = canvas.getBoundingClientRect()
+      const width = rect.width || 300
+      const height = rect.height || 180
+      const dpr = window.devicePixelRatio || 1
+
+      if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+        canvas.width = Math.round(width * dpr)
+        canvas.height = Math.round(height * dpr)
+      }
+
+      ctx.save()
+      ctx.scale(dpr, dpr)
+      ctx.clearRect(0, 0, width, height)
+
+      const cx = width / 2
+      const cy = height / 2
+      const baseRadius = Math.min(width, height) * 0.28
+      const now = performance.now()
+      const s = stateRef.current
+
+      const elapsed = now - s.spawnTime
+
+      // Auto-hit when approach circle reaches circle radius
+      if (!s.isHit && elapsed >= s.duration) {
+        s.isHit = true
+        s.hitTime = now
+      }
+
+      let circleAlpha = 1
+      let circleScale = 1
+      let showCircle = true
+      let rippleProgress = -1
+
+      if (s.isHit && s.hitTime !== null) {
+        const hitElapsed = now - s.hitTime
+        if (applied) {
+          // Instafade: 0ms fadeout - circle disappears instantly
+          showCircle = false
+          if (hitElapsed < 180) {
+            rippleProgress = hitElapsed / 180
+          }
+          if (hitElapsed > 480) {
+            s.isHit = false
+            s.hitTime = null
+            s.spawnTime = now
+          }
+        } else {
+          // Standard osu!stable fadeout: expands ~35% and fades out over 240ms
+          const fadeDuration = 240
+          if (hitElapsed < fadeDuration) {
+            const p = hitElapsed / fadeDuration
+            circleScale = 1 + p * 0.35
+            circleAlpha = Math.max(0, 1 - p)
+          } else {
+            showCircle = false
+          }
+          if (hitElapsed > 580) {
+            s.isHit = false
+            s.hitTime = null
+            s.spawnTime = now
+          }
+        }
+      }
+
+      // 1. Draw Hitcircle + Overlay + Center Style
+      if (showCircle) {
+        ctx.save()
+        ctx.globalAlpha = circleAlpha
+        ctx.translate(cx, cy)
+        ctx.scale(circleScale, circleScale)
+        ctx.translate(-cx, -cy)
+
+        const drawSize = baseRadius * 2
+        const hcDrawable =
+          colorMode === 'original' && applied
+            ? hitcircleImgRef.current
+            : tintedHitcircleRef.current || hitcircleImgRef.current
+
+        if (hcDrawable && hcDrawable.width > 1 && hcDrawable.height > 1) {
+          ctx.drawImage(hcDrawable, cx - drawSize / 2, cy - drawSize / 2, drawSize, drawSize)
+        } else {
+          ctx.beginPath()
+          ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2)
+          ctx.fillStyle = `rgb(${effectiveRgb.join(',')})`
+          ctx.fill()
+        }
+
+        const overlay = overlayImgRef.current
+        if (overlay && overlay.width > 1 && overlay.height > 1) {
+          ctx.drawImage(overlay, cx - drawSize / 2, cy - drawSize / 2, drawSize, drawSize)
+        } else {
+          ctx.beginPath()
+          ctx.arc(cx, cy, baseRadius - 1.5, 0, Math.PI * 2)
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+          ctx.lineWidth = 3
+          ctx.stroke()
+        }
+
+        const effectiveStyle = applied ? style : 'numbers'
+        if (effectiveStyle === 'dot') {
+          ctx.beginPath()
+          ctx.arc(cx, cy, Math.max(5, baseRadius * 0.16), 0, Math.PI * 2)
+          ctx.fillStyle = '#ffffff'
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.6)'
+          ctx.shadowBlur = 4
+          ctx.fill()
+          ctx.shadowBlur = 0
+        } else if (effectiveStyle === 'numbers') {
+          const d1 = default1ImgRef.current
+          if (d1 && d1.width > 1 && d1.height > 1) {
+            const aspect = d1.width / d1.height
+            const numH = baseRadius * 0.9
+            const numW = numH * aspect
+            ctx.drawImage(d1, cx - numW / 2, cy - numH / 2, numW, numH)
+          } else {
+            ctx.fillStyle = '#ffffff'
+            ctx.font = `bold ${Math.round(baseRadius * 0.85)}px sans-serif`
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.shadowColor = 'rgba(0,0,0,0.7)'
+            ctx.shadowBlur = 3
+            ctx.fillText('1', cx, cy + 1)
+            ctx.shadowBlur = 0
+          }
+        }
+
+        ctx.restore()
+      }
+
+      // 2. Approach Circle
+      if (!s.isHit) {
+        const approachProgress = Math.min(1, Math.max(0, elapsed / s.duration))
+        const approachScale = 2.6 - (2.6 - 1.0) * approachProgress
+        const approachAlpha = Math.min(1, approachProgress * 3.5)
+
+        ctx.save()
+        ctx.globalAlpha = approachAlpha
+        const appSize = baseRadius * 2 * approachScale
+        const appImg = approachImgRef.current
+
+        if (appImg && appImg.width > 1 && appImg.height > 1) {
+          ctx.drawImage(appImg, cx - appSize / 2, cy - appSize / 2, appSize, appSize)
+        } else {
+          ctx.beginPath()
+          ctx.arc(cx, cy, baseRadius * approachScale, 0, Math.PI * 2)
+          ctx.strokeStyle = `rgba(${effectiveRgb.join(',')}, 0.85)`
+          ctx.lineWidth = 2.5
+          ctx.stroke()
+        }
+        ctx.restore()
+      }
+
+      // 3. Hit burst ripple (instafade)
+      if (rippleProgress >= 0) {
+        ctx.save()
+        const rRad = baseRadius * (1.0 + rippleProgress * 0.4)
+        ctx.beginPath()
+        ctx.arc(cx, cy, rRad, 0, Math.PI * 2)
+        ctx.strokeStyle = `rgba(${effectiveRgb.join(',')}, ${Math.max(0, 0.7 * (1 - rippleProgress))})`
+        ctx.lineWidth = 2.5 * (1 - rippleProgress)
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      ctx.restore()
+      animId = requestAnimationFrame(render)
+    }
+
+    animId = requestAnimationFrame(render)
+    return () => cancelAnimationFrame(animId)
+  }, [applied, colorMode, effectiveRgb, style])
+
+  return (
+    <div
+      ref={containerRef}
+      className="customizer-instafade-canvas-wrap"
+      onClick={triggerHit}
+      title={t('skinCustomizer.previewCanvasTitle')}
+    >
+      <canvas ref={canvasRef} className="customizer-instafade-canvas" />
+      <div className="instafade-preview-badges">
+        <span className={`instafade-timing-pill ${applied ? '-instant' : '-fade'}`}>
+          <Zap size={11} />
+          {applied ? t('skinCustomizer.instantFadeTimingBadge') : t('skinCustomizer.normalFadeTimingBadge')}
+        </span>
+        <span className="instafade-hint-pill">{t('skinCustomizer.previewCanvasTitle')}</span>
+      </div>
     </div>
   )
 }

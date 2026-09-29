@@ -48,6 +48,12 @@ export interface FollowPointsCustomOptions {
   opacity: number
 }
 
+export interface InstafadeCustomOptions {
+  style?: 'numbers' | 'dot' | 'blank'
+  colorMode?: 'combo1' | 'original' | 'custom'
+  customColor?: string
+}
+
 export interface OptimizerSpriteInfo {
   fileName: string
   relPath: string
@@ -218,6 +224,24 @@ export const TWEAK_CONFIGS: TweakConfig[] = [
       'hitcircleoverlay.png',
       'hitcircleoverlay@2x.png',
       'approachcircle.png',
+    ],
+  },
+  {
+    id: 'instafade',
+    category: 'gameplay',
+    title: 'Инста-фейд нот (Instant Fade)',
+    subtitle: 'hitcircle*.png, default-0..9.png, skin.ini',
+    description: 'Мгновенное исчезновение нот при клике (без анимации затухания). Переносит круги в комбо-цифры default-0..9 с настройкой HitCircleOverlap в skin.ini.',
+    previewType: 'combo',
+    previewCandidates: [
+      'default-1.png',
+      'default-1@2x.png',
+      'default-0.png',
+      'default-0@2x.png',
+      'hitcircle.png',
+      'hitcircle@2x.png',
+      'hitcircleoverlay.png',
+      'hitcircleoverlay@2x.png',
     ],
   },
   {
@@ -1055,6 +1079,22 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
       }
     }
 
+    if (cfg.id === 'instafade') {
+      const hcPath = path.join(skinPath, 'hitcircle.png')
+      const hc2xPath = path.join(skinPath, 'hitcircle@2x.png')
+      const hasHc = fs.existsSync(hcPath) || fs.existsSync(hc2xPath)
+      const hcBlank =
+        (!fs.existsSync(hcPath) || isBlankPlaceholderFile(hcPath, false)) &&
+        (!fs.existsSync(hc2xPath) || isBlankPlaceholderFile(hc2xPath, false))
+      const overlap = parseInt(getIniValue(iniContent, 'Fonts', 'HitCircleOverlap') || '0', 10)
+      if (hasHc && hcBlank && overlap >= 80) {
+        isNativeApplied = true
+      }
+      if (isExplicitlyDisabled) {
+        isNativeApplied = false
+      }
+    }
+
     if (isExplicitlyDisabled) {
       isNativeApplied = false
     }
@@ -1194,6 +1234,38 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
         digitImages,
         comboColors: extracted.colors,
       }
+    } else if (cfg.id === 'instafade') {
+      const hitcircleImage = findSpriteBase64(skinPath, ['hitcircle.png', 'hitcircle@2x.png'], backupFilesDir)
+      const hitcircleOverlayImage = findSpriteBase64(skinPath, ['hitcircleoverlay.png', 'hitcircleoverlay@2x.png'], backupFilesDir)
+      const approachCircleImage = findSpriteBase64(skinPath, ['approachcircle.png', 'approachcircle@2x.png'], backupFilesDir)
+      let default0Image = (tweakRecord && backupFilesDir)
+        ? findSpriteBase64(backupFilesDir, ['default-0@2x.png', 'default-0.png'])
+        : null
+      if (!default0Image) {
+        default0Image = findSpriteBase64(skinPath, ['default-0@2x.png', 'default-0.png'], backupFilesDir)
+      }
+      let default1Image = (tweakRecord && backupFilesDir)
+        ? findSpriteBase64(backupFilesDir, ['default-1@2x.png', 'default-1.png'])
+        : null
+      if (!default1Image) {
+        default1Image = findSpriteBase64(skinPath, ['default-1@2x.png', 'default-1.png'], backupFilesDir)
+      }
+      const extracted = extractComboColorsFromIni(iniContent)
+
+      meta = {
+        ...(tweakRecord?.meta || {}),
+        style: tweakRecord?.meta?.style || 'numbers',
+        colorMode: tweakRecord?.meta?.colorMode || 'combo1',
+        customColor: tweakRecord?.meta?.customColor || '#1e88e5',
+        hitcircleImage,
+        hitcircleOverlayImage,
+        approachCircleImage,
+        default0Image,
+        default1Image,
+        comboColors: extracted.colors,
+        comboColor: extracted.colors[0] || '255, 192, 0',
+      }
+      previewImage = default1Image || hitcircleImage || default0Image
     }
 
     const candidateFiles = cfg.id === 'follow-points'
@@ -1204,6 +1276,8 @@ export async function getSkinCustomizationData(skinPath: string): Promise<SkinCu
       ? { fileName: 'skin.ini', ext: '.ini', sizeBytes: 0, badgeText: 'skin.ini' }
       : cfg.id === 'combo-colors'
       ? { fileName: 'skin.ini', ext: '.ini', sizeBytes: 0, badgeText: 'skin.ini [Colours]' }
+      : cfg.id === 'instafade'
+      ? { fileName: 'default-0..9', ext: '.png', sizeBytes: 0, badgeText: 'default-0..9.png' }
       : getFileDetails(skinPath, candidateFiles, cfg.isAudio, backupFilesDir, Boolean(hasCustomTexture || isCustomized))
 
     tweaks.push({
@@ -1285,6 +1359,17 @@ export async function applySkinTweak(
         const fixedIni = setIniValue(currentIni, 'General', 'CursorTrail', '1')
         writeSkinIni(skinPath, fixedIni)
       }
+    } else if (tweakId === 'combo-numbers') {
+      if (manifest?.tweaks['instafade']) {
+        await resetSkinTweak(skinPath, 'instafade')
+        manifest = readManifest(skinPath) || manifest
+      }
+    } else if (tweakId === 'instafade') {
+      if (manifest?.tweaks['combo-numbers']) {
+        await resetSkinTweak(skinPath, 'combo-numbers')
+        manifest = readManifest(skinPath) || manifest
+      }
+      return applyInstafadeInternal(skinPath, options, manifest)
     }
 
     if (manifest.disabledTweaks?.[tweakId]) {
@@ -1631,6 +1716,19 @@ export async function resetSkinTweak(
       }
       if (!currentManifest.disabledTweaks) currentManifest.disabledTweaks = {}
       currentManifest.disabledTweaks['continuous-cursor-trail'] = { appliedAt: Date.now() }
+      writeManifest(skinPath, currentManifest)
+    }
+
+    if (tweakId === 'instafade') {
+      let currentManifest = readManifest(skinPath) || {
+        version: 1,
+        skinName: path.basename(skinPath),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        tweaks: {},
+      }
+      if (!currentManifest.disabledTweaks) currentManifest.disabledTweaks = {}
+      currentManifest.disabledTweaks['instafade'] = { appliedAt: Date.now() }
       writeManifest(skinPath, currentManifest)
     }
 
@@ -2369,6 +2467,560 @@ export async function customizeSkinFollowPoints(
   }
   manifest.updatedAt = Date.now()
   writeManifest(skinPath, manifest)
+
+  return getSkinCustomizationData(skinPath)
+}
+
+// --- Instafade for Notes (osu!stable technique) ---
+
+function blendPixel(
+  bgR: number, bgG: number, bgB: number, bgA: number,
+  fgR: number, fgG: number, fgB: number, fgA: number
+): [number, number, number, number] {
+  if (fgA === 0) return [bgR, bgG, bgB, bgA]
+  if (bgA === 0) return [fgR, fgG, fgB, fgA]
+  const aFg = fgA / 255
+  const aBg = bgA / 255
+  const outA = aFg + aBg * (1 - aFg)
+  if (outA <= 0) return [0, 0, 0, 0]
+  const outR = (fgR * aFg + bgR * aBg * (1 - aFg)) / outA
+  const outG = (fgG * aFg + bgG * aBg * (1 - aFg)) / outA
+  const outB = (fgB * aFg + bgB * aBg * (1 - aFg)) / outA
+  return [
+    Math.round(Math.min(255, Math.max(0, outR))),
+    Math.round(Math.min(255, Math.max(0, outG))),
+    Math.round(Math.min(255, Math.max(0, outB))),
+    Math.round(Math.min(255, Math.max(0, outA * 255))),
+  ]
+}
+
+function scalePng(src: PNG, targetW: number, targetH: number): PNG {
+  const dst = new PNG({ width: targetW, height: targetH })
+  const scaleX = src.width / targetW
+  const scaleY = src.height / targetH
+  for (let y = 0; y < targetH; y++) {
+    for (let x = 0; x < targetW; x++) {
+      const gx = (x + 0.5) * scaleX - 0.5
+      const gy = (y + 0.5) * scaleY - 0.5
+      const gxi = Math.max(0, Math.min(src.width - 2, Math.floor(gx)))
+      const gyi = Math.max(0, Math.min(src.height - 2, Math.floor(gy)))
+      const tx = Math.max(0, Math.min(1, gx - gxi))
+      const ty = Math.max(0, Math.min(1, gy - gyi))
+
+      const idx00 = (src.width * gyi + gxi) << 2
+      const idx10 = (src.width * gyi + (gxi + 1)) << 2
+      const idx01 = (src.width * (gyi + 1) + gxi) << 2
+      const idx11 = (src.width * (gyi + 1) + (gxi + 1)) << 2
+
+      const w00 = (1 - tx) * (1 - ty)
+      const w10 = tx * (1 - ty)
+      const w01 = (1 - tx) * ty
+      const w11 = tx * ty
+
+      const a00 = src.data[idx00 + 3], a10 = src.data[idx10 + 3]
+      const a01 = src.data[idx01 + 3], a11 = src.data[idx11 + 3]
+      const rawAlpha = a00 * w00 + a10 * w10 + a01 * w01 + a11 * w11
+
+      let r = 0, g = 0, b = 0
+      if (rawAlpha > 0) {
+        r = (src.data[idx00] * a00 * w00 + src.data[idx10] * a10 * w10 + src.data[idx01] * a01 * w01 + src.data[idx11] * a11 * w11) / rawAlpha
+        g = (src.data[idx00 + 1] * a00 * w00 + src.data[idx10 + 1] * a10 * w10 + src.data[idx01 + 1] * a01 * w01 + src.data[idx11 + 1] * a11 * w11) / rawAlpha
+        b = (src.data[idx00 + 2] * a00 * w00 + src.data[idx10 + 2] * a10 * w10 + src.data[idx01 + 2] * a01 * w01 + src.data[idx11 + 2] * a11 * w11) / rawAlpha
+      }
+
+      const dIdx = (targetW * y + x) << 2
+      dst.data[dIdx] = Math.round(Math.min(255, Math.max(0, r)))
+      dst.data[dIdx + 1] = Math.round(Math.min(255, Math.max(0, g)))
+      dst.data[dIdx + 2] = Math.round(Math.min(255, Math.max(0, b)))
+      dst.data[dIdx + 3] = Math.round(Math.min(255, Math.max(0, rawAlpha)))
+    }
+  }
+  return dst
+}
+
+function drawAntiAliasedDot(png: PNG, cx: number, cy: number, radius: number, r = 255, g = 255, b = 255): void {
+  const minX = Math.max(0, Math.floor(cx - radius - 1))
+  const maxX = Math.min(png.width - 1, Math.ceil(cx + radius + 1))
+  const minY = Math.max(0, Math.floor(cy - radius - 1))
+  const maxY = Math.min(png.height - 1, Math.ceil(cy + radius + 1))
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const dist = Math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+      if (dist > radius + 0.5) continue
+      const alphaFactor = dist <= radius - 0.5 ? 1 : Math.max(0, Math.min(1, radius + 0.5 - dist))
+      const dotA = Math.round(255 * alphaFactor)
+      const idx = (y * png.width + x) * 4
+      const bgA = png.data[idx + 3] / 255
+      const fgA = dotA / 255
+      const outA = fgA + bgA * (1 - fgA)
+      if (outA > 0) {
+        png.data[idx] = Math.round((r * fgA + png.data[idx] * bgA * (1 - fgA)) / outA)
+        png.data[idx + 1] = Math.round((g * fgA + png.data[idx + 1] * bgA * (1 - fgA)) / outA)
+        png.data[idx + 2] = Math.round((b * fgA + png.data[idx + 2] * bgA * (1 - fgA)) / outA)
+        png.data[idx + 3] = Math.round(outA * 255)
+      }
+    }
+  }
+}
+
+function createDefaultCircle(size: number, color: [number, number, number]): PNG {
+  const png = new PNG({ width: size, height: size })
+  png.data.fill(0)
+  const cx = size / 2
+  const cy = size / 2
+  const r = size * 0.44
+  const borderThickness = Math.max(3, Math.round(size * 0.05))
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dist = Math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+      if (dist > r + 0.5) continue
+      const idx = (y * size + x) << 2
+      const edgeAlpha = dist <= r - 0.5 ? 1 : Math.max(0, Math.min(1, r + 0.5 - dist))
+      if (dist >= r - borderThickness) {
+        png.data[idx] = 255
+        png.data[idx + 1] = 255
+        png.data[idx + 2] = 255
+        png.data[idx + 3] = Math.round(255 * edgeAlpha)
+      } else {
+        png.data[idx] = color[0]
+        png.data[idx + 1] = color[1]
+        png.data[idx + 2] = color[2]
+        png.data[idx + 3] = Math.round(220 * edgeAlpha)
+      }
+    }
+  }
+  return png
+}
+
+const DIGIT_GLYPHS_5X7: Record<number, number[]> = {
+  0: [0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110],
+  1: [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
+  2: [0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111],
+  3: [0b11110, 0b00001, 0b00010, 0b00110, 0b00001, 0b10001, 0b01110],
+  4: [0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010],
+  5: [0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110],
+  6: [0b01110, 0b10000, 0b11110, 0b10001, 0b10001, 0b10001, 0b01110],
+  7: [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000],
+  8: [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110],
+  9: [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00001, 0b01110],
+}
+
+function drawProceduralDigit(
+  dst: PNG,
+  digit: number,
+  centerX: number,
+  centerY: number,
+  pixelBlockSize = 16
+) {
+  const rows = DIGIT_GLYPHS_5X7[digit]
+  if (!rows) return
+  const gw = 5 * pixelBlockSize
+  const gh = 7 * pixelBlockSize
+  const startX = Math.round(centerX - gw / 2)
+  const startY = Math.round(centerY - gh / 2)
+
+  // Pass 1: Black border
+  const border = Math.max(2, Math.round(pixelBlockSize * 0.2))
+  for (let r = 0; r < 7; r++) {
+    const rowBits = rows[r]
+    for (let c = 0; c < 5; c++) {
+      if ((rowBits & (1 << (4 - c))) !== 0) {
+        const bx = startX + c * pixelBlockSize
+        const by = startY + r * pixelBlockSize
+        for (let y = by - border; y < by + pixelBlockSize + border; y++) {
+          for (let x = bx - border; x < bx + pixelBlockSize + border; x++) {
+            if (x >= 0 && x < dst.width && y >= 0 && y < dst.height) {
+              const idx = (y * dst.width + x) << 2
+              dst.data[idx] = 0
+              dst.data[idx + 1] = 0
+              dst.data[idx + 2] = 0
+              dst.data[idx + 3] = 220
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Pass 2: White core
+  for (let r = 0; r < 7; r++) {
+    const rowBits = rows[r]
+    for (let c = 0; c < 5; c++) {
+      if ((rowBits & (1 << (4 - c))) !== 0) {
+        const bx = startX + c * pixelBlockSize
+        const by = startY + r * pixelBlockSize
+        for (let y = by; y < by + pixelBlockSize; y++) {
+          for (let x = bx; x < bx + pixelBlockSize; x++) {
+            if (x >= 0 && x < dst.width && y >= 0 && y < dst.height) {
+              const idx = (y * dst.width + x) << 2
+              dst.data[idx] = 255
+              dst.data[idx + 1] = 255
+              dst.data[idx + 2] = 255
+              dst.data[idx + 3] = 255
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+export function generateInstafadeSprites(
+  skinPath: string,
+  backupFilesDir: string,
+  options?: InstafadeCustomOptions,
+  backedUpFiles?: BackupFileRecord[]
+): { overlap: number } {
+  const style = options?.style || 'numbers'
+  const colorMode = options?.colorMode || 'combo1'
+  const customColor = options?.customColor || '#1e88e5'
+
+  const iniContent = readSkinIni(skinPath)
+  let tint: [number, number, number] | null = null
+
+  if (colorMode === 'original') {
+    tint = null
+  } else if (colorMode === 'custom') {
+    tint = customColor.startsWith('#') ? hexToRgb(customColor) : rgbStringToRgb(customColor)
+  } else {
+    // combo1
+    const c1 = getIniValue(iniContent, 'Colours', 'Combo1')
+    tint = c1 ? rgbStringToRgb(c1) : [31, 128, 255]
+  }
+
+  // Strict reader that ONLY reads true original files (never overwritten generated files)
+  const getOriginalFile = (name: string): Buffer | null => {
+    if (backedUpFiles) {
+      const rec = backedUpFiles.find((f) => f.relPath === name)
+      if (rec) {
+        if (rec.existedBefore && rec.backupRelPath) {
+          const bp = path.join(backupFilesDir, rec.backupRelPath)
+          if (fs.existsSync(bp) && !isBlankPlaceholderFile(bp, false)) {
+            return fs.readFileSync(bp)
+          }
+        }
+        return null
+      }
+    }
+    const bPath = path.join(backupFilesDir, name)
+    if (fs.existsSync(bPath) && !isBlankPlaceholderFile(bPath, false)) {
+      return fs.readFileSync(bPath)
+    }
+    const sPath = path.join(skinPath, name)
+    if (fs.existsSync(sPath) && !isBlankPlaceholderFile(sPath, false)) {
+      return fs.readFileSync(sPath)
+    }
+    return null
+  }
+
+  const hc2xBuf = getOriginalFile('hitcircle@2x.png')
+  const hcBuf = getOriginalFile('hitcircle.png')
+  const hco2xBuf = getOriginalFile('hitcircleoverlay@2x.png')
+  const hcoBuf = getOriginalFile('hitcircleoverlay.png')
+
+  let base2x: PNG | null = null
+  let overlay2x: PNG | null = null
+
+  if (hc2xBuf) {
+    try { base2x = PNG.sync.read(hc2xBuf) } catch {}
+  } else if (hcBuf) {
+    try {
+      const p1x = PNG.sync.read(hcBuf)
+      base2x = scalePng(p1x, p1x.width * 2, p1x.height * 2)
+    } catch {}
+  }
+
+  if (hco2xBuf) {
+    try { overlay2x = PNG.sync.read(hco2xBuf) } catch {}
+  } else if (hcoBuf) {
+    try {
+      const p1x = PNG.sync.read(hcoBuf)
+      overlay2x = scalePng(p1x, p1x.width * 2, p1x.height * 2)
+    } catch {}
+  }
+
+  if (!base2x) {
+    base2x = createDefaultCircle(256, tint || [31, 128, 255])
+  }
+
+  // --- EXACT OSU!STABLE SIZING MATH ---
+  // In osu!stable, fonts rendered via HitCirclePrefix are hardcoded with a 0.8x scale:
+  //   Scale = Vector2(0.8f)  [osu/Skinning/Legacy/OsuLegacySkinTransformer.cs]
+  // Standard hitcircle and slider tracks are rendered with 1.0x scale (128 SD / 256 HD).
+  // To make the instafade circle in default-X exactly match the hitcircle and slider head:
+  //   targetSize = Math.round(baseSize * 1.25)   (because 1.25 * 0.8 = 1.00!)
+  //   targetSize2x = 320 for 256 HD base (or base2x.width * 1.25)
+  //   targetSize1x = 160 SD
+  //   overlap = 160 SD
+  // When osu! draws default-X: 160 * 0.8 = 128px! Perfect alignment with the slider track!
+  const baseSize2x = Math.max(
+    base2x.width,
+    base2x.height,
+    overlay2x ? overlay2x.width : 0,
+    overlay2x ? overlay2x.height : 0,
+    256
+  )
+
+  const targetSize2x = Math.round(baseSize2x * 1.25)
+  const targetSize1x = Math.round(targetSize2x / 2)
+  const overlap = targetSize1x
+
+  const scaledBase2x = (base2x.width === targetSize2x && base2x.height === targetSize2x)
+    ? base2x
+    : scalePng(base2x, targetSize2x, targetSize2x)
+
+  const scaledOverlay2x = overlay2x
+    ? ((overlay2x.width === targetSize2x && overlay2x.height === targetSize2x)
+        ? overlay2x
+        : scalePng(overlay2x, targetSize2x, targetSize2x))
+    : null
+
+  const comp2x = new PNG({ width: targetSize2x, height: targetSize2x })
+  comp2x.data.fill(0)
+
+  // Draw scaledBase2x onto comp2x with optional tint
+  for (let y = 0; y < targetSize2x; y++) {
+    for (let x = 0; x < targetSize2x; x++) {
+      const idx = (y * targetSize2x + x) << 2
+      const a = scaledBase2x.data[idx + 3]
+      if (a < 2) continue
+      let r = scaledBase2x.data[idx]
+      let g = scaledBase2x.data[idx + 1]
+      let b = scaledBase2x.data[idx + 2]
+      if (tint) {
+        r = Math.round((r * tint[0]) / 255)
+        g = Math.round((g * tint[1]) / 255)
+        b = Math.round((b * tint[2]) / 255)
+      }
+      comp2x.data[idx] = r
+      comp2x.data[idx + 1] = g
+      comp2x.data[idx + 2] = b
+      comp2x.data[idx + 3] = a
+    }
+  }
+
+  // Blend scaledOverlay2x on top
+  if (scaledOverlay2x) {
+    for (let y = 0; y < targetSize2x; y++) {
+      for (let x = 0; x < targetSize2x; x++) {
+        const idx = (y * targetSize2x + x) << 2
+        const fa = scaledOverlay2x.data[idx + 3]
+        if (fa < 2) continue
+        const fr = scaledOverlay2x.data[idx]
+        const fg = scaledOverlay2x.data[idx + 1]
+        const fb = scaledOverlay2x.data[idx + 2]
+        const [nr, ng, nb, na] = blendPixel(
+          comp2x.data[idx], comp2x.data[idx + 1], comp2x.data[idx + 2], comp2x.data[idx + 3],
+          fr, fg, fb, fa
+        )
+        comp2x.data[idx] = nr
+        comp2x.data[idx + 1] = ng
+        comp2x.data[idx + 2] = nb
+        comp2x.data[idx + 3] = na
+      }
+    }
+  }
+
+  for (let d = 0; d <= 9; d++) {
+    const dPng2x = new PNG({ width: targetSize2x, height: targetSize2x })
+    comp2x.data.copy(dPng2x.data)
+
+    if (style === 'numbers') {
+      const d2xBuf = getOriginalFile(`default-${d}@2x.png`)
+      const d1xBuf = getOriginalFile(`default-${d}.png`)
+      let digitPng: PNG | null = null
+      if (d2xBuf) {
+        try {
+          const raw = PNG.sync.read(d2xBuf)
+          if (raw.width > 2 && raw.height > 2 && raw.width < targetSize2x && raw.height < targetSize2x) {
+            digitPng = raw
+          }
+        } catch {}
+      }
+      if (!digitPng && d1xBuf) {
+        try {
+          const raw1x = PNG.sync.read(d1xBuf)
+          if (raw1x.width > 2 && raw1x.height > 2) {
+            digitPng = scalePng(raw1x, raw1x.width * 2, raw1x.height * 2)
+          }
+        } catch {}
+      }
+
+      if (digitPng && digitPng.width < targetSize2x * 0.85 && digitPng.height < targetSize2x * 0.85) {
+        // Original digit: scale by 1.25x so in-game 0.8x font scaling leaves it at 1.0x original size!
+        const scaledDigitW = Math.round(digitPng.width * 1.25)
+        const scaledDigitH = Math.round(digitPng.height * 1.25)
+        const scaledDigit = scalePng(digitPng, scaledDigitW, scaledDigitH)
+
+        const dx = Math.round((targetSize2x - scaledDigitW) / 2)
+        const dy = Math.round((targetSize2x - scaledDigitH) / 2)
+        for (let y = 0; y < scaledDigitH; y++) {
+          for (let x = 0; x < scaledDigitW; x++) {
+            const sIdx = (y * scaledDigitW + x) << 2
+            const fa = scaledDigit.data[sIdx + 3]
+            if (fa < 2) continue
+            const fr = scaledDigit.data[sIdx]
+            const fg = scaledDigit.data[sIdx + 1]
+            const fb = scaledDigit.data[sIdx + 2]
+            const dIdx = ((y + dy) * targetSize2x + (x + dx)) << 2
+            const [nr, ng, nb, na] = blendPixel(
+              dPng2x.data[dIdx], dPng2x.data[dIdx + 1], dPng2x.data[dIdx + 2], dPng2x.data[dIdx + 3],
+              fr, fg, fb, fa
+            )
+            dPng2x.data[dIdx] = nr
+            dPng2x.data[dIdx + 1] = ng
+            dPng2x.data[dIdx + 2] = nb
+            dPng2x.data[dIdx + 3] = na
+          }
+        }
+      } else {
+        // Fallback procedural numeral if skin had no custom digits
+        drawProceduralDigit(dPng2x, d, targetSize2x / 2, targetSize2x / 2, Math.max(12, Math.round(targetSize2x * 0.05)))
+      }
+    } else if (style === 'dot') {
+      drawAntiAliasedDot(dPng2x, targetSize2x / 2, targetSize2x / 2, Math.round(targetSize2x * 0.042), 255, 255, 255)
+    }
+
+    fs.writeFileSync(path.join(skinPath, `default-${d}@2x.png`), PNG.sync.write(dPng2x, { deflateLevel: 9 }))
+    const dPng1x = scalePng(dPng2x, targetSize1x, targetSize1x)
+    fs.writeFileSync(path.join(skinPath, `default-${d}.png`), PNG.sync.write(dPng1x, { deflateLevel: 9 }))
+  }
+
+  const blanks = [
+    'hitcircle.png',
+    'hitcircle@2x.png',
+    'hitcircleoverlay.png',
+    'hitcircleoverlay@2x.png',
+    'sliderstartcircle.png',
+    'sliderstartcircle@2x.png',
+    'sliderstartcircleoverlay.png',
+    'sliderstartcircleoverlay@2x.png',
+  ]
+  for (const b of blanks) {
+    const p = path.join(skinPath, b)
+    if (fs.existsSync(p) || b.startsWith('hitcircle')) {
+      fs.writeFileSync(p, TRANSPARENT_1X1_PNG)
+    }
+  }
+
+  let ini = readSkinIni(skinPath)
+  ini = setIniValue(ini, 'Fonts', 'HitCirclePrefix', 'default')
+  ini = setIniValue(ini, 'Fonts', 'HitCircleOverlap', String(overlap))
+  writeSkinIni(skinPath, ini)
+
+  return { overlap }
+}
+
+async function applyInstafadeInternal(
+  skinPath: string,
+  options?: InstafadeCustomOptions,
+  manifest?: BackupManifest | null
+): Promise<SkinCustomizationData> {
+  let activeManifest = manifest || readManifest(skinPath)
+  if (!activeManifest) {
+    activeManifest = {
+      version: 1,
+      skinName: path.basename(skinPath),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      tweaks: {},
+    }
+  }
+
+  if (activeManifest.disabledTweaks?.['instafade']) {
+    delete activeManifest.disabledTweaks['instafade']
+  }
+
+  const backupFilesDir = getBackupFilesDir(skinPath)
+  if (!fs.existsSync(backupFilesDir)) {
+    fs.mkdirSync(backupFilesDir, { recursive: true })
+  }
+
+  const existingTweak = activeManifest.tweaks['instafade']
+  const backedUpFiles: BackupFileRecord[] = existingTweak ? [...existingTweak.files] : []
+  const iniChanges: BackupIniRecord[] = existingTweak?.iniChanges ? [...existingTweak.iniChanges] : []
+
+  const allPotentialFiles = [
+    'hitcircle.png',
+    'hitcircle@2x.png',
+    'hitcircleoverlay.png',
+    'hitcircleoverlay@2x.png',
+    'sliderstartcircle.png',
+    'sliderstartcircle@2x.png',
+    'sliderstartcircleoverlay.png',
+    'sliderstartcircleoverlay@2x.png',
+  ]
+  for (let d = 0; d <= 9; d++) {
+    allPotentialFiles.push(`default-${d}.png`, `default-${d}@2x.png`)
+  }
+
+  // ONLY back up pristine files on initial tweak application.
+  // If tweak is already applied, skinPath currently contains generated sprites,
+  // so copying them would corrupt the original backups!
+  if (!existingTweak) {
+    for (const relName of allPotentialFiles) {
+      const fullPath = path.join(skinPath, relName)
+      const backupTarget = path.join(backupFilesDir, relName)
+      const fullExists = fs.existsSync(fullPath)
+      const backupExists = fs.existsSync(backupTarget)
+
+      if (fullExists && !backupExists) {
+        fs.copyFileSync(fullPath, backupTarget)
+        backedUpFiles.push({
+          relPath: relName,
+          existedBefore: true,
+          backupRelPath: relName,
+        })
+      } else if (backupExists) {
+        backedUpFiles.push({
+          relPath: relName,
+          existedBefore: true,
+          backupRelPath: relName,
+        })
+      } else {
+        backedUpFiles.push({
+          relPath: relName,
+          existedBefore: false,
+          backupRelPath: null,
+        })
+      }
+    }
+
+    const iniContent = readSkinIni(skinPath)
+    iniChanges.push({
+      section: 'Fonts',
+      key: 'HitCircleOverlap',
+      originalValue: getIniValue(iniContent, 'Fonts', 'HitCircleOverlap'),
+      appliedValue: '',
+    })
+    iniChanges.push({
+      section: 'Fonts',
+      key: 'HitCirclePrefix',
+      originalValue: getIniValue(iniContent, 'Fonts', 'HitCirclePrefix'),
+      appliedValue: 'default',
+    })
+  }
+
+  const genRes = generateInstafadeSprites(skinPath, backupFilesDir, options, backedUpFiles)
+  const overlapChange = iniChanges.find((c) => c.key.toLowerCase() === 'hitcircleoverlap')
+  if (overlapChange) {
+    overlapChange.appliedValue = String(genRes.overlap)
+  }
+
+  activeManifest.tweaks['instafade'] = {
+    tweakId: 'instafade',
+    appliedAt: Date.now(),
+    files: backedUpFiles,
+    iniChanges,
+    meta: {
+      ...(options || {}),
+      overlap: genRes.overlap,
+    },
+  }
+  activeManifest.updatedAt = Date.now()
+  writeManifest(skinPath, activeManifest)
 
   return getSkinCustomizationData(skinPath)
 }

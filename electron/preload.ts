@@ -23,6 +23,7 @@ import type {
   SkinPreviewType,
   FileDetails,
   FollowPointsCustomOptions,
+  InstafadeCustomOptions,
   OptimizerSpriteInfo,
   SkinOptimizerSummary,
 } from './skins-customizer'
@@ -35,6 +36,7 @@ export type {
   SkinPreviewType,
   FileDetails,
   FollowPointsCustomOptions,
+  InstafadeCustomOptions,
   OptimizerSpriteInfo,
   SkinOptimizerSummary,
   OsuAccountInfo,

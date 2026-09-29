@@ -2019,3 +2019,230 @@
 .customizer-scroll-arrow:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent-hover); }
 .customizer-scroll-arrow:disabled { opacity: 0.25; cursor: default; }
 .customizer-scroll-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Platform Compatibility Notice (osu!stable vs osu!lazer) */
+.customizer-platform-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-surface, 8px);
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+
+.customizer-platform-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.customizer-platform-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.customizer-platform-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.customizer-platform-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Card Stable-only Badge */
+.customizer-card-stable-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(56, 189, 248, 0.1);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  margin-left: 6px;
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Instafade Card Options */
+.customizer-instafade-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.instafade-option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.instafade-option-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.instafade-pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.instafade-pill {
+  padding: 3px 9px;
+  background: var(--bg-grouped, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.instafade-pill:hover:not(:disabled) {
+  background: var(--bg-grouped-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.instafade-pill.-active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+  font-weight: 600;
+}
+
+.instafade-pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.instafade-color-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.instafade-color-input {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.instafade-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.instafade-color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.instafade-color-hex {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-tertiary);
+}
+
+/* Instafade Interactive Canvas Preview */
+.customizer-instafade-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.customizer-instafade-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.instafade-preview-badges {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+  gap: 6px;
+}
+
+.instafade-timing-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.instafade-timing-pill.-instant {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.instafade-timing-pill.-fade {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.instafade-hint-pill {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+

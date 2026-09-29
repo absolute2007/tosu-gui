@@ -125,7 +125,7 @@ const I18N = {
       "Каталог skins.osuck.net: поиск, фильтры по режиму, превью скриншотов и установка .osk в папку Skins. Быстрый поиск и индикаторы уже установленных скинов.",
     shotEditorTitle: "Редактор элементов",
     shotEditorBody:
-      "Кастомизация и тонкая настройка элементов скина: плавный непрерывный или классический след курсора с подгонкой под размер в osu!, линии следования, скрытие мешающих эффектов, замена текстур и звуков через Drag & Drop.",
+      "Кастомизация и тонкая настройка элементов скина: инста-фейд нот для osu!stable (0 ms затухание при ударе), плавный непрерывный или классический след курсора с подгонкой под размер в osu!, линии следования, скрытие мешающих эффектов, замена текстур и звуков через Drag & Drop.",
     shotColorsTitle: "Цвета комбо-нот",
     shotColorsBody:
       "Настройка оттенков кругов для каждой серии комбо прямо в skin.ini: визуальный спектр, HSL-слайдеры, готовые палитры и интерактивное превью с кликабельными нотами.",
@@ -175,7 +175,7 @@ const I18N = {
       "Browse skins.osuck.net: search, mode filters, screenshot previews, and install .osk directly into your Skins folder.",
     shotEditorTitle: "Skin Editor",
     shotEditorBody:
-      "Customize and tune skin elements: smooth continuous or classic cursor trail adjusted to your in-game cursor size, follow points, hiding distracting effects, and custom texture replacement with Drag & Drop.",
+      "Customize and tune skin elements: instant fade hitcircles for osu!stable (0 ms vanish on hit), smooth continuous or classic cursor trail adjusted to your in-game cursor size, follow points, hiding distracting effects, and custom texture replacement with Drag & Drop.",
     shotColorsTitle: "Combo Colors",
     shotColorsBody:
       "Customize hitcircle combo colors saved directly into skin.ini: visual spectrum, HSL sliders, curated palettes, and interactive live hitcircle preview.",
