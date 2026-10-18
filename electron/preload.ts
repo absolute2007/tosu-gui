@@ -115,6 +115,8 @@ const api = {
     ipcRenderer.invoke('maps:search', params),
   fetchBeatmapOsu: (beatmapId: number): Promise<{ beatmapId: number; content: string }> =>
     ipcRenderer.invoke('maps:osu-file', beatmapId),
+  fetchPreviewAudio: (setId: number, primaryUrl?: string): Promise<Uint8Array> =>
+    ipcRenderer.invoke('maps:preview-audio', setId, primaryUrl),
   getSongsPath: (): Promise<{
     configured: string
     resolved: string | null

@@ -1250,7 +1250,8 @@
       elapsed = Math.max(0, now - (gp.startPerf || now))
     }
 
-    var t = (gp.parsed.previewTime || 0) + elapsed
+    // b.ppy.sh preview clips start ~117 ms before PreviewTime (see PREVIEW_CLIP_LEAD_MS)
+    var t = (gp.parsed.previewTime || 0) - ((eng && eng.PREVIEW_CLIP_LEAD_MS) || 117) + elapsed
     var rt = ensureGpRuntime()
     var cont = true
     try {

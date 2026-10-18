@@ -28,7 +28,11 @@ import type { OsuAccountInfo } from '../../electron/osu-session'
 import {
   createPreviewRuntime,
   drawPreviewFrame,
+  ensureAudio,
+  musicMapTime,
+  PREVIEW_CLIP_LEAD_MS,
   parseOsu,
+  preloadHitSounds,
   resetPreviewRuntime,
   type ParsedBeatmap,
   type PreviewRuntime,
@@ -406,12 +410,17 @@ export function MapsPage({
   const gpDataRef = useRef<ParsedBeatmap | null>(null)
   const gpStartRef = useRef(0)
   const gpRuntimeRef = useRef<PreviewRuntime>(createPreviewRuntime(loadStoredVolume()))
+  /** Web Audio music track of the gameplay preview (shares the clock with hitsounds) */
+  const gpMusicRef = useRef<{ src: AudioBufferSourceNode; gain: GainNode; endCtx: number } | null>(null)
+  /** Bumped on every load/stop so stale async loads don't start playback */
+  const gpSeqRef = useRef(0)
   const loggedIn = Boolean(account?.loggedIn)
 
   useEffect(() => {
     volumeRef.current = volume
     if (audioRef.current) audioRef.current.volume = volume
     if (gpAudioRef.current) gpAudioRef.current.volume = volume
+    if (gpMusicRef.current) gpMusicRef.current.gain.gain.value = volume
     gpRuntimeRef.current.volume = volume
   }, [volume])
 
@@ -550,11 +559,23 @@ export function MapsPage({
   }, [])
 
   const stopGameplay = useCallback(() => {
+    gpSeqRef.current++
     notifyPreview(false, 'gui-gameplay')
     if (gpRafRef.current) {
       cancelAnimationFrame(gpRafRef.current)
       gpRafRef.current = 0
     }
+    if (gpMusicRef.current) {
+      try {
+        gpMusicRef.current.src.stop()
+        gpMusicRef.current.src.disconnect()
+        gpMusicRef.current.gain.disconnect()
+      } catch {
+        /* ignore */
+      }
+      gpMusicRef.current = null
+    }
+    gpRuntimeRef.current.music = null
     if (gpAudioRef.current) {
       try {
         gpAudioRef.current.pause()
@@ -587,13 +608,26 @@ export function MapsPage({
       const canvas = gpCanvasRef.current
       const data = gpDataRef.current
       if (!canvas || !data) return
+      // Render at the displayed size × DPR so sprites stay sharp
+      const dpr = window.devicePixelRatio || 1
+      const cw = Math.round(canvas.clientWidth * dpr)
+      const ch = Math.round(canvas.clientHeight * dpr)
+      if (cw > 0 && ch > 0 && (canvas.width !== cw || canvas.height !== ch)) {
+        canvas.width = cw
+        canvas.height = ch
+      }
       const ctx = canvas.getContext('2d')
       if (!ctx) return
 
       const audio = gpAudioRef.current
+      const rt = gpRuntimeRef.current
+      const music = gpMusicRef.current
       let elapsed = 0
 
-      if (audio && !audio.paused && !audio.ended && Number.isFinite(audio.currentTime) && audio.currentTime > 0) {
+      const musicT = musicMapTime(rt)
+      if (music && musicT != null) {
+        elapsed = musicT - (data.previewTime - PREVIEW_CLIP_LEAD_MS)
+      } else if (audio && !audio.paused && !audio.ended && Number.isFinite(audio.currentTime) && audio.currentTime > 0) {
         const curSec = audio.currentTime
         if (curSec !== gpAudioSyncRef.current.lastAudioSec) {
           gpAudioSyncRef.current.lastAudioSec = curSec
@@ -604,7 +638,7 @@ export function MapsPage({
         elapsed = Math.max(0, now - gpStartRef.current)
       }
 
-      const t = data.previewTime + elapsed
+      const t = data.previewTime - PREVIEW_CLIP_LEAD_MS + elapsed
       const cont = drawPreviewFrame(
         ctx,
         data,
@@ -615,7 +649,8 @@ export function MapsPage({
         gpRuntimeRef.current
       )
 
-      if (!cont || (audio && audio.ended)) {
+      const musicEnded = music && rt.audio && rt.audio.currentTime >= music.endCtx
+      if (!cont || musicEnded || (audio && audio.ended)) {
         closeGameplay()
         return
       }
@@ -627,21 +662,62 @@ export function MapsPage({
   const loadGameplayDiff = useCallback(
     async (beatmapId: number, mapSet: MapSetSummary) => {
       setGpLoading(true)
-      setGpStatus('Загрузка карты…')
+      setGpStatus(lang === 'en' ? 'Loading map…' : 'Загрузка карты…')
       setGpBeatmapId(beatmapId)
       stopGameplay()
+      const seq = gpSeqRef.current
+      const primaryUrl = mapSet.previewUrl || `https://b.ppy.sh/preview/${mapSet.id}.mp3`
       try {
-        const result = await window.tosuGui.fetchBeatmapOsu(beatmapId)
+        const rt = gpRuntimeRef.current
+        const ctx = ensureAudio(rt)
+        // Map, track and hitsounds load in parallel; playback starts only when all are ready.
+        const [result, audioBytes] = await Promise.all([
+          window.tosuGui.fetchBeatmapOsu(beatmapId),
+          window.tosuGui.fetchPreviewAudio(mapSet.id, primaryUrl).catch(() => null),
+          preloadHitSounds(rt).catch(() => {}),
+        ])
+        if (seq !== gpSeqRef.current) return
         const parsed = parseOsu(result.content)
+
+        let buffer: AudioBuffer | null = null
+        if (ctx && audioBytes) {
+          try {
+            const bytes = audioBytes.slice()
+            buffer = await ctx.decodeAudioData(bytes.buffer)
+          } catch {
+            buffer = null
+          }
+        }
+        if (seq !== gpSeqRef.current) return
+
         gpDataRef.current = parsed
-        resetPreviewRuntime(gpRuntimeRef.current, volumeRef.current)
-        setGpStatus('')
-        setGpLoading(false)
+        resetPreviewRuntime(rt, volumeRef.current)
+
+        if (ctx && buffer) {
+          await ctx.resume().catch(() => {})
+          if (seq !== gpSeqRef.current) return
+          const gain = ctx.createGain()
+          gain.gain.value = volumeRef.current
+          gain.connect(ctx.destination)
+          const src = ctx.createBufferSource()
+          src.buffer = buffer
+          src.connect(gain)
+          // Small lead-in so the first frames and hitsounds can be queued in time
+          const startAt = ctx.currentTime + 0.12
+          src.start(startAt)
+          gpMusicRef.current = { src, gain, endCtx: startAt + buffer.duration }
+          rt.music = { ctxStart: startAt, mapStartMs: parsed.previewTime - PREVIEW_CLIP_LEAD_MS }
+          notifyPreview(true, 'gui-gameplay')
+          setGpStatus('')
+          setGpLoading(false)
+          gpRafRef.current = requestAnimationFrame(drawGameplay)
+          return
+        }
+
+        // Fallback: HTML5 audio, but still wait until it actually starts playing
         const audio = new Audio()
-        const vol = volumeRef.current > 0 ? volumeRef.current : 0.65
-        audio.volume = vol
+        audio.volume = volumeRef.current
         audio.preload = 'auto'
-        const primaryUrl = mapSet.previewUrl || `https://b.ppy.sh/preview/${mapSet.id}.mp3`
         const fallbackUrl = `https://catboy.best/preview/audio/${mapSet.id}`
         audio.src = primaryUrl
         audio.addEventListener('error', () => {
@@ -651,24 +727,30 @@ export function MapsPage({
           }
         })
         gpAudioRef.current = audio
-        const now = performance.now()
-        gpStartRef.current = now
-        gpAudioSyncRef.current = { audioStartPerf: now, lastAudioSec: 0 }
         audio.addEventListener('playing', () => {
+          if (seq !== gpSeqRef.current) return
           notifyPreview(true, 'gui-gameplay')
           const pNow = performance.now()
           const cur = audio.currentTime || 0
           gpStartRef.current = pNow - cur * 1000
           gpAudioSyncRef.current = { audioStartPerf: pNow - cur * 1000, lastAudioSec: cur }
+          setGpStatus('')
+          setGpLoading(false)
+          if (!gpRafRef.current) gpRafRef.current = requestAnimationFrame(drawGameplay)
         })
-        void audio.play().catch(() => {})
-        gpRafRef.current = requestAnimationFrame(drawGameplay)
+        setGpStatus(lang === 'en' ? 'Loading audio…' : 'Загрузка аудио…')
+        void audio.play().catch(() => {
+          if (seq !== gpSeqRef.current) return
+          setGpLoading(false)
+          setGpStatus(lang === 'en' ? 'Failed to load audio' : 'Не удалось загрузить аудио')
+        })
       } catch (err) {
+        if (seq !== gpSeqRef.current) return
         setGpLoading(false)
         setGpStatus(err instanceof Error ? err.message : 'Ошибка загрузки карты')
       }
     },
-    [stopGameplay, drawGameplay, notifyPreview]
+    [lang, stopGameplay, drawGameplay, notifyPreview]
   )
 
   const openGameplayPreview = useCallback(
@@ -1410,12 +1492,14 @@ export function MapsPage({
               {muteOsu ? <VolumeX size={14} strokeWidth={1.8} /> : <Volume2 size={14} strokeWidth={1.8} />}
               <span>{lang === 'en' ? 'Mute osu!' : 'Глушить osu!'}</span>
             </button>
-            <Volume2 size={14} strokeWidth={1.8} />
+            {volume <= 0 ? <VolumeX size={14} strokeWidth={1.8} /> : <Volume2 size={14} strokeWidth={1.8} />}
             <input
               type="range"
+              className="maps-vol-slider"
               min={0}
               max={100}
               value={Math.round(volume * 100)}
+              style={{ '--fill': `${Math.round(volume * 100)}%` } as React.CSSProperties}
               onChange={(e) => setVolumePersist((parseInt(e.target.value, 10) || 0) / 100)}
               aria-label={lang === 'en' ? 'Volume' : 'Громкость'}
             />

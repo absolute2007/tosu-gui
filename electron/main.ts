@@ -30,6 +30,7 @@ import {
   downloadMapSet,
   DownloadCancelledError,
   fetchBeatmapOsuFile,
+  fetchPreviewAudio,
   invalidateLocalSetIdsCache,
   pickSongsDirectory,
   resolveSongsPath,
@@ -640,6 +641,10 @@ ipcMain.handle('maps:search', async (_e, params: MapSearchParams) => {
 
 ipcMain.handle('maps:osu-file', async (_e, beatmapId: number) => {
   return fetchBeatmapOsuFile(Number(beatmapId) || 0)
+})
+
+ipcMain.handle('maps:preview-audio', async (_e, setId: number, primaryUrl?: string) => {
+  return fetchPreviewAudio(Number(setId) || 0, typeof primaryUrl === 'string' ? primaryUrl : undefined)
 })
 
 ipcMain.handle('maps:get-songs-path', async () => {

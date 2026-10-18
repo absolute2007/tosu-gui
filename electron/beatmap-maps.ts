@@ -259,6 +259,35 @@ function appendCursorObject(sp: URLSearchParams, cursor: unknown) {
 }
 
 /**
+ * Fetch the set's preview mp3 bytes for the gameplay preview.
+ * Done in main so the renderer can decode it with Web Audio without CORS issues.
+ */
+export async function fetchPreviewAudio(setId: number, primaryUrl?: string): Promise<Uint8Array> {
+  const id = Math.floor(Number(setId) || 0)
+  if (!id) throw new Error('setId required')
+  const urls = [
+    primaryUrl && /^https:\/\//.test(primaryUrl) ? primaryUrl : '',
+    `https://b.ppy.sh/preview/${id}.mp3`,
+    `https://catboy.best/preview/audio/${id}`,
+  ].filter((u, i, arr) => u && arr.indexOf(u) === i)
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'tosu-gui' },
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!res.ok) continue
+      const buf = new Uint8Array(await res.arrayBuffer())
+      if (buf.byteLength > 1024) return buf
+    } catch {
+      /* try next mirror */
+    }
+  }
+  throw new Error('Preview audio unavailable')
+}
+
+/**
  * Fetch difficulty .osu text for in-app gameplay preview (osu!preview-style).
  * Uses website endpoint /osu/{beatmapId} — no full set download.
  */

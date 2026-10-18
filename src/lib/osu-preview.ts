@@ -61,6 +61,12 @@ export interface PreviewRuntime {
   audio: AudioContext | null
   lastT: number
   judgments: JudgmentPop[]
+  /**
+   * Music clock when the track plays through `audio` (Web Audio):
+   * map time `mapStartMs` is heard at context time `ctxStart`.
+   * Hitsounds are then scheduled on the same clock, so they cannot drift.
+   */
+  music: { ctxStart: number; mapStartMs: number } | null
 }
 
 export const IDKE_COMBO_COLORS = [
@@ -92,6 +98,7 @@ export function createPreviewRuntime(volume = 0.65): PreviewRuntime {
     audio: null,
     lastT: -1,
     judgments: [],
+    music: null,
   }
 }
 
@@ -101,6 +108,7 @@ export function resetPreviewRuntime(rt: PreviewRuntime, volume?: number) {
   rt.trail = []
   rt.lastT = -1
   rt.judgments = []
+  rt.music = null
   if (volume != null) rt.volume = Math.min(1, Math.max(0, volume))
 }
 
@@ -114,13 +122,6 @@ function lerp(a: Pt, b: Pt, t: number): Pt {
 
 function clamp(v: number, a: number, b: number): number {
   return Math.min(b, Math.max(a, v))
-}
-
-function clampPlayfield(p: Pt): Pt {
-  return {
-    x: clamp(p.x, 0, PLAY_W),
-    y: clamp(p.y, 0, PLAY_H),
-  }
 }
 
 function pathMetrics(path: Pt[]): { pathLen: number; cumLens: number[] } {
@@ -178,6 +179,13 @@ function sampleBezierSegment(ctrl: Pt[], steps: number): Pt[] {
   return out
 }
 
+/** Enough samples that each step is ~2 osu!px along the control polygon */
+function bezierSteps(ctrl: Pt[]): number {
+  let len = 0
+  for (let i = 1; i < ctrl.length; i++) len += dist(ctrl[i - 1], ctrl[i])
+  return Math.max(16, Math.min(600, Math.ceil(len / 2)))
+}
+
 function sampleBezier(points: Pt[]): Pt[] {
   if (points.length < 3) return sampleLinear(points, 20)
   const out: Pt[] = []
@@ -185,7 +193,7 @@ function sampleBezier(points: Pt[]): Pt[] {
   for (let i = 0; i < points.length - 1; i++) {
     if (i > segStart && points[i].x === points[i + 1].x && points[i].y === points[i + 1].y) {
       const seg = points.slice(segStart, i + 1)
-      const sampled = sampleBezierSegment(seg, Math.max(10, seg.length * 8))
+      const sampled = sampleBezierSegment(seg, bezierSteps(seg))
       if (out.length) sampled.shift()
       out.push(...sampled)
       segStart = i + 1
@@ -193,7 +201,7 @@ function sampleBezier(points: Pt[]): Pt[] {
   }
   if (segStart < points.length) {
     const seg = points.slice(segStart)
-    const sampled = sampleBezierSegment(seg, Math.max(10, seg.length * 8))
+    const sampled = sampleBezierSegment(seg, bezierSteps(seg))
     if (out.length && sampled.length) sampled.shift()
     out.push(...sampled)
   }
@@ -351,6 +359,112 @@ function timingAt(list: TimingState[], t: number): TimingState {
   return cur
 }
 
+type ParsedObject = PreviewObject & { stack?: number }
+
+function objectEndPos(o: PreviewObject): Pt {
+  if (o.kind === 'slider') {
+    // After an even number of slides the ball ends back at the head
+    return o.slides % 2 === 0 ? o.path[0] : o.path[o.path.length - 1]
+  }
+  if (o.kind === 'circle') return { x: o.x, y: o.y }
+  return { x: PLAY_W / 2, y: PLAY_H / 2 }
+}
+
+function objectPos(o: PreviewObject): Pt {
+  return o.kind === 'spinner' ? { x: PLAY_W / 2, y: PLAY_H / 2 } : { x: o.x, y: o.y }
+}
+
+function objectEndTime(o: PreviewObject): number {
+  return o.kind === 'circle' ? o.t : o.endTime
+}
+
+/**
+ * osu! stacking (beatmap format v6+, same as osu!stable / lazer OsuBeatmapProcessor):
+ * objects placed on the same spot within the stack threshold are shifted up-left
+ * by radius/10 per stack level so they don't collapse into one point.
+ */
+function applyStacking(objects: ParsedObject[], preempt: number, stackLeniency: number, radius: number) {
+  const STACK_DISTANCE = 3
+  const threshold = preempt * stackLeniency
+  const n = objects.length
+  for (const o of objects) o.stack = 0
+  if (n < 2) return
+
+  let extendedEndIndex = n - 1
+  for (let i = n - 1; i >= 0; i--) {
+    let stackBaseIndex = i
+    for (let k = stackBaseIndex + 1; k < n; k++) {
+      const base = objects[stackBaseIndex]
+      if (base.kind === 'spinner') break
+      const ok = objects[k]
+      if (ok.kind === 'spinner') continue
+      if (ok.t - objectEndTime(base) > threshold) break
+      if (
+        dist(objectPos(base), objectPos(ok)) < STACK_DISTANCE ||
+        (base.kind === 'slider' && dist(objectEndPos(base), objectPos(ok)) < STACK_DISTANCE)
+      ) {
+        stackBaseIndex = k
+        ok.stack = 0
+      }
+    }
+    if (stackBaseIndex > extendedEndIndex) {
+      extendedEndIndex = stackBaseIndex
+      if (extendedEndIndex === n - 1) break
+    }
+  }
+
+  let extendedStartIndex = 0
+  for (let i = extendedEndIndex; i > 0; i--) {
+    let k = i
+    let oi = objects[i]
+    if ((oi.stack || 0) !== 0 || oi.kind === 'spinner') continue
+
+    if (oi.kind === 'circle') {
+      while (--k >= 0) {
+        const ok = objects[k]
+        if (ok.kind === 'spinner') continue
+        if (oi.t - objectEndTime(ok) > threshold) break
+        if (k < extendedStartIndex) {
+          ok.stack = 0
+          extendedStartIndex = k
+        }
+        if (ok.kind === 'slider' && dist(objectEndPos(ok), objectPos(oi)) < STACK_DISTANCE) {
+          const offset = (oi.stack || 0) - (ok.stack || 0) + 1
+          for (let j = k + 1; j <= i; j++) {
+            const oj = objects[j]
+            if (dist(objectEndPos(ok), objectPos(oj)) < STACK_DISTANCE) oj.stack = (oj.stack || 0) - offset
+          }
+          break
+        }
+        if (dist(objectPos(ok), objectPos(oi)) < STACK_DISTANCE) {
+          ok.stack = (oi.stack || 0) + 1
+          oi = ok
+        }
+      }
+    } else if (oi.kind === 'slider') {
+      while (--k >= 0) {
+        const ok = objects[k]
+        if (ok.kind === 'spinner') continue
+        if (oi.t - ok.t > threshold) break
+        if (dist(objectEndPos(ok), objectPos(oi)) < STACK_DISTANCE) {
+          ok.stack = (oi.stack || 0) + 1
+          oi = ok
+        }
+      }
+    }
+  }
+
+  const step = radius / 10
+  for (const o of objects) {
+    const h = o.stack || 0
+    if (!h || o.kind === 'spinner') continue
+    const d = -h * step
+    o.x += d
+    o.y += d
+    if (o.kind === 'slider') o.path = o.path.map((p) => ({ x: p.x + d, y: p.y + d }))
+  }
+}
+
 export function parseOsu(text: string): ParsedBeatmap {
   const lines = String(text || '').split(/\r?\n/)
   let section = ''
@@ -359,12 +473,16 @@ export function parseOsu(text: string): ParsedBeatmap {
   let cs = 4
   let modeNum = 0
   let sliderMultiplier = 1.4
+  let stackLeniency = 0.7
   let hasAR = false
   const timing = parseTimingPoints(lines)
-  const objects: PreviewObject[] = []
+  const objects: ParsedObject[] = []
 
   let comboNumber = 0
-  let comboIndex = 0
+  let comboIndex = -1
+  let prevWasSpinner = true
+
+  const sane = (v: number) => clamp(v, -1024, 1536)
 
   for (const raw of lines) {
     const line = raw.trim()
@@ -376,12 +494,16 @@ export function parseOsu(text: string): ParsedBeatmap {
     if (section === 'general') {
       if (line.startsWith('PreviewTime:')) previewTime = parseInt(line.split(':')[1], 10) || 0
       if (line.startsWith('Mode:')) modeNum = parseInt(line.split(':')[1], 10) || 0
+      if (line.startsWith('StackLeniency:')) {
+        const v = parseFloat(line.split(':')[1])
+        if (Number.isFinite(v)) stackLeniency = v
+      }
     } else if (section === 'difficulty') {
       if (line.startsWith('ApproachRate:')) {
-        ar = parseFloat(line.split(':')[1]) || 9
+        ar = parseFloat(line.split(':')[1]) || 0
         hasAR = true
       }
-      if (line.startsWith('CircleSize:')) cs = parseFloat(line.split(':')[1]) || 4
+      if (line.startsWith('CircleSize:')) cs = parseFloat(line.split(':')[1]) || 0
       if (line.startsWith('SliderMultiplier:')) sliderMultiplier = parseFloat(line.split(':')[1]) || 1.4
       if (line.startsWith('OverallDifficulty:') && !hasAR) {
         ar = parseFloat(line.split(':')[1]) || ar
@@ -389,26 +511,25 @@ export function parseOsu(text: string): ParsedBeatmap {
     } else if (section === 'hitobjects') {
       const p = line.split(',')
       if (p.length < 4) continue
-      let x = parseFloat(p[0])
-      let y = parseFloat(p[1])
+      const x = sane(parseFloat(p[0]))
+      const y = sane(parseFloat(p[1]))
       const t = parseInt(p[2], 10)
       const type = parseInt(p[3], 10) || 0
       const hitSound = parseInt(p[4], 10) || 0
       if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(t)) continue
 
-      const clamped = clampPlayfield({ x, y })
-      x = clamped.x
-      y = clamped.y
-
-      if (type & 4) {
-        comboIndex = (comboIndex + 1 + ((type >> 4) & 7)) % IDKE_COMBO_COLORS.length
+      const isSpinner = (type & 8) !== 0
+      // New combo on the NC flag, on the first object and on the object after a spinner
+      if (!isSpinner && ((type & 4) || prevWasSpinner)) {
+        comboIndex = (comboIndex + 1 + ((type & 4) ? (type >> 4) & 7 : 0)) % IDKE_COMBO_COLORS.length
         comboNumber = 1
-      } else {
+      } else if (!isSpinner) {
         comboNumber += 1
       }
-      const color = IDKE_COMBO_COLORS[comboIndex % IDKE_COMBO_COLORS.length]
+      prevWasSpinner = isSpinner
+      const color = IDKE_COMBO_COLORS[Math.max(0, comboIndex) % IDKE_COMBO_COLORS.length]
 
-      if (type & 8) {
+      if (isSpinner) {
         const endTime = parseInt(p[5], 10) || t + 1000
         objects.push({ kind: 'spinner', t, endTime })
         continue
@@ -426,17 +547,12 @@ export function parseOsu(text: string): ParsedBeatmap {
           if (xy.length < 2) continue
           const cx = parseFloat(xy[0])
           const cy = parseFloat(xy[1])
-          if (Number.isFinite(cx) && Number.isFinite(cy)) {
-            cps.push({
-              x: clamp(cx, -PLAY_W * 0.15, PLAY_W * 1.15),
-              y: clamp(cy, -PLAY_H * 0.15, PLAY_H * 1.15),
-            })
-          }
+          if (Number.isFinite(cx) && Number.isFinite(cy)) cps.push({ x: sane(cx), y: sane(cy) })
         }
         let path = buildCurve(curveType, cps)
         if (pixelLength > 0) path = fitPathLength(path, pixelLength)
-        if (path.length < 2) path = [{ x, y }, { x: x + 40, y }]
-        const { pathLen, cumLens } = pathMetrics(path)
+        if (path.length < 2) path = [{ x, y }, { x: x + 1, y }]
+        const { pathLen } = pathMetrics(path)
         const tm = timingAt(timing, t)
         const pxPerBeat = sliderMultiplier * 100 * tm.sv
         const oneSlide = pxPerBeat > 0 ? (Math.max(pathLen, 1) / pxPerBeat) * tm.beatLength : 500
@@ -450,8 +566,8 @@ export function parseOsu(text: string): ParsedBeatmap {
           endTime,
           slides,
           path,
-          pathLen,
-          cumLens,
+          pathLen: 0,
+          cumLens: [],
           hitSound,
           comboIndex,
           comboNumber,
@@ -464,13 +580,20 @@ export function parseOsu(text: string): ParsedBeatmap {
   }
 
   objects.sort((a, b) => a.t - b.t)
+  applyStacking(objects, approachMs(ar), stackLeniency, circleRadius(cs))
+  for (const o of objects) {
+    if (o.kind === 'slider') {
+      const m = pathMetrics(o.path)
+      o.pathLen = m.pathLen
+      o.cumLens = m.cumLens
+    }
+  }
   if (previewTime <= 0 && objects.length) {
     previewTime = Math.max(0, objects[0].t - 500)
   }
 
   return { previewTime, ar, cs, mode: modeNum, objects }
 }
-
 
 
 // --- Skin Image and Sound Asset Manager (vv_idke_trail) ---
@@ -483,6 +606,7 @@ interface SkinImageMap {
   approachcircle: HTMLImageElement | null
   reversearrow: HTMLImageElement | null
   sliderb: HTMLImageElement | null
+  sliderfollowcircle: HTMLImageElement | null
   hit300: HTMLImageElement | null
   hit100: HTMLImageElement | null
   hit50: HTMLImageElement | null
@@ -498,6 +622,7 @@ const skinImages: SkinImageMap = {
   approachcircle: null,
   reversearrow: null,
   sliderb: null,
+  sliderfollowcircle: null,
   hit300: null,
   hit100: null,
   hit50: null,
@@ -505,8 +630,42 @@ const skinImages: SkinImageMap = {
   digits: [],
 }
 
-const tintedCircles = new Map<string, HTMLCanvasElement>()
-const tintedApproaches = new Map<string, HTMLCanvasElement>()
+/** skin.ini values the renderer relies on */
+const SKIN = {
+  sliderBorder: 'rgb(120,120,120)',
+  sliderTrack: 'rgb(3,3,12)',
+  hitCircleOverlap: 6,
+  overlayAboveNumber: true,
+  allowSliderBallTint: true,
+}
+
+/** Combo-colour tinted copies (osu! tints by multiplying, keeping the sprite's shading) */
+const tintCache = new Map<string, HTMLCanvasElement>()
+
+function tinted(img: HTMLImageElement | null, color: string, key: string): CanvasImageSource | null {
+  if (!img) return null
+  const cacheKey = `${key}|${color}`
+  const hit = tintCache.get(cacheKey)
+  if (hit) return hit
+  const c = document.createElement('canvas')
+  c.width = img.naturalWidth || img.width
+  c.height = img.naturalHeight || img.height
+  const ctx = c.getContext('2d')
+  if (!ctx) return img
+  ctx.drawImage(img, 0, 0)
+  ctx.globalCompositeOperation = 'multiply'
+  ctx.fillStyle = color
+  ctx.fillRect(0, 0, c.width, c.height)
+  ctx.globalCompositeOperation = 'destination-in'
+  ctx.drawImage(img, 0, 0)
+  tintCache.set(cacheKey, c)
+  return c
+}
+
+/** Skins hide an element with a 1x1 transparent png */
+function usable(img: HTMLImageElement | null): img is HTMLImageElement {
+  return !!img && img.naturalWidth > 2 && img.naturalHeight > 2
+}
 
 function getCandidateBases(): string[] {
   const list: string[] = ['http://127.0.0.1:24777/skin/', './skin/', '/skin/']
@@ -544,91 +703,41 @@ async function loadImgWithFallback(filename: string): Promise<HTMLImageElement |
 
 let skinLoadingPromise: Promise<void> | null = null
 
-function ensureSkinLoaded(): Promise<void> {
+export function ensureSkinLoaded(): Promise<void> {
   if (skinLoadingPromise) return skinLoadingPromise
 
   skinLoadingPromise = (async () => {
-    const [
-      cursor,
-      cursortrail,
-      hitcircle,
-      hitcircleoverlay,
-      approachcircle,
-      reversearrow,
-      sliderb,
-      hit300,
-      hit100,
-      hit50,
-      hit0,
-    ] = await Promise.all([
-      loadImgWithFallback('cursor.png'),
-      loadImgWithFallback('cursortrail.png'),
-      loadImgWithFallback('hitcircle.png'),
-      loadImgWithFallback('hitcircleoverlay.png'),
-      loadImgWithFallback('approachcircle.png'),
-      loadImgWithFallback('reversearrow.png'),
-      loadImgWithFallback('sliderb0.png'),
-      loadImgWithFallback('hit300.png'),
-      loadImgWithFallback('hit100.png'),
-      loadImgWithFallback('hit50.png'),
-      loadImgWithFallback('hit0.png'),
+    const names = [
+      'cursor',
+      'cursortrail',
+      'hitcircle',
+      'hitcircleoverlay',
+      'approachcircle',
+      'reversearrow',
+      'sliderb0',
+      'sliderfollowcircle',
+      'hit300',
+      'hit100',
+      'hit50',
+      'hit0',
+    ]
+    const imgs = await Promise.all([
+      ...names.map((n) => loadImgWithFallback(`${n}.png`)),
+      ...Array.from({ length: 10 }, (_, i) => loadImgWithFallback(`default-${i}.png`)),
     ])
-
-    skinImages.cursor = cursor
-    skinImages.cursortrail = cursortrail
-    skinImages.hitcircle = hitcircle
-    skinImages.hitcircleoverlay = hitcircleoverlay
-    skinImages.approachcircle = approachcircle
-    skinImages.reversearrow = reversearrow
-    skinImages.sliderb = sliderb
-    skinImages.hit300 = hit300
-    skinImages.hit100 = hit100
-    skinImages.hit50 = hit50
-    skinImages.hit0 = hit0
-
-    const digits: (HTMLImageElement | null)[] = []
-    for (let i = 0; i <= 9; i++) {
-      digits.push(await loadImgWithFallback(`default-${i}.png`))
-    }
-    skinImages.digits = digits
-
-    // Generate tinted circle canvases
-    if (hitcircle) {
-      for (const col of IDKE_COMBO_COLORS) {
-        const c = document.createElement('canvas')
-        c.width = hitcircle.width || 128
-        c.height = hitcircle.height || 128
-        const ctx = c.getContext('2d')
-        if (ctx) {
-          ctx.drawImage(hitcircle, 0, 0, c.width, c.height)
-          ctx.globalCompositeOperation = 'source-in'
-          ctx.fillStyle = col
-          ctx.fillRect(0, 0, c.width, c.height)
-          if (hitcircleoverlay) {
-            ctx.globalCompositeOperation = 'source-over'
-            ctx.drawImage(hitcircleoverlay, 0, 0, c.width, c.height)
-          }
-          tintedCircles.set(col, c)
-        }
-      }
-    }
-
-    // Generate tinted approach circle canvases
-    if (approachcircle) {
-      for (const col of IDKE_COMBO_COLORS) {
-        const c = document.createElement('canvas')
-        c.width = approachcircle.width || 128
-        c.height = approachcircle.height || 128
-        const ctx = c.getContext('2d')
-        if (ctx) {
-          ctx.drawImage(approachcircle, 0, 0, c.width, c.height)
-          ctx.globalCompositeOperation = 'source-in'
-          ctx.fillStyle = col
-          ctx.fillRect(0, 0, c.width, c.height)
-          tintedApproaches.set(col, c)
-        }
-      }
-    }
+    skinImages.cursor = imgs[0]
+    skinImages.cursortrail = imgs[1]
+    skinImages.hitcircle = imgs[2]
+    skinImages.hitcircleoverlay = imgs[3]
+    skinImages.approachcircle = imgs[4]
+    skinImages.reversearrow = imgs[5]
+    skinImages.sliderb = imgs[6]
+    skinImages.sliderfollowcircle = imgs[7]
+    skinImages.hit300 = imgs[8]
+    skinImages.hit100 = imgs[9]
+    skinImages.hit50 = imgs[10]
+    skinImages.hit0 = imgs[11]
+    skinImages.digits = imgs.slice(names.length)
   })()
 
   return skinLoadingPromise
@@ -689,21 +798,21 @@ async function loadHitSoundBuffers(ctx: AudioContext): Promise<HitSoundBuffers> 
   return loadingBuffersPromise
 }
 
-function playBuffer(ctx: AudioContext, buf: AudioBuffer, vol: number) {
+function playBuffer(ctx: AudioContext, buf: AudioBuffer, vol: number, when = 0) {
   try {
     const src = ctx.createBufferSource()
     src.buffer = buf
     const gain = ctx.createGain()
-    gain.gain.setValueAtTime(vol, ctx.currentTime)
+    gain.gain.value = vol
     src.connect(gain)
     gain.connect(ctx.destination)
-    src.start(0)
+    src.start(Math.max(when, ctx.currentTime))
   } catch {
     /* ignore */
   }
 }
 
-function ensureAudio(rt: PreviewRuntime): AudioContext | null {
+export function ensureAudio(rt: PreviewRuntime): AudioContext | null {
   try {
     if (!rt.audio) {
       const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -717,7 +826,7 @@ function ensureAudio(rt: PreviewRuntime): AudioContext | null {
   }
 }
 
-function playHitSound(rt: PreviewRuntime, hitSound: number) {
+function playHitSound(rt: PreviewRuntime, hitSound: number, when = 0) {
   if (rt.volume <= 0.001) return
   const ctx = ensureAudio(rt)
   if (!ctx) return
@@ -727,30 +836,58 @@ function playHitSound(rt: PreviewRuntime, hitSound: number) {
   const vol = Math.min(1, Math.max(0, rt.volume))
 
   if (cachedBuffers && cachedBuffers.normal) {
-    playBuffer(ctx, cachedBuffers.normal, 0.55 * vol)
+    playBuffer(ctx, cachedBuffers.normal, 0.55 * vol, when)
     if ((hitSound & 2) && cachedBuffers.whistle) {
-      playBuffer(ctx, cachedBuffers.whistle, 0.55 * vol)
+      playBuffer(ctx, cachedBuffers.whistle, 0.55 * vol, when)
     }
     if ((hitSound & 4) && cachedBuffers.finish) {
-      playBuffer(ctx, cachedBuffers.finish, 0.65 * vol)
+      playBuffer(ctx, cachedBuffers.finish, 0.65 * vol, when)
     }
     if ((hitSound & 8) && cachedBuffers.clap) {
-      playBuffer(ctx, cachedBuffers.clap, 0.6 * vol)
+      playBuffer(ctx, cachedBuffers.clap, 0.6 * vol, when)
     }
   }
 }
 
-export function preloadHitSounds(rt: PreviewRuntime) {
+export async function preloadHitSounds(rt: PreviewRuntime): Promise<void> {
   const ctx = ensureAudio(rt)
   if (ctx) {
-    void loadHitSoundBuffers(ctx)
+    await loadHitSoundBuffers(ctx)
   }
+}
+
+/**
+ * The b.ppy.sh preview mp3 starts this many ms before the map's PreviewTime
+ * (measured by onset alignment over 20 ranked maps: 107–123 ms, ~117 ms avg).
+ * Map time at clip position 0 is therefore `previewTime - PREVIEW_CLIP_LEAD_MS`.
+ */
+export const PREVIEW_CLIP_LEAD_MS = 117
+
+/** How far ahead hitsounds are queued on the audio clock (covers rAF hiccups). */
+const HIT_LOOKAHEAD_MS = 150
+
+/**
+ * Map time (ms) of what the listener hears right now. Accounts for the output
+ * latency so visuals line up with the sound rather than with the audio thread.
+ */
+export function musicMapTime(rt: PreviewRuntime): number | null {
+  const ctx = rt.audio
+  if (!ctx || !rt.music) return null
+  const latency = (ctx.outputLatency || 0) + (ctx.baseLatency || 0)
+  return rt.music.mapStartMs + (ctx.currentTime - latency - rt.music.ctxStart) * 1000
 }
 
 function fireHits(data: ParsedBeatmap, t: number, rt: PreviewRuntime) {
-  // Compensation offset for HTML5 Audio playback output buffer latency (~35ms)
-  const AUDIO_LATENCY_OFFSET = 35
-  const effectiveT = t + AUDIO_LATENCY_OFFSET
+  const ctx = rt.audio
+  const music = rt.music
+  // With a Web Audio music clock, queue hits slightly ahead at exact context times.
+  // Without one (legacy path), fire them as the frame time crosses them.
+  const effectiveT =
+    ctx && music
+      ? music.mapStartMs + (ctx.currentTime - music.ctxStart) * 1000 + HIT_LOOKAHEAD_MS
+      : t + 35 // HTML5 Audio output latency compensation
+  const whenFor = (mapMs: number) =>
+    ctx && music ? music.ctxStart + (mapMs - music.mapStartMs) / 1000 : 0
 
   if (rt.lastT < 0) rt.lastT = effectiveT
   const from = rt.lastT
@@ -763,7 +900,7 @@ function fireHits(data: ParsedBeatmap, t: number, rt: PreviewRuntime) {
       const key = `c${i}`
       if (o.t >= from && o.t <= to && !rt.fired.has(key)) {
         rt.fired.add(key)
-        playHitSound(rt, o.hitSound)
+        playHitSound(rt, o.hitSound, whenFor(o.t))
         rt.judgments.push({ x: o.x, y: o.y, t: o.t, type: '300' })
       }
     } else if (o.kind === 'slider') {
@@ -774,7 +911,7 @@ function fireHits(data: ParsedBeatmap, t: number, rt: PreviewRuntime) {
         const key = `sl_${i}_${s}`
         if (slideT >= from && slideT <= to && !rt.fired.has(key)) {
           rt.fired.add(key)
-          playHitSound(rt, o.hitSound)
+          playHitSound(rt, o.hitSound, whenFor(slideT))
           if (s === slides) {
             const endPos = sliderBallPos(o, o.endTime)
             rt.judgments.push({ x: endPos.x, y: endPos.y, t: o.endTime, type: '300' })
@@ -865,264 +1002,358 @@ function autoplayTarget(data: ParsedBeatmap, t: number): Pt {
   return anchors[anchors.length - 1].p
 }
 
+/** Cursor trail: sprites spawned by distance, short-lived (osu!stable without cursormiddle) */
+const TRAIL_SPACING_OSU = 9
+const TRAIL_LIFE_MS = 110
+const TRAIL_MAX = 10
+
 function updateCursor(data: ParsedBeatmap, t: number, rt: PreviewRuntime) {
-  const isInsideSpinner = data.objects.some(
-    (o) => o.kind === 'spinner' && t >= o.t && t <= o.endTime
-  )
-  const target = autoplayTarget(data, t)
-  const k = isInsideSpinner ? 0.9 : 0.55
-  rt.cursor = {
-    x: rt.cursor.x + (target.x - rt.cursor.x) * k,
-    y: rt.cursor.y + (target.y - rt.cursor.y) * k,
+  // Autoplay is exact: follow the target directly instead of lagging behind it
+  rt.cursor = autoplayTarget(data, t)
+  const last = rt.trail[rt.trail.length - 1]
+  if (last && t < last.t) rt.trail = []
+  if (!last || dist(last, rt.cursor) >= TRAIL_SPACING_OSU) {
+    rt.trail.push({ x: rt.cursor.x, y: rt.cursor.y, t })
   }
-  rt.trail.push({ x: rt.cursor.x, y: rt.cursor.y, t })
-  while (rt.trail.length > 24 || (rt.trail.length > 0 && t - rt.trail[0].t > 220)) {
+  while (rt.trail.length > TRAIL_MAX || (rt.trail.length > 0 && t - rt.trail[0].t > TRAIL_LIFE_MS)) {
     rt.trail.shift()
   }
 }
 
-// --- Layout & Normalization ---
-
-function normalizeOsuPos(p: Pt, insetOsu: number): Pt {
-  const inset = clamp(insetOsu, 0, Math.min(PLAY_W, PLAY_H) * 0.35)
-  const usableW = Math.max(1, PLAY_W - 2 * inset)
-  const usableH = Math.max(1, PLAY_H - 2 * inset)
-  const cx = clamp(p.x, 0, PLAY_W)
-  const cy = clamp(p.y, 0, PLAY_H)
-  return {
-    x: inset + (cx / PLAY_W) * usableW,
-    y: inset + (cy / PLAY_H) * usableH,
-  }
-}
+// --- Layout ---
 
 type FieldLayout = {
   ox: number
   oy: number
+  /** canvas px per osu!px */
   scale: number
   pfW: number
   pfH: number
   rPx: number
-  insetOsu: number
+  /** canvas px per skin-texture px for hit object sprites (128px hitcircle = 2 * radius) */
+  sprite: number
   scr: (p: Pt) => Pt
-  maxRadiusAt: (sx: number, sy: number) => number
 }
 
 function makeFieldLayout(canvasW: number, canvasH: number, cs: number): FieldLayout {
-  const rOsu = circleRadius(cs)
-  const insetOsu = rOsu + 3
-  const scale = Math.min(canvasW / PLAY_W, canvasH / PLAY_H)
+  // osu! puts the 512x384 playfield inside a 640x480 virtual screen, nudged 8px down
+  const scale = Math.min(canvasW / 640, canvasH / 480)
   const pfW = PLAY_W * scale
   const pfH = PLAY_H * scale
   const ox = (canvasW - pfW) / 2
-  const oy = (canvasH - pfH) / 2
-  const rPx = rOsu * scale
-  const pad = 1.5
-
-  const scr = (p: Pt): Pt => {
-    const n = normalizeOsuPos(p, insetOsu)
-    return { x: ox + n.x * scale, y: oy + n.y * scale }
+  const oy = (canvasH - pfH) / 2 + 8 * scale
+  const rOsu = circleRadius(cs)
+  return {
+    ox,
+    oy,
+    scale,
+    pfW,
+    pfH,
+    rPx: rOsu * scale,
+    sprite: (rOsu / 64) * scale,
+    scr: (p: Pt) => ({ x: ox + p.x * scale, y: oy + p.y * scale }),
   }
-
-  const maxRadiusAt = (sx: number, sy: number) => {
-    const left = sx - ox - pad
-    const right = ox + pfW - sx - pad
-    const top = sy - oy - pad
-    const bottom = oy + pfH - sy - pad
-    return Math.max(2, Math.min(left, right, top, bottom))
-  }
-
-  return { ox, oy, scale, pfW, pfH, rPx, insetOsu, scr, maxRadiusAt }
 }
 
-// --- Rendering Functions (Using vv_idke_trail Skin Assets) ---
+// --- Sprites ---
 
-function drawDigits(ctx: CanvasRenderingContext2D, cx: number, cy: number, num: number, r: number, alpha: number) {
+function drawSprite(
+  ctx: CanvasRenderingContext2D,
+  img: CanvasImageSource,
+  x: number,
+  y: number,
+  k: number,
+  alpha: number,
+  rotation = 0
+) {
+  const iw = (img as HTMLImageElement).naturalWidth || (img as HTMLCanvasElement).width
+  const ih = (img as HTMLImageElement).naturalHeight || (img as HTMLCanvasElement).height
+  const w = iw * k
+  const h = ih * k
+  if (w < 0.5 || alpha <= 0.003) return
+  ctx.globalAlpha = clamp(alpha, 0, 1)
+  if (rotation) {
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(rotation)
+    ctx.drawImage(img, -w / 2, -h / 2, w, h)
+    ctx.restore()
+  } else {
+    ctx.drawImage(img, x - w / 2, y - h / 2, w, h)
+  }
+}
+
+function drawDigits(ctx: CanvasRenderingContext2D, layout: FieldLayout, cx: number, cy: number, num: number, alpha: number) {
   const str = String(num)
   const digits = skinImages.digits
-  const hasSprites = digits.length >= 10 && digits.every((d) => d != null)
-
-  if (hasSprites && digits[0]) {
-    const scale = (r * 0.85) / (digits[0]!.height || 40)
-    let totalW = 0
-    for (const ch of str) {
-      const d = digits[parseInt(ch, 10)]
-      if (d) totalW += (d.width - 6) * scale
+  if (digits.length >= 10 && digits.every(usable)) {
+    // osu! draws hit circle numbers at 0.8x with HitCircleOverlap between glyphs
+    const k = layout.sprite * 0.8
+    const glyphs = [...str].map((ch) => digits[parseInt(ch, 10)] as HTMLImageElement)
+    const overlap = SKIN.hitCircleOverlap * k
+    const total = glyphs.reduce((s, g) => s + g.naturalWidth * k, 0) - overlap * (glyphs.length - 1)
+    let x = cx - total / 2
+    for (const g of glyphs) {
+      const w = g.naturalWidth * k
+      drawSprite(ctx, g, x + w / 2, cy, k, alpha)
+      x += w - overlap
     }
-    let curX = cx - totalW / 2
-    for (const ch of str) {
-      const d = digits[parseInt(ch, 10)]
-      if (d) {
-        const dw = d.width * scale
-        const dh = d.height * scale
-        ctx.drawImage(d, curX, cy - dh / 2, dw, dh)
-        curX += (d.width - 6) * scale
-      }
-    }
-  } else {
-    ctx.fillStyle = `rgba(255,255,255,${(0.95 * alpha).toFixed(3)})`
-    ctx.font = `bold ${Math.max(12, Math.round(r * 0.62))}px system-ui,sans-serif`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(str, cx, cy + 0.5)
+    return
   }
-}
-
-function drawHitCircle(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-  color: string,
-  alpha: number,
-  comboNumber: number,
-  scaleMul = 1
-) {
-  const rr = r * scaleMul
-  if (rr < 1 || alpha < 0.01) return
-
-  const tinted = tintedCircles.get(color)
-  ctx.save()
   ctx.globalAlpha = clamp(alpha, 0, 1)
-
-  if (tinted) {
-    ctx.drawImage(tinted, cx - rr, cy - rr, rr * 2, rr * 2)
-  } else {
-    // Vector fallback matching idke skin
-    ctx.beginPath()
-    ctx.arc(cx, cy, rr, 0, Math.PI * 2)
-    ctx.fillStyle = color
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(255,255,255,0.92)'
-    ctx.lineWidth = Math.max(2, rr * 0.08)
-    ctx.stroke()
-  }
-
-  if (comboNumber > 0 && rr > 7) {
-    drawDigits(ctx, cx, cy, comboNumber, rr, alpha)
-  }
-  ctx.restore()
+  ctx.fillStyle = '#fff'
+  ctx.font = `bold ${Math.max(10, Math.round(layout.rPx * 0.7))}px system-ui,sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(str, cx, cy + 0.5)
 }
 
-function drawApproach(
+/** hitcircle (tinted) + number + hitcircleoverlay, in skin.ini order */
+function drawCircleSprite(
   ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-  color: string,
-  alpha: number,
-  progress: number,
-  maxR: number
-) {
-  const p = clamp(progress, 0, 1)
-  const ideal = r * (1 + 2.5 * p)
-  const apR = Math.min(ideal, Math.max(r * 1.02, maxR))
-
-  const tinted = tintedApproaches.get(color)
-  ctx.save()
-  ctx.globalAlpha = clamp(alpha, 0, 1)
-
-  if (tinted) {
-    ctx.drawImage(tinted, cx - apR, cy - apR, apR * 2, apR * 2)
-  } else {
-    ctx.beginPath()
-    ctx.arc(cx, cy, apR, 0, Math.PI * 2)
-    ctx.strokeStyle = color
-    ctx.lineWidth = Math.max(1.8, r * 0.09)
-    ctx.stroke()
-  }
-  ctx.restore()
-}
-
-function strokePathMapped(ctx: CanvasRenderingContext2D, path: Pt[], layout: FieldLayout) {
-  if (path.length < 2) return
-  const p0 = layout.scr(path[0])
-  ctx.beginPath()
-  ctx.moveTo(p0.x, p0.y)
-  for (let i = 1; i < path.length; i++) {
-    const p = layout.scr(path[i])
-    ctx.lineTo(p.x, p.y)
-  }
-}
-
-function drawSliderBody(
-  ctx: CanvasRenderingContext2D,
-  o: Extract<PreviewObject, { kind: 'slider' }>,
   layout: FieldLayout,
-  r: number,
-  alpha: number
-) {
-  if (o.path.length < 2 || alpha < 0.02) return
-  const border = r * 2.0
-  const body = r * 1.74
-
-  ctx.save()
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-
-  // vv_idke_trail slider border: rgb(120, 120, 120)
-  strokePathMapped(ctx, o.path, layout)
-  ctx.strokeStyle = `rgba(120,120,120,${(0.9 * alpha).toFixed(3)})`
-  ctx.lineWidth = border
-  ctx.stroke()
-
-  // vv_idke_trail slider track override: rgb(3, 3, 12)
-  strokePathMapped(ctx, o.path, layout)
-  ctx.strokeStyle = `rgba(3,3,12,${(0.85 * alpha).toFixed(3)})`
-  ctx.lineWidth = body
-  ctx.stroke()
-
-  // Slider end circle
-  const end = layout.scr(o.path[o.path.length - 1])
-  const endR = Math.min(r * 0.92, layout.maxRadiusAt(end.x, end.y))
-  ctx.beginPath()
-  ctx.arc(end.x, end.y, endR, 0, Math.PI * 2)
-  ctx.fillStyle = `rgba(3,3,12,${(0.85 * alpha).toFixed(3)})`
-  ctx.fill()
-  ctx.strokeStyle = `rgba(120,120,120,${(0.85 * alpha).toFixed(3)})`
-  ctx.lineWidth = Math.max(1.5, r * 0.08)
-  ctx.stroke()
-
-  // Draw reverse arrow at end if slides > 1
-  if (o.slides > 1 && skinImages.reversearrow) {
-    const arrow = skinImages.reversearrow
-    const pPrev = layout.scr(o.path[Math.max(0, o.path.length - 3)])
-    const angle = Math.atan2(pPrev.y - end.y, pPrev.x - end.x)
-    ctx.save()
-    ctx.translate(end.x, end.y)
-    ctx.rotate(angle)
-    const arSize = endR * 1.6
-    ctx.drawImage(arrow, -arSize / 2, -arSize / 2, arSize, arSize)
-    ctx.restore()
-  }
-
-  ctx.restore()
-}
-
-function drawSliderBall(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
+  p: Pt,
   color: string,
-  alpha: number
+  alpha: number,
+  scale: number,
+  comboNumber: number
 ) {
-  ctx.save()
-  ctx.globalAlpha = clamp(alpha, 0, 1)
-  if (skinImages.sliderb) {
-    const img = skinImages.sliderb
-    const size = r * 1.8
-    ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size)
+  if (alpha <= 0.003) return
+  const k = layout.sprite * scale
+  const base = tinted(skinImages.hitcircle, color, 'hitcircle')
+  const overlay = skinImages.hitcircleoverlay
+  if (base) {
+    drawSprite(ctx, base, p.x, p.y, k, alpha)
   } else {
+    ctx.globalAlpha = clamp(alpha, 0, 1)
     ctx.beginPath()
-    ctx.arc(cx, cy, r * 0.72, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(255,255,255,0.95)'
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(cx, cy, r * 0.54, 0, Math.PI * 2)
+    ctx.arc(p.x, p.y, layout.rPx * scale * 0.94, 0, Math.PI * 2)
     ctx.fillStyle = color
     ctx.fill()
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = Math.max(1.5, layout.rPx * 0.1)
+    ctx.stroke()
   }
-  ctx.restore()
+  if (overlay && !SKIN.overlayAboveNumber) drawSprite(ctx, overlay, p.x, p.y, k, alpha)
+  if (comboNumber > 0) drawDigits(ctx, layout, p.x, p.y, comboNumber, alpha)
+  if (overlay && SKIN.overlayAboveNumber) drawSprite(ctx, overlay, p.x, p.y, k, alpha)
+}
+
+function drawApproachSprite(
+  ctx: CanvasRenderingContext2D,
+  layout: FieldLayout,
+  p: Pt,
+  color: string,
+  alpha: number,
+  scale: number
+) {
+  const img = tinted(skinImages.approachcircle, color, 'approach')
+  if (img) {
+    drawSprite(ctx, img, p.x, p.y, layout.sprite * scale, alpha)
+    return
+  }
+  ctx.globalAlpha = clamp(alpha, 0, 1)
+  ctx.beginPath()
+  ctx.arc(p.x, p.y, layout.rPx * scale, 0, Math.PI * 2)
+  ctx.strokeStyle = color
+  ctx.lineWidth = Math.max(1.5, layout.rPx * 0.09)
+  ctx.stroke()
+}
+
+// --- osu! object timing (stable / lazer legacy values) ---
+
+const HIT_FADE_MS = 240
+const FOLLOW_IN_MS = 180
+const FOLLOW_OUT_MS = 200
+
+function fadeInMs(preempt: number) {
+  return 400 * Math.min(1, preempt / 450)
+}
+
+function easeOut(u: number) {
+  const x = clamp(u, 0, 1)
+  return 1 - (1 - x) * (1 - x)
+}
+
+type CircleState = { alpha: number; approachAlpha: number; approachScale: number }
+
+/** State of a hit circle (or slider head) before it is hit; null when not visible yet / already hit */
+function approachState(t: number, hitT: number, preempt: number): CircleState | null {
+  const appear = hitT - preempt
+  if (t < appear || t >= hitT) return null
+  const fi = fadeInMs(preempt)
+  return {
+    alpha: clamp((t - appear) / fi, 0, 1),
+    approachAlpha: 0.9 * clamp((t - appear) / Math.min(fi * 2, preempt), 0, 1),
+    approachScale: 1 + 3 * clamp((hitT - t) / preempt, 0, 1),
+  }
+}
+
+type Explosion = { p: Pt; color: string; age: number }
+
+function explosionAt(t: number, hitT: number, p: Pt, color: string, out: Explosion[]) {
+  const age = t - hitT
+  if (age >= 0 && age < HIT_FADE_MS) out.push({ p, color, age })
+}
+
+// --- Sliders ---
+
+type Slider = Extract<PreviewObject, { kind: 'slider' }>
+
+function partialPath(o: Slider, fraction: number): Pt[] {
+  if (fraction >= 1) return o.path
+  const target = o.pathLen * Math.max(0, fraction)
+  const out: Pt[] = [o.path[0]]
+  for (let i = 1; i < o.path.length; i++) {
+    if (o.cumLens[i] >= target) {
+      const seg = o.cumLens[i] - o.cumLens[i - 1] || 1
+      out.push(lerp(o.path[i - 1], o.path[i], (target - o.cumLens[i - 1]) / seg))
+      break
+    }
+    out.push(o.path[i])
+  }
+  return out
+}
+
+let bodyLayer: HTMLCanvasElement | null = null
+
+/** Border + translucent track, composed off-screen so overlaps don't double-blend */
+function drawSliderBody(ctx: CanvasRenderingContext2D, layout: FieldLayout, path: Pt[], alpha: number) {
+  if (path.length < 2 || alpha <= 0.003) return
+  const W = ctx.canvas.width
+  const H = ctx.canvas.height
+  if (!bodyLayer) bodyLayer = document.createElement('canvas')
+  if (bodyLayer.width !== W || bodyLayer.height !== H) {
+    bodyLayer.width = W
+    bodyLayer.height = H
+  }
+  const b = bodyLayer.getContext('2d')
+  if (!b) return
+  b.clearRect(0, 0, W, H)
+  b.lineCap = 'round'
+  b.lineJoin = 'round'
+  const trace = () => {
+    b.beginPath()
+    const p0 = layout.scr(path[0])
+    b.moveTo(p0.x, p0.y)
+    for (let i = 1; i < path.length; i++) {
+      const p = layout.scr(path[i])
+      b.lineTo(p.x, p.y)
+    }
+  }
+  const outer = layout.rPx * 2 * 0.96
+  const inner = outer * (1 - 0.128 * 2)
+  trace()
+  b.globalCompositeOperation = 'source-over'
+  b.strokeStyle = SKIN.sliderBorder
+  b.lineWidth = outer
+  b.stroke()
+  b.globalCompositeOperation = 'destination-out'
+  b.lineWidth = inner
+  b.stroke()
+  b.globalCompositeOperation = 'source-over'
+  b.globalAlpha = 0.7
+  b.strokeStyle = SKIN.sliderTrack
+  b.stroke()
+  b.globalAlpha = 1
+
+  ctx.globalAlpha = clamp(alpha, 0, 1)
+  ctx.drawImage(bodyLayer, 0, 0)
+}
+
+function pathAngleAt(o: Slider, atEnd: boolean): number {
+  const n = o.path.length
+  const a = atEnd ? o.path[n - 1] : o.path[0]
+  // look a few px back into the path for a stable direction
+  const d = Math.min(o.pathLen, 6)
+  const b = pointAlongPath(o.path, o.cumLens, o.pathLen, atEnd ? o.pathLen - d : d)
+  return Math.atan2(b.y - a.y, b.x - a.x)
+}
+
+function drawSlider(
+  ctx: CanvasRenderingContext2D,
+  layout: FieldLayout,
+  o: Slider,
+  t: number,
+  preempt: number,
+  explosions: Explosion[]
+) {
+  const appear = o.t - preempt
+  const fi = fadeInMs(preempt)
+  const span = Math.max(1, (o.endTime - o.t) / o.slides)
+
+  let bodyAlpha: number
+  if (t < o.t) bodyAlpha = clamp((t - appear) / fi, 0, 1)
+  else if (t <= o.endTime) bodyAlpha = 1
+  else bodyAlpha = 1 - clamp((t - o.endTime) / HIT_FADE_MS, 0, 1)
+
+  // Snaking: the body grows over the first third of the approach (osu! default)
+  const snake = clamp((t - appear) / (preempt / 3), 0, 1)
+  const path = partialPath(o, snake)
+  drawSliderBody(ctx, layout, path, bodyAlpha)
+
+  // Tail circle (no number) once the body has snaked to it
+  if (t < o.endTime && snake >= 1) {
+    drawCircleSprite(ctx, layout, layout.scr(o.path[o.path.length - 1]), o.color, bodyAlpha, 1, 0)
+  }
+
+  // Reverse arrows: the next two upcoming repeats
+  const arrow = skinImages.reversearrow
+  if (usable(arrow) && snake >= 1) {
+    for (let i = 1; i < o.slides; i++) {
+      const repeatT = o.t + i * span
+      if (t >= repeatT || t < o.t + (i - 2) * span) continue
+      const atEnd = i % 2 === 1
+      const pos = layout.scr(atEnd ? o.path[o.path.length - 1] : o.path[0])
+      const pulse = 1 + 0.12 * (1 - (((t - appear) % 300) + 300) % 300 / 300)
+      drawSprite(ctx, arrow, pos.x, pos.y, layout.sprite * pulse, bodyAlpha, pathAngleAt(o, atEnd))
+    }
+  }
+
+  // Head behaves like a hit circle until it is hit
+  const head = layout.scr({ x: o.x, y: o.y })
+  const hs = approachState(t, o.t, preempt)
+  if (hs) drawCircleSprite(ctx, layout, head, o.color, hs.alpha, 1, o.comboNumber)
+  explosionAt(t, o.t, head, o.color, explosions)
+  explosionAt(t, o.endTime, layout.scr(objectEndPos(o)), o.color, explosions)
+}
+
+/** Ball + follow circle, drawn above every object like in osu! */
+function drawSliderBall(ctx: CanvasRenderingContext2D, layout: FieldLayout, o: Slider, t: number) {
+  if (t < o.t || t > o.endTime + FOLLOW_OUT_MS) return
+  const tt = Math.min(t, o.endTime)
+  const p = layout.scr(sliderBallPos(o, tt))
+
+  const follow = skinImages.sliderfollowcircle
+  if (usable(follow)) {
+    let fs: number
+    let fa: number
+    if (t <= o.endTime) {
+      const age = t - o.t
+      fs = 0.5 + 0.5 * easeOut(age / FOLLOW_IN_MS)
+      fa = clamp(age / 60, 0, 1)
+    } else {
+      const u = (t - o.endTime) / FOLLOW_OUT_MS
+      fs = 1 - 0.2 * easeOut(u)
+      fa = 1 - u
+    }
+    drawSprite(ctx, follow, p.x, p.y, layout.sprite * fs, fa)
+  }
+
+  if (t > o.endTime) return
+  const ahead = sliderBallPos(o, Math.min(o.endTime, tt + 4))
+  const here = sliderBallPos(o, tt)
+  const angle = Math.atan2(ahead.y - here.y, ahead.x - here.x)
+  const ball = SKIN.allowSliderBallTint ? tinted(skinImages.sliderb, o.color, 'sliderb') : skinImages.sliderb
+  if (ball && usable(skinImages.sliderb)) {
+    drawSprite(ctx, ball, p.x, p.y, layout.sprite, 1, angle)
+  } else {
+    ctx.globalAlpha = 1
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, layout.rPx * 0.8, 0, Math.PI * 2)
+    ctx.fillStyle = o.color
+    ctx.fill()
+  }
 }
 
 function drawSpinner(
@@ -1133,110 +1364,65 @@ function drawSpinner(
   alpha: number
 ) {
   const c = layout.scr({ x: PLAY_W / 2, y: PLAY_H / 2 })
-  const R = Math.min(layout.pfW, layout.pfH) * 0.32
+  const R = Math.min(layout.pfW, layout.pfH) * 0.4
   const progress = clamp((t - o.t) / Math.max(1, o.endTime - o.t), 0, 1)
-  const elapsed = Math.max(0, t - o.t)
-  const spinAngle = (elapsed * 0.035) % (Math.PI * 2)
+  const spinAngle = (Math.max(0, t - o.t) * 0.035) % (Math.PI * 2)
 
   ctx.save()
-
-  // 1. Dark backdrop disk
+  ctx.globalAlpha = clamp(alpha, 0, 1)
   ctx.beginPath()
   ctx.arc(c.x, c.y, R, 0, Math.PI * 2)
-  ctx.fillStyle = `rgba(10,12,20,${(0.6 * alpha).toFixed(3)})`
+  ctx.fillStyle = 'rgba(10,12,20,0.6)'
   ctx.fill()
-
-  // 2. Outer track circle
-  ctx.beginPath()
-  ctx.arc(c.x, c.y, R, 0, Math.PI * 2)
-  ctx.strokeStyle = `rgba(255,255,255,${(0.3 * alpha).toFixed(3)})`
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)'
   ctx.lineWidth = 4 * layout.scale
   ctx.stroke()
 
-  // 3. Spinning inner rays
-  const numRays = 8
-  ctx.strokeStyle = `rgba(255,255,255,${(0.22 * alpha).toFixed(3)})`
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)'
   ctx.lineWidth = 2 * layout.scale
-  for (let i = 0; i < numRays; i++) {
-    const a = spinAngle + (i * Math.PI * 2) / numRays
+  for (let i = 0; i < 8; i++) {
+    const a = spinAngle + (i * Math.PI * 2) / 8
     ctx.beginPath()
-    ctx.moveTo(c.x + Math.cos(a) * (R * 0.22), c.y + Math.sin(a) * (R * 0.22))
-    ctx.lineTo(c.x + Math.cos(a) * (R * 0.88), c.y + Math.sin(a) * (R * 0.88))
+    ctx.moveTo(c.x + Math.cos(a) * R * 0.22, c.y + Math.sin(a) * R * 0.22)
+    ctx.lineTo(c.x + Math.cos(a) * R * 0.88, c.y + Math.sin(a) * R * 0.88)
     ctx.stroke()
   }
 
-  // 4. Center spinning core
+  // Approach ring shrinking to the centre, like osu!'s spinner approach circle
   ctx.beginPath()
-  ctx.arc(c.x, c.y, R * 0.2, 0, Math.PI * 2)
-  ctx.fillStyle = `rgba(26,116,242,${(0.8 * alpha).toFixed(3)})`
-  ctx.fill()
-  ctx.strokeStyle = `rgba(255,255,255,${(0.9 * alpha).toFixed(3)})`
+  ctx.arc(c.x, c.y, Math.max(2, R * (1 - progress)), 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'
   ctx.lineWidth = 3 * layout.scale
   ctx.stroke()
-
-  // 5. Progress ring
-  ctx.beginPath()
-  ctx.arc(c.x, c.y, R, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2)
-  ctx.strokeStyle = `rgba(26,116,242,${(0.95 * alpha).toFixed(3)})`
-  ctx.lineWidth = 6 * layout.scale
-  ctx.lineCap = 'round'
-  ctx.stroke()
-
-  // 6. Label
-  ctx.fillStyle = `rgba(255,255,255,${(0.95 * alpha).toFixed(3)})`
-  ctx.font = `bold ${Math.max(10, Math.round(12 * layout.scale))}px sans-serif`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(progress >= 1 ? 'CLEAR' : 'SPIN', c.x, c.y)
-
   ctx.restore()
 }
 
 function drawCursor(ctx: CanvasRenderingContext2D, layout: FieldLayout, rt: PreviewRuntime, nowT: number) {
-  const cursorImg = skinImages.cursor
+  // Cursor sprites are sized in 640x480 screen space, not by CS
+  const k = layout.scale
   const trailImg = skinImages.cursortrail
-
-  // Draw smooth cursor trail
-  for (let i = 0; i < rt.trail.length; i++) {
-    const pt = rt.trail[i]
-    const p = layout.scr(pt)
-    const age = nowT - pt.t
-    if (age > 200) continue
-    const a = (1 - age / 200) * 0.55
-
-    ctx.save()
-    ctx.globalAlpha = a
-    if (trailImg) {
-      const size = layout.rPx * 0.65
-      ctx.drawImage(trailImg, p.x - size / 2, p.y - size / 2, size, size)
-    } else {
-      ctx.beginPath()
-      ctx.arc(p.x, p.y, layout.rPx * 0.2, 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(255,255,255,0.7)'
-      ctx.fill()
+  if (usable(trailImg)) {
+    for (const pt of rt.trail) {
+      const age = nowT - pt.t
+      if (age < 0 || age > TRAIL_LIFE_MS) continue
+      const p = layout.scr(pt)
+      drawSprite(ctx, trailImg, p.x, p.y, k, 0.75 * (1 - age / TRAIL_LIFE_MS))
     }
-    ctx.restore()
   }
-
-  // Draw main cursor
   const c = layout.scr(rt.cursor)
-  ctx.save()
-  if (cursorImg) {
-    const size = layout.rPx * 0.95
-    ctx.drawImage(cursorImg, c.x - size / 2, c.y - size / 2, size, size)
+  if (usable(skinImages.cursor)) {
+    drawSprite(ctx, skinImages.cursor, c.x, c.y, k, 1)
   } else {
+    ctx.globalAlpha = 1
     ctx.beginPath()
-    ctx.arc(c.x, c.y, layout.rPx * 0.35, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(255,255,255,0.95)'
+    ctx.arc(c.x, c.y, 10 * k, 0, Math.PI * 2)
+    ctx.fillStyle = '#fff'
     ctx.fill()
   }
-  ctx.restore()
 }
 
 function drawJudgments(ctx: CanvasRenderingContext2D, layout: FieldLayout, rt: PreviewRuntime, nowT: number) {
-  const hit300 = skinImages.hit300
-  if (!hit300) return
-
+  const img = skinImages.hit300
   for (let i = rt.judgments.length - 1; i >= 0; i--) {
     const j = rt.judgments[i]
     const age = nowT - j.t
@@ -1244,95 +1430,16 @@ function drawJudgments(ctx: CanvasRenderingContext2D, layout: FieldLayout, rt: P
       rt.judgments.splice(i, 1)
       continue
     }
-    const alpha = (1 - age / 350) * 0.85
-    const scale = 1 + (age / 350) * 0.15
+    // This skin hides 300s with a 1x1 sprite
+    if (age < 0 || !usable(img)) continue
     const p = layout.scr({ x: j.x, y: j.y })
-    const size = layout.rPx * 1.1 * scale
-
-    ctx.save()
-    ctx.globalAlpha = alpha
-    ctx.drawImage(hit300, p.x - size / 2, p.y - size / 2 - (age / 350) * 8, size, size)
-    ctx.restore()
-  }
-}
-
-// --- Natural Appearance & Fade Timing ---
-
-function circleAnim(t: number, hitT: number, preempt: number) {
-  const dt = hitT - t
-  if (dt > preempt) return null
-
-  // Natural osu! fade-in: fades smoothly over first 400ms of preempt
-  const fadeInTime = Math.min(preempt, 400)
-  if (dt > 0) {
-    const lived = preempt - dt
-    const fadeIn = clamp(lived / fadeInTime, 0, 1)
-    const alpha = fadeIn * fadeIn * (3 - 2 * fadeIn) // smoothstep
-    return { alpha, scale: 1, approach: dt / preempt, showBody: true, showApproach: true }
-  }
-
-  // Hit burst: quick expansion and fade
-  const age = t - hitT
-  const burstFade = 140
-  if (age > burstFade) return null
-  const p = age / burstFade
-  const alpha = (1 - p) * (1 - p)
-  const scale = 1 + 0.3 * p
-  return { alpha, scale, approach: 0, showBody: true, showApproach: false }
-}
-
-function sliderAnim(t: number, o: Extract<PreviewObject, { kind: 'slider' }>, preempt: number) {
-  const appear = o.t - preempt
-  const gone = o.endTime + 160
-  if (t < appear || t > gone) return null
-
-  const fadeInTime = Math.min(preempt, 400)
-
-  if (t < o.t) {
-    const lived = t - appear
-    const fadeIn = clamp(lived / fadeInTime, 0, 1)
-    const alpha = fadeIn * fadeIn * (3 - 2 * fadeIn)
-    return {
-      alpha,
-      headScale: 1,
-      approach: (o.t - t) / preempt,
-      showApproach: true,
-      showHead: true,
-      showBall: false,
-      bodyAlpha: alpha,
-    }
-  }
-
-  if (t <= o.endTime) {
-    return {
-      alpha: 1,
-      headScale: 1,
-      approach: 0,
-      showApproach: false,
-      showHead: true,
-      showBall: true,
-      bodyAlpha: 1,
-    }
-  }
-
-  const age = t - o.endTime
-  const p = age / 160
-  const alpha = (1 - p) * (1 - p)
-  return {
-    alpha,
-    headScale: 1 + 0.2 * p,
-    approach: 0,
-    showApproach: false,
-    showHead: true,
-    showBall: false,
-    bodyAlpha: alpha,
+    drawSprite(ctx, img, p.x, p.y - (age / 350) * 8 * layout.scale, layout.scale * (1 + (age / 350) * 0.15), 1 - age / 350)
   }
 }
 
 /**
- * Draw one frame.
- * Renders objects in true osu! stacking order:
- * Earlier combo notes sit ON TOP of later combo notes (reverse hit time order).
+ * Draw one frame like osu!stable: objects back-to-front (later objects below earlier ones),
+ * then approach circles, hit explosions, slider balls and the cursor on top.
  */
 export function drawPreviewFrame(
   ctx: CanvasRenderingContext2D,
@@ -1348,32 +1455,20 @@ export function drawPreviewFrame(
   const layout = makeFieldLayout(canvasW, canvasH, data.cs)
   const { ox, oy, scale, pfW, pfH } = layout
   const preempt = approachMs(data.ar)
-  const r = layout.rPx
-  const runtime = rt
 
-  if (runtime) {
-    fireHits(data, t, runtime)
-    updateCursor(data, t, runtime)
+  if (rt) {
+    fireHits(data, t, rt)
+    updateCursor(data, t, rt)
   }
 
-  ctx.clearRect(0, 0, canvasW, canvasH)
+  ctx.save()
+  ctx.globalAlpha = 1
+  ctx.globalCompositeOperation = 'source-over'
   ctx.fillStyle = '#0a0a0f'
   ctx.fillRect(0, 0, canvasW, canvasH)
 
-  // Playfield background
-  const pfGrad = ctx.createLinearGradient(ox, oy, ox, oy + pfH)
-  pfGrad.addColorStop(0, '#13131a')
-  pfGrad.addColorStop(1, '#0e0e14')
-  ctx.fillStyle = pfGrad
-  ctx.fillRect(ox, oy, pfW, pfH)
-
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(ox, oy, pfW, pfH)
-  ctx.clip()
-
   // Faint playfield grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.03)'
+  ctx.strokeStyle = 'rgba(255,255,255,0.035)'
   ctx.lineWidth = 1
   for (let gx = 0; gx <= PLAY_W; gx += 64) {
     ctx.beginPath()
@@ -1388,118 +1483,60 @@ export function drawPreviewFrame(
     ctx.stroke()
   }
 
-  type DrawItem = {
-    o: PreviewObject
-    i: number
-    anim: ReturnType<typeof circleAnim> | ReturnType<typeof sliderAnim> | { alpha: number }
+  const visible: PreviewObject[] = []
+  for (const o of data.objects) {
+    const endT = o.kind === 'circle' ? o.t + HIT_FADE_MS : o.endTime + Math.max(HIT_FADE_MS, FOLLOW_OUT_MS)
+    if (t >= o.t - preempt && t <= endT) visible.push(o)
   }
 
-  const drawItems: DrawItem[] = []
-  data.objects.forEach((o, i) => {
+  const explosions: Explosion[] = []
+  // Back to front: latest object first so earlier ones end up on top
+  for (let i = visible.length - 1; i >= 0; i--) {
+    const o = visible[i]
     if (o.kind === 'circle') {
-      const anim = circleAnim(t, o.t, preempt)
-      if (!anim) return
-      drawItems.push({ o, i, anim })
+      const p = layout.scr({ x: o.x, y: o.y })
+      const st = approachState(t, o.t, preempt)
+      if (st) drawCircleSprite(ctx, layout, p, o.color, st.alpha, 1, o.comboNumber)
+      explosionAt(t, o.t, p, o.color, explosions)
     } else if (o.kind === 'slider') {
-      const anim = sliderAnim(t, o, preempt)
-      if (!anim) return
-      drawItems.push({ o, i, anim })
-    } else if (o.kind === 'spinner') {
-      if (t < o.t - 100 || t > o.endTime + 100) return
-      const alpha =
-        t < o.t
-          ? clamp(1 - (o.t - t) / 100, 0, 1)
-          : t > o.endTime
-            ? clamp(1 - (t - o.endTime) / 100, 0, 1)
-            : 1
-      drawItems.push({ o, i, anim: { alpha } })
-    }
-  })
-
-  // Pass 1: Slider tracks (always drawn at the base layer)
-  for (const item of drawItems) {
-    if (item.o.kind === 'slider') {
-      const sa = item.anim as NonNullable<ReturnType<typeof sliderAnim>>
-      drawSliderBody(ctx, item.o, layout, r, sa.bodyAlpha)
+      drawSlider(ctx, layout, o, t, preempt, explosions)
+    } else {
+      const a = t < o.t ? clamp(1 - (o.t - t) / 300, 0, 1) : t > o.endTime ? clamp(1 - (t - o.endTime) / 240, 0, 1) : 1
+      drawSpinner(ctx, layout, t, o, a)
     }
   }
 
-  // Pass 2: Circles & slider heads in TRUE OSU ORDER:
-  // Sort descending by hit time (b.o.t - a.o.t) so EARLIER notes (note 1) are rendered ON TOP of later notes (note 2)
-  const solidNotes = drawItems.slice().sort((a, b) => b.o.t - a.o.t || b.i - a.i)
-  for (const item of solidNotes) {
-    const { o, anim } = item
-    if (o.kind === 'circle') {
-      const ca = anim as NonNullable<ReturnType<typeof circleAnim>>
-      if (!ca.showBody) continue
-      const c = layout.scr({ x: o.x, y: o.y })
-      const maxR = layout.maxRadiusAt(c.x, c.y)
-      const drawR = Math.min(r, maxR / Math.max(ca.scale, 1))
-      drawHitCircle(ctx, c.x, c.y, drawR, o.color, ca.alpha, o.comboNumber, ca.scale)
-    } else if (o.kind === 'slider') {
-      const sa = anim as NonNullable<ReturnType<typeof sliderAnim>>
-      const c = layout.scr({ x: o.x, y: o.y })
-      const maxR = layout.maxRadiusAt(c.x, c.y)
-      const drawR = Math.min(r, maxR / Math.max(sa.headScale, 1))
-      if (sa.showHead) {
-        drawHitCircle(ctx, c.x, c.y, drawR, o.color, sa.alpha, o.comboNumber, sa.headScale)
-      }
-      if (sa.showBall) {
-        const bp = layout.scr(sliderBallPos(o, t))
-        const br = Math.min(r, layout.maxRadiusAt(bp.x, bp.y))
-        drawSliderBall(ctx, bp.x, bp.y, br, o.color, sa.alpha)
-      }
-    } else if (o.kind === 'spinner') {
-      drawSpinner(ctx, layout, t, o, (anim as { alpha: number }).alpha)
-    }
+  // Approach circles sit above all hit objects
+  for (let i = visible.length - 1; i >= 0; i--) {
+    const o = visible[i]
+    if (o.kind === 'spinner') continue
+    const st = approachState(t, o.t, preempt)
+    if (st) drawApproachSprite(ctx, layout, layout.scr({ x: o.x, y: o.y }), o.color, st.approachAlpha, st.approachScale)
   }
 
-  // Pass 3: Approach rings (drawn above hit circles)
-  for (const item of drawItems) {
-    const { o, anim } = item
-    if (o.kind === 'slider') {
-      const sa = anim as NonNullable<ReturnType<typeof sliderAnim>>
-      if (sa.showApproach && sa.approach > 0) {
-        const c = layout.scr({ x: o.x, y: o.y })
-        const maxR = layout.maxRadiusAt(c.x, c.y)
-        const drawR = Math.min(r, maxR / Math.max(sa.headScale, 1))
-        drawApproach(ctx, c.x, c.y, drawR, o.color, sa.alpha, sa.approach, maxR)
-      }
-    } else if (o.kind === 'circle') {
-      const ca = anim as NonNullable<ReturnType<typeof circleAnim>>
-      if (ca.showApproach && ca.approach > 0) {
-        const c = layout.scr({ x: o.x, y: o.y })
-        const maxR = layout.maxRadiusAt(c.x, c.y)
-        const drawR = Math.min(r, maxR / Math.max(ca.scale, 1))
-        drawApproach(ctx, c.x, c.y, drawR, o.color, ca.alpha, ca.approach, maxR)
-      }
-    }
+  // Hit explosions: hitcircle grows to 1.4x while fading out, number hidden
+  for (const e of explosions) {
+    const u = e.age / HIT_FADE_MS
+    drawCircleSprite(ctx, layout, e.p, e.color, 1 - u, 1 + 0.4 * easeOut(u), 0)
   }
 
-  // Pass 4: Hit judgments (300 bursts)
-  if (runtime) {
-    drawJudgments(ctx, layout, runtime, t)
-    drawCursor(ctx, layout, runtime, t)
+  for (let i = visible.length - 1; i >= 0; i--) {
+    const o = visible[i]
+    if (o.kind === 'slider') drawSliderBall(ctx, layout, o, t)
   }
 
-  ctx.restore()
+  if (rt) {
+    drawJudgments(ctx, layout, rt, t)
+    drawCursor(ctx, layout, rt, t)
+  }
 
-  // Letterbox borders
-  ctx.fillStyle = '#0a0a0f'
-  if (oy > 0.5) ctx.fillRect(0, 0, canvasW, oy)
-  if (oy + pfH < canvasH - 0.5) ctx.fillRect(0, oy + pfH, canvasW, canvasH - oy - pfH)
-  if (ox > 0.5) ctx.fillRect(0, oy, ox, pfH)
-  if (ox + pfW < canvasW - 0.5) ctx.fillRect(ox + pfW, oy, canvasW - ox - pfW, pfH)
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)'
-  ctx.lineWidth = 1.5
-  ctx.strokeRect(ox + 0.5, oy + 0.5, pfW - 1, pfH - 1)
-
+  ctx.globalAlpha = 1
   ctx.fillStyle = 'rgba(255,255,255,0.45)'
-  ctx.font = '12px system-ui,sans-serif'
+  ctx.font = `${Math.round(12 * Math.max(1, scale))}px system-ui,sans-serif`
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillText(`${(t / 1000).toFixed(1)}s`, 10, 18)
+  ctx.fillText(`${(t / 1000).toFixed(1)}s`, 10 * Math.max(1, scale), 18 * Math.max(1, scale))
+  ctx.restore()
 
   return elapsed <= 34000
 }

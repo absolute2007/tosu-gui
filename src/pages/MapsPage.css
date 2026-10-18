@@ -429,13 +429,19 @@
 /* Mini-player (osu website style) */
 .maps-miniplayer {
   flex-shrink: 0;
-  border-top: 1px solid var(--hairline);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  overflow: hidden;
   background: var(--bg-grouped);
-  margin: 0 -4px -4px;
+  /* right margin = global scrollbar width, so the card lines up with the list */
+  margin: 8px 9px 0 0;
 }
 
 .maps-miniplayer-bar {
   height: 3px;
+  margin: 6px 12px 0;
+  border-radius: 999px;
+  overflow: hidden;
   background: rgba(255, 255, 255, 0.06);
   cursor: pointer;
 }
@@ -443,6 +449,7 @@
 .maps-miniplayer-progress {
   height: 100%;
   width: 0;
+  border-radius: 999px;
   background: var(--accent);
   transition: width 0.1s linear;
 }
@@ -510,15 +517,65 @@
   color: var(--text-tertiary);
 }
 
-.maps-miniplayer-vol input[type='range'] {
-  width: 72px;
-  accent-color: var(--accent);
+.maps-vol-slider {
+  --fill: 50%;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 88px;
+  height: 16px;
+  margin: 0;
+  background: transparent;
   cursor: pointer;
+}
+
+.maps-vol-slider:focus {
+  outline: none;
+}
+
+.maps-vol-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0,
+    var(--accent) var(--fill),
+    rgba(255, 255, 255, 0.12) var(--fill),
+    rgba(255, 255, 255, 0.12) 100%
+  );
+}
+
+.maps-vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transform: scale(0.85);
+  transition: transform 0.12s ease;
+}
+
+.maps-vol-slider:hover::-webkit-slider-thumb,
+.maps-vol-slider:focus-visible::-webkit-slider-thumb {
+  transform: scale(1);
+}
+
+.maps-vol-slider:active::-webkit-slider-thumb {
+  transform: scale(1.1);
+}
+
+.maps-vol-slider:focus-visible::-webkit-slider-runnable-track {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
 }
 
 .maps-miniplayer-vol span {
   font-size: 11px;
   min-width: 30px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .maps-mute-toggle {
