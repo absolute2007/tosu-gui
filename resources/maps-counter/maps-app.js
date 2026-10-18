@@ -267,6 +267,8 @@
     parsed: null,
     startPerf: 0,
     audio: null,
+    /** Web Audio track: { src, gain, endCtx, clock } — shares its clock with hitsounds */
+    music: null,
     runtime: null,
   }
 
@@ -289,6 +291,7 @@
     }
     if (previewAudio) previewAudio.volume = previewVolume
     if (gp.audio) gp.audio.volume = previewVolume
+    if (gp.music) gp.music.gain.gain.value = previewVolume
     if (gp.runtime) gp.runtime.volume = previewVolume
     syncPlayerUi()
   }
@@ -1093,6 +1096,17 @@
 
   function stopGpAudio() {
     gpAudioSession++
+    if (gp.music) {
+      try {
+        gp.music.src.stop()
+        gp.music.src.disconnect()
+        gp.music.gain.disconnect()
+      } catch (e) {
+        /* ignore */
+      }
+      gp.music = null
+    }
+    if (gp.runtime) gp.runtime.music = null
     if (gp.audio) {
       try {
         gp.audio.pause()
@@ -1119,6 +1133,79 @@
     }
 
     var urls = audioUrlsForSet(id)
+    startGpWebAudio(urls, session, function (ok) {
+      if (session !== gpAudioSession || !gp.open) return
+      if (ok) {
+        notifyPreviewState(true, 'gameplay')
+        if (typeof onReady === 'function') onReady()
+      } else {
+        startGpHtmlAudio(urls, session, onReady)
+      }
+    })
+  }
+
+  /**
+   * Decode the preview clip and play it through the engine's AudioContext, so
+   * hitsounds are scheduled on the same clock as the music and cannot drift.
+   */
+  function startGpWebAudio(urls, session, done) {
+    var eng = engine()
+    var rt = ensureGpRuntime()
+    var ctx = eng && rt && typeof eng.ensureAudio === 'function' ? eng.ensureAudio(rt) : null
+    if (!ctx || typeof eng.musicMapTime !== 'function') {
+      done(false)
+      return
+    }
+    var hitsReady =
+      typeof eng.preloadHitSounds === 'function' ? Promise.resolve(eng.preloadHitSounds(rt)).catch(function () {}) : Promise.resolve()
+    ;(async function () {
+      var buffer = null
+      for (var i = 0; i < urls.length && !buffer; i++) {
+        if (session !== gpAudioSession || !gp.open) return
+        try {
+          var res = await fetch(urls[i])
+          if (!res.ok) continue
+          var bytes = await res.arrayBuffer()
+          if (bytes.byteLength < 1024) continue
+          buffer = await ctx.decodeAudioData(bytes)
+        } catch (e) {
+          buffer = null
+        }
+      }
+      await hitsReady
+      if (session !== gpAudioSession || !gp.open) return
+      if (!buffer) {
+        done(false)
+        return
+      }
+      try {
+        await ctx.resume()
+      } catch (e) {
+        /* ignore */
+      }
+      if (session !== gpAudioSession || !gp.open) return
+      var gain = ctx.createGain()
+      gain.gain.value = previewVolume
+      gain.connect(ctx.destination)
+      var src = ctx.createBufferSource()
+      src.buffer = buffer
+      src.connect(gain)
+      // Small lead-in so the first frames and hitsounds can be queued in time
+      var startAt = ctx.currentTime + 0.12
+      src.start(startAt)
+      var lead = eng.PREVIEW_CLIP_LEAD_MS || 117
+      gp.music = {
+        src: src,
+        gain: gain,
+        endCtx: startAt + buffer.duration,
+        clock: { ctxStart: startAt, mapStartMs: (gp.parsed ? gp.parsed.previewTime || 0 : 0) - lead },
+      }
+      done(true)
+    })()
+  }
+
+  function startGpHtmlAudio(urls, session, onReady) {
+    var id = gp.set ? gp.set.id : 0
     var audio = new Audio()
     audio.volume = previewVolume
     audio.preload = 'auto'
@@ -1135,8 +1222,8 @@
       if (typeof onReady === 'function') onReady()
     }
 
-    // Safety fallback: if audio takes > 2500ms to start, launch replay anyway
-    var fallbackTimer = setTimeout(triggerReady, 2500)
+    // Safety fallback: only start without music if the track never arrives
+    var fallbackTimer = setTimeout(triggerReady, 12000)
 
     var idx = 0
     function tryNext() {
@@ -1243,16 +1330,28 @@
     if (!canvas || !gp.open || !eng || !gp.parsed) return
     var ctx = canvas.getContext('2d')
     if (!ctx) return
+    // Render at the displayed size x DPR so sprites stay sharp
+    var dpr = window.devicePixelRatio || 1
+    var cw = Math.round(canvas.clientWidth * dpr)
+    var ch = Math.round(canvas.clientHeight * dpr)
+    if (cw > 0 && ch > 0 && (canvas.width !== cw || canvas.height !== ch)) {
+      canvas.width = cw
+      canvas.height = ch
+    }
+    var rt = ensureGpRuntime()
+    var lead = (eng && eng.PREVIEW_CLIP_LEAD_MS) || 117
+    var musicT = gp.music && rt && typeof eng.musicMapTime === 'function' ? eng.musicMapTime(rt) : null
     var elapsed = 0
-    if (gp.audio && !gp.audio.paused && !gp.audio.ended && Number.isFinite(gp.audio.currentTime) && gp.audio.currentTime > 0) {
+    if (musicT != null) {
+      elapsed = musicT - ((gp.parsed.previewTime || 0) - lead)
+    } else if (gp.audio && !gp.audio.paused && !gp.audio.ended && Number.isFinite(gp.audio.currentTime) && gp.audio.currentTime > 0) {
       elapsed = Math.max(0, gp.audio.currentTime * 1000)
     } else {
       elapsed = Math.max(0, now - (gp.startPerf || now))
     }
 
     // b.ppy.sh preview clips start ~117 ms before PreviewTime (see PREVIEW_CLIP_LEAD_MS)
-    var t = (gp.parsed.previewTime || 0) - ((eng && eng.PREVIEW_CLIP_LEAD_MS) || 117) + elapsed
-    var rt = ensureGpRuntime()
+    var t = (gp.parsed.previewTime || 0) - lead + elapsed
     var cont = true
     try {
       cont = eng.drawPreviewFrame(
@@ -1267,7 +1366,8 @@
     } catch (drawErr) {
       console.error('[maps-gp] drawPreviewFrame error:', drawErr)
     }
-    if (!cont || (gp.audio && gp.audio.ended)) {
+    var musicEnded = gp.music && rt && rt.audio && rt.audio.currentTime >= gp.music.endCtx
+    if (!cont || musicEnded || (gp.audio && gp.audio.ended)) {
       closeGameplayPreview()
       return
     }
@@ -1444,6 +1544,7 @@
         if (curRt && typeof eng.resetPreviewRuntime === 'function') {
           eng.resetPreviewRuntime(curRt, previewVolume)
         }
+        if (curRt && gp.music) curRt.music = gp.music.clock
         // Unlock Web Audio for hitsounds
         try {
           if (curRt && curRt.audio && curRt.audio.resume) void curRt.audio.resume()
