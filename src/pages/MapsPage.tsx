@@ -13,6 +13,8 @@ import {
   Pause,
   Play,
   Search,
+  Video,
+  VideoOff,
   Volume2,
   VolumeX,
   X,
@@ -41,6 +43,7 @@ import { useI18n } from '../i18n/context'
 import { DiffIcon } from '../components/DiffIcon'
 import { normalizeOsuMode } from '../lib/osu-diff'
 import './MapsPage.css'
+import { humanizeError } from '../lib/errors'
 
 interface Props {
   visible?: boolean
@@ -130,11 +133,6 @@ function isBusyPhase(phase: MapDownloadProgress['phase'] | undefined): boolean {
   return phase === 'downloading' || phase === 'installing' || phase === 'queued'
 }
 
-function cleanIpcError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err)
-  return raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
-}
-
 function isRateLimitMsg(msg: string): boolean {
   return /429|слишком много|rate|лимит/i.test(msg)
 }
@@ -149,7 +147,9 @@ interface MapRowProps {
   lang: string
   onTogglePreview: (set: MapSetSummary) => void
   onGameplayPreview: (set: MapSetSummary) => void
-  onDownload: (set: MapSetSummary) => void
+  /** osu! profile setting: download without video by default */
+  prefersNoVideo: boolean
+  onDownload: (set: MapSetSummary, noVideo?: boolean) => void
   onCancel: (setId: number) => void
 }
 
@@ -161,6 +161,7 @@ const MapRow = memo(function MapRow({
   canDownload,
   previewPlaying,
   lang,
+  prefersNoVideo,
   onTogglePreview,
   onGameplayPreview,
   onDownload,
@@ -269,15 +270,39 @@ const MapRow = memo(function MapRow({
             {Math.round(pct)}%
           </button>
         ) : (
-          <button
-            type="button"
-            className="btn btn-primary btn-sm map-dl-btn"
-            disabled={!canDownload}
-            onClick={() => onDownload(set)}
-          >
-            <Download size={14} strokeWidth={1.8} />
-            {lang === 'en' ? 'Download' : 'Скачать'}
-          </button>
+          <>
+            {set.hasVideo && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm map-preview-btn"
+                disabled={!canDownload}
+                onClick={() => onDownload(set, !prefersNoVideo)}
+                title={
+                  prefersNoVideo
+                    ? lang === 'en' ? 'Download with video' : 'Скачать с видео'
+                    : lang === 'en' ? 'Download without video' : 'Скачать без видео'
+                }
+              >
+                {prefersNoVideo ? <Video size={14} strokeWidth={1.8} /> : <VideoOff size={14} strokeWidth={1.8} />}
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary btn-sm map-dl-btn"
+              disabled={!canDownload}
+              onClick={() => onDownload(set)}
+              title={
+                set.hasVideo
+                  ? prefersNoVideo
+                    ? lang === 'en' ? 'Without video (osu! profile setting)' : 'Без видео (настройка профиля osu!)'
+                    : lang === 'en' ? 'With video (osu! profile setting)' : 'С видео (настройка профиля osu!)'
+                  : undefined
+              }
+            >
+              <Download size={14} strokeWidth={1.8} />
+              {lang === 'en' ? 'Download' : 'Скачать'}
+            </button>
+          </>
         )}
       </div>
       {busy && <div className="map-row-progress" style={{ width: `${Math.max(4, pct)}%` }} />}
@@ -747,7 +772,7 @@ export function MapsPage({
       } catch (err) {
         if (seq !== gpSeqRef.current) return
         setGpLoading(false)
-        setGpStatus(err instanceof Error ? err.message : 'Ошибка загрузки карты')
+        setGpStatus(humanizeError(err, lang, 'Ошибка загрузки карты'))
       }
     },
     [lang, stopGameplay, drawGameplay, notifyPreview]
@@ -970,7 +995,7 @@ export function MapsPage({
         }
       } catch (err) {
         if (seq !== searchSeq.current) return
-        const msg = cleanIpcError(err)
+        const msg = humanizeError(err, lang)
         markRateLimited(msg)
         if (!append) {
           setSets([])
@@ -1090,7 +1115,7 @@ export function MapsPage({
   )
 
   const handleDownload = useCallback(
-    async (set: MapSetSummary) => {
+    async (set: MapSetSummary, noVideo?: boolean) => {
       if (!loggedIn) {
         onToast(lang === 'en' ? 'Please log in to osu! first' : 'Сначала войдите в osu!', 'error')
         return
@@ -1127,6 +1152,7 @@ export function MapsPage({
           setId: set.id,
           artist: set.artist,
           title: set.title,
+          noVideo,
         })
         if (result.cancelled) {
           onToast(lang === 'en' ? 'Download cancelled' : 'Загрузка отменена', 'success')
@@ -1145,7 +1171,7 @@ export function MapsPage({
           return next
         })
       } catch (err) {
-        const msg = cleanIpcError(err)
+        const msg = humanizeError(err, lang)
         if (/отмен|cancel/i.test(msg)) {
           setDownloads((prev) => ({
             ...prev,
@@ -1375,6 +1401,7 @@ export function MapsPage({
                   canDownload={canDownload && !rateLimitActive}
                   onDownload={handleDownload}
                   onCancel={handleCancel}
+                  prefersNoVideo={account?.beatmapDownload === 'no_video'}
                   lang={lang}
                 />
               ))}

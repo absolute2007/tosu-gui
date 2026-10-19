@@ -27,6 +27,8 @@ export interface OsuAccountInfo {
   userId: number | null
   username: string | null
   avatarUrl: string | null
+  /** osu! website preference "beatmapset_download": all | no_video | direct */
+  beatmapDownload?: string | null
 }
 
 export function isValidAccount(account: unknown): account is OsuAccountInfo {
@@ -160,7 +162,16 @@ async function requestText(url: string, headers: Record<string, string>, timeout
   }
 }
 
-function parseUserFromHtml(html: string): Pick<OsuAccountInfo, 'userId' | 'username' | 'avatarUrl'> | null {
+function readDownloadPreference(user: Record<string, unknown>): string | null {
+  const prefs = user.user_preferences
+  if (!prefs || typeof prefs !== 'object') return null
+  const v = (prefs as Record<string, unknown>).beatmapset_download
+  return typeof v === 'string' ? v : null
+}
+
+function parseUserFromHtml(
+  html: string
+): Pick<OsuAccountInfo, 'userId' | 'username' | 'avatarUrl' | 'beatmapDownload'> | null {
   // osu-web embeds current user as JSON in several places
   const scriptMatch = html.match(
     /<script id="json-current-user"[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/i
@@ -175,6 +186,7 @@ function parseUserFromHtml(html: string): Pick<OsuAccountInfo, 'userId' | 'usern
           userId: id,
           username,
           avatarUrl: typeof data.avatar_url === 'string' ? data.avatar_url : null,
+          beatmapDownload: readDownloadPreference(data),
         }
       }
       // If script is present with {} or id=0, this is definitively a guest page
@@ -281,6 +293,7 @@ async function queryOsuAccountOnline(): Promise<OsuAccountInfo> {
         userId: parsed.userId,
         username: parsed.username,
         avatarUrl: parsed.avatarUrl,
+        beatmapDownload: parsed.beatmapDownload ?? null,
       }
       writePersistedAccountCache(account)
       lastAccountRefreshOnlineAt = Date.now()

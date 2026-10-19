@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TosuCounter } from '../../electron/tosu-api'
 import { useI18n } from '../i18n/context'
+import { humanizeError } from '../lib/errors'
 
 export type DownloadStatus = 'downloading' | 'success' | 'error'
 
@@ -96,7 +97,7 @@ export function useCounterDownloads(onToast: (msg: string, type: 'success' | 'er
       scheduleClear(key, 2500)
       await onComplete?.()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Download error' : 'Ошибка загрузки')
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Download error' : 'Ошибка загрузки'))
       const isAlreadyInstalled = msg === 'Folder already exist'
       stopProgress(key)
       setDownloads((prev) => ({

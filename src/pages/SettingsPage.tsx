@@ -18,6 +18,8 @@ interface Props {
   skinsPathResolved: string | null
   skinsBrowserEnabled: boolean
   mapsOverlayKeybind: string
+  mapsOverlayEnabled: boolean
+  onMapsOverlayEnabledChange: (enabled: boolean) => void
   disableHardwareAcceleration: boolean
   onCheckAppUpdatesChange: (enabled: boolean) => void
   onCloseToTrayChange: (enabled: boolean) => void
@@ -46,6 +48,8 @@ export function SettingsPage({
   skinsPathResolved,
   skinsBrowserEnabled,
   mapsOverlayKeybind,
+  mapsOverlayEnabled,
+  onMapsOverlayEnabledChange,
   disableHardwareAcceleration,
   onCheckAppUpdatesChange,
   onCloseToTrayChange,
@@ -95,15 +99,26 @@ export function SettingsPage({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <div className="setting-label">{t('settings.inGameMaps')}</div>
-              <div className="setting-desc">
-                {t('settings.inGameMapsDesc')}
-              </div>
+              <div className="setting-label">{t('settings.inGameMapsEnabled')}</div>
+              <div className="setting-desc">{t('settings.inGameMapsEnabledDesc')}</div>
             </div>
             <div className="setting-control">
-              <KeybindInput value={mapsOverlayKeybind} onChange={onMapsOverlayKeybindChange} />
+              <Toggle checked={mapsOverlayEnabled} onChange={onMapsOverlayEnabledChange} />
             </div>
           </div>
+          {mapsOverlayEnabled && (
+            <div className="setting-row">
+              <div className="setting-info">
+                <div className="setting-label">{t('settings.inGameMaps')}</div>
+                <div className="setting-desc">
+                  {t('settings.inGameMapsDesc')}
+                </div>
+              </div>
+              <div className="setting-control">
+                <KeybindInput value={mapsOverlayKeybind} onChange={onMapsOverlayKeybindChange} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

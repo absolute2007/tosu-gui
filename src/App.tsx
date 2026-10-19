@@ -18,6 +18,7 @@ import { UpdateBanner } from './components/UpdateBanner'
 import { useI18n } from './i18n/context'
 import type { TosuStatus } from '../electron/preload'
 import './styles/app.css'
+import { humanizeError } from './lib/errors'
 
 const MapsPage = lazy(() => import('./pages/MapsPage').then((m) => ({ default: m.MapsPage })))
 const SkinsPage = lazy(() => import('./pages/SkinsPage').then((m) => ({ default: m.SkinsPage })))
@@ -175,7 +176,7 @@ export default function App() {
       await refreshStatus()
       showToast(lang === 'en' ? 'tosu restarted' : 'tosu перезапущен', 'success')
     } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err ?? (lang === 'en' ? 'Restart error' : 'Ошибка перезапуска'))
+      const raw = humanizeError(err, lang, (lang === 'en' ? 'Restart error' : 'Ошибка перезапуска'))
       // Electron wraps invoke errors: "Error invoking remote method 'x': Error: actual"
       const msg = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
       showToast(msg || (lang === 'en' ? 'Restart error' : 'Ошибка перезапуска'), 'error')
@@ -236,6 +237,8 @@ export default function App() {
               onDownload={counterDownloads.download}
               isDownloading={counterDownloads.isDownloading}
               onToast={showToast}
+              mapsOverlayEnabled={guiSettings.mapsOverlayEnabled}
+              onMapsOverlayEnabledChange={guiSettings.setMapsOverlayEnabledSetting}
             />
           </div>
           {visitedPages.has('maps') && (
@@ -308,6 +311,8 @@ export default function App() {
               skinsPathResolved={guiSettings.skinsPathResolved}
               skinsBrowserEnabled={guiSettings.skinsBrowserEnabled}
               mapsOverlayKeybind={guiSettings.mapsOverlayKeybind}
+              mapsOverlayEnabled={guiSettings.mapsOverlayEnabled}
+              onMapsOverlayEnabledChange={guiSettings.setMapsOverlayEnabledSetting}
               disableHardwareAcceleration={guiSettings.disableHardwareAcceleration}
               onCheckAppUpdatesChange={appUpdate.setCheckAppUpdates}
               onCloseToTrayChange={guiSettings.setCloseToTraySetting}

@@ -24,6 +24,7 @@ import type {
 } from '../../electron/skins-types'
 import { useI18n } from '../i18n/context'
 import './SkinsPage.css'
+import { humanizeError } from '../lib/errors'
 
 function toFullShotUrl(url: string): string {
   return url.replace(/_(xs|sm|md|lg)\.webp(\?.*)?$/i, '.webp$2')
@@ -196,7 +197,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
         loadedKeyRef.current = filterKey(q, m, s)
       } catch (err) {
         if (my !== reqId.current) return
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = humanizeError(err, lang)
         setError(msg)
         if (!append) setSkins([])
         onToast(msg, 'error')
@@ -311,7 +312,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
         onToast('MEGA: ссылка открыта в браузере', 'success')
       }
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err), 'error')
+      onToast(humanizeError(err, lang), 'error')
     }
   }
 
@@ -322,7 +323,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
       onToast('Скин импортирован', 'success')
       void refreshPath()
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err), 'error')
+      onToast(humanizeError(err, lang), 'error')
     }
   }
 
@@ -339,7 +340,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
         void refreshPath()
       }
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err), 'error')
+      onToast(humanizeError(err, lang), 'error')
     }
   }
 
@@ -377,7 +378,7 @@ export function SkinsPage({ visible = true, onToast, onOpenSettings }: Props) {
           ? {
               ...g,
               loading: false,
-              error: err instanceof Error ? err.message : String(err),
+              error: humanizeError(err, lang),
             }
           : null
       )

@@ -24,7 +24,7 @@ export function useTosuCounters(tosuStatus: TosuStatus | null) {
     void reload()
 
     const timer = setInterval(() => {
-      void reload()
+      if (!document.hidden) void reload()
     }, 8000)
 
     return () => clearInterval(timer)

@@ -3,6 +3,7 @@ import { Download, ExternalLink, FolderOpen, Layers, Loader2, Settings, Trash2 }
 import type { TosuCounter } from '../../electron/tosu-api'
 import { CounterPreview } from '../components/CounterPreview'
 import { CounterSettingsModal } from '../components/CounterSettingsModal'
+import { Toggle } from '../components/Toggle'
 import { DownloadProgressBar } from '../components/DownloadProgressBar'
 import { counterKey, type CounterDownloadState } from '../hooks/useCounterDownloads'
 import { useTosuCounters } from '../hooks/useTosuCounters'
@@ -17,9 +18,21 @@ interface Props {
   onDownload: (counter: TosuCounter, onComplete?: () => void) => Promise<void>
   isDownloading: (key: string) => boolean
   onToast: (msg: string, type: 'success' | 'error') => void
+  mapsOverlayEnabled: boolean
+  onMapsOverlayEnabledChange: (enabled: boolean) => Promise<void>
 }
 
-export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, onDownload, isDownloading, onToast }: Props) {
+export function CountersPage({
+  baseUrl,
+  tosuStatus,
+  visible = true,
+  downloads,
+  onDownload,
+  isDownloading,
+  onToast,
+  mapsOverlayEnabled,
+  onMapsOverlayEnabledChange,
+}: Props) {
   const { t, lang } = useI18n()
   const previewSessionKey = `${tosuStatus?.pid ?? 'off'}-${visible ? 'on' : 'off'}`
   const previewLiveReady = Boolean(tosuStatus?.running && baseUrl)
@@ -60,8 +73,8 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
     if (isProtectedCounter(name)) {
       onToast(
         lang === 'en'
-          ? 'Maps Browser cannot be deleted — only disabled via in-game overlay'
-          : 'Maps Browser нельзя удалить — только выключить in-game overlay',
+          ? 'Maps Browser cannot be deleted — use the toggle to turn it off'
+          : 'Maps Browser нельзя удалить — выключите его переключателем',
         'error'
       )
       return
@@ -72,6 +85,15 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
       onToast(lang === 'en' ? `Deleted: ${name}` : `Удалено: ${name}`, 'success')
     } catch {
       onToast(lang === 'en' ? 'Delete failed' : 'Не удалось удалить', 'error')
+    }
+  }
+
+  const setMapsEnabled = async (enabled: boolean) => {
+    try {
+      await onMapsOverlayEnabledChange(enabled)
+      await reloadLocal()
+    } catch {
+      onToast(lang === 'en' ? 'Failed to change setting' : 'Не удалось изменить настройку', 'error')
     }
   }
 
@@ -97,6 +119,20 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
           {t('counters.available')}
         </button>
       </div>
+
+      {tab === 'local' && !mapsOverlayEnabled && (
+        <div className="counters-notice">
+          <div className="counters-notice-text">
+            <strong>{t('counters.mapsDisabledTitle')}</strong>
+            <span>{t('counters.mapsDisabledDesc')}</span>
+          </div>
+          <div className="counters-notice-actions">
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => void setMapsEnabled(true)}>
+              {t('counters.mapsEnable')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {tab === 'available' && (
         <div className="search-bar">
@@ -162,8 +198,8 @@ export function CountersPage({ baseUrl, tosuStatus, visible = true, downloads, o
                           <FolderOpen size={13} />
                         </button>
                         {isProtectedCounter(c.folderName) ? (
-                          <span className="counter-meta" title={lang === 'en' ? 'System counter — cannot be deleted' : 'Системный счётчик — нельзя удалить'}>
-                            {lang === 'en' ? 'system' : 'системный'}
+                          <span title={t('counters.mapsToggleTitle')}>
+                            <Toggle checked={mapsOverlayEnabled} onChange={(v) => void setMapsEnabled(v)} />
                           </span>
                         ) : (
                           <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c.folderName)} title={t('common.delete')}>

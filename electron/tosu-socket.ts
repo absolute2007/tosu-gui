@@ -5,6 +5,8 @@ export type TosuSocketEvent =
   | { type: 'bridge'; connected: boolean }
   | { type: 'message'; data: string }
 
+const MESSAGE_INTERVAL_MS = 100
+
 export class TosuSocketBridge {
   private ws: WebSocket | null = null
   private baseUrl = ''
@@ -38,6 +40,11 @@ export class TosuSocketBridge {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer)
+      this.flushTimer = null
+    }
+    this.pendingMessage = null
     this.safeCloseWs(this.ws)
     this.ws = null
     this.emit({ type: 'bridge', connected: false })
@@ -86,8 +93,12 @@ export class TosuSocketBridge {
     })
 
     ws.on('error', () => {
+      // safeCloseWs drops listeners, so 'close' will not fire — reconnect from here.
       this.safeCloseWs(ws)
-      if (this.ws === ws) this.ws = null
+      if (this.ws !== ws) return
+      this.ws = null
+      this.emit({ type: 'bridge', connected: false })
+      this.scheduleReconnect()
     })
   }
 
@@ -100,18 +111,30 @@ export class TosuSocketBridge {
   }
 
   private lastEmitTime = 0
+  private pendingMessage: TosuSocketEvent | null = null
+  private flushTimer: ReturnType<typeof setTimeout> | null = null
 
+  /** Messages are throttled to ~10/s with a trailing flush so the newest state is never dropped. */
   private emit(event: TosuSocketEvent) {
     if (!this.window || this.window.isDestroyed()) return
     if (event.type === 'message') {
       if (!this.window.isVisible() || this.window.isMinimized()) {
         return
       }
-      const now = Date.now()
-      if (now - this.lastEmitTime < 100) {
+      const wait = MESSAGE_INTERVAL_MS - (Date.now() - this.lastEmitTime)
+      if (wait > 0) {
+        this.pendingMessage = event
+        if (!this.flushTimer) {
+          this.flushTimer = setTimeout(() => {
+            this.flushTimer = null
+            const pending = this.pendingMessage
+            this.pendingMessage = null
+            if (pending) this.emit(pending)
+          }, wait)
+        }
         return
       }
-      this.lastEmitTime = now
+      this.lastEmitTime = Date.now()
     }
     this.window.webContents.send('tosu:socket-event', event)
   }

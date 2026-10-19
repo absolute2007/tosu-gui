@@ -68,11 +68,127 @@ function parseKeybindString(str) {
     .filter(Boolean);
 }
 
+// --- Keyboard text fixes for the Maps panel ---
+// osu!stable is an ANSI window: WM_CHAR delivers bytes in the system ANSI code page
+// (e.g. CP1251 for Cyrillic), which the overlay library forwards as Latin-1 → garbled text.
+
+let ansiDecoder;
+function getAnsiDecoder() {
+  if (ansiDecoder !== undefined) return ansiDecoder;
+  ansiDecoder = null;
+  try {
+    const out = require("node:child_process").execFileSync(
+      "reg",
+      ["query", "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Nls\\CodePage", "/v", "ACP"],
+      { encoding: "utf8", windowsHide: true, timeout: 3000 }
+    );
+    const acp = Number((out.match(/ACP\s+REG_SZ\s+(\d+)/) || [])[1]) || 0;
+    if (acp && acp !== 1252 && acp !== 65001) ansiDecoder = new TextDecoder(`windows-${acp}`);
+  } catch {
+    ansiDecoder = null;
+  }
+  return ansiDecoder;
+}
+
+function decodeAnsiChar(ch) {
+  if (typeof ch !== "string" || ch.length !== 1) return ch;
+  const code = ch.charCodeAt(0);
+  if (code < 0x80 || code > 0xff) return ch;
+  const decoder = getAnsiDecoder();
+  if (!decoder) return ch;
+  try {
+    return decoder.decode(Uint8Array.of(code)) || ch;
+  } catch {
+    return ch;
+  }
+}
+
+/** ElectronOverlayInput.connect + ANSI→Unicode correction for typed characters. */
+function connectInput(target, contents) {
+  const input = ElectronOverlayInput.connect(target, contents);
+  const original = input.sendKeyboardInput.bind(input);
+  input.sendKeyboardInput = (ev) => {
+    if (ev && ev.type === "Char") return original({ ...ev, ch: decodeAnsiChar(ev.ch) });
+    return original(ev);
+  };
+  return input;
+}
+
+/**
+ * While the panel blocks game input, Windows never sees the layout hotkey, so we detect
+ * Alt+Shift / Ctrl+Shift / Win+Space ourselves and ask the game window to switch layout.
+ */
+class LayoutHotkey {
+  constructor() {
+    this.down = new Set();
+    this.armed = false;
+  }
+
+  /** Returns true when a layout switch should happen. */
+  update(key, state) {
+    const name = key && key.code ? String(mapKeycode(key.code) || key.code) : "";
+    const mod = /control|shift|alt|super|meta/i.test(name) ? name.replace(/(Left|Right)$/, "").toLowerCase() : null;
+    if (state === "Pressed") {
+      if (this.down.has(name)) return false;
+      this.down.add(name);
+      if (!mod) {
+        const win = [...this.down].some((k) => /super|meta/i.test(k));
+        this.armed = false;
+        return win && /^space$/i.test(name);
+      }
+      const mods = new Set([...this.down].map((k) => k.replace(/(Left|Right)$/, "").toLowerCase()));
+      this.armed = mods.has("shift") && (mods.has("alt") || mods.has("control")) && mods.size === 2;
+      return false;
+    }
+    this.down.delete(name);
+    if (mod && this.armed) {
+      this.armed = false;
+      return true;
+    }
+    return false;
+  }
+
+  reset() {
+    this.down.clear();
+    this.armed = false;
+  }
+}
+
+let layoutShell = null;
+function requestNextKeyboardLayout() {
+  if (process.platform !== "win32") return;
+  try {
+    if (!layoutShell || layoutShell.exitCode !== null) {
+      layoutShell = require("node:child_process").spawn(
+        "powershell.exe",
+        ["-NoProfile", "-NoLogo", "-NonInteractive", "-Command", "-"],
+        { windowsHide: true, stdio: ["pipe", "ignore", "ignore"] }
+      );
+      layoutShell.on("error", () => {
+        layoutShell = null;
+      });
+      layoutShell.stdin.write(
+        "$k = Add-Type -Name KbLayout -Namespace TosuGui -PassThru -MemberDefinition '" +
+          "[DllImport(\"user32.dll\")] public static extern System.IntPtr GetForegroundWindow();" +
+          "[DllImport(\"user32.dll\")] public static extern bool PostMessage(System.IntPtr h, uint m, System.IntPtr w, System.IntPtr l);'\n"
+      );
+    }
+    // WM_INPUTLANGCHANGEREQUEST with HKL_NEXT on the focused (game) window
+    layoutShell.stdin.write("[void]$k::PostMessage($k::GetForegroundWindow(), 0x50, [IntPtr]0, [IntPtr]1)\n");
+  } catch {
+    layoutShell = null;
+  }
+}
+
+/** tosu GUI writes "disabled" when the Maps panel is switched off in Settings. */
+const MAPS_DISABLED = "disabled";
+
 function readMapsKeybindKeys() {
   for (const file of MAPS_KEYBIND_FILES) {
     try {
       if (fs.existsSync(file)) {
         const raw = fs.readFileSync(file, "utf8").trim();
+        if (raw.toLowerCase() === MAPS_DISABLED) return [];
         if (raw) return parseKeybindString(raw);
       }
     } catch {
@@ -207,6 +323,29 @@ function consoleMessageText(event, level, message) {
   return String(message ?? level ?? "");
 }
 
+const OVERLAY_LOG = path.join(path.dirname(process.execPath), "overlay-console.log");
+const OVERLAY_LOG_MAX_BYTES = 512 * 1024;
+let overlayLogQueue = Promise.resolve();
+
+function isWarnOrError(event, level) {
+  const lvl = event && typeof event === "object" && "level" in event ? event.level : level;
+  return lvl === "warning" || lvl === "error" || (typeof lvl === "number" && lvl >= 2);
+}
+
+function appendOverlayLog(line) {
+  overlayLogQueue = overlayLogQueue
+    .then(async () => {
+      try {
+        const st = await fs.promises.stat(OVERLAY_LOG);
+        if (st.size > OVERLAY_LOG_MAX_BYTES) await fs.promises.truncate(OVERLAY_LOG, 0);
+      } catch {
+        /* no log yet */
+      }
+      await fs.promises.appendFile(OVERLAY_LOG, line);
+    })
+    .catch(() => {});
+}
+
 class OverlayProcess {
   constructor(surface, window) {
     this.surface = surface;
@@ -214,14 +353,20 @@ class OverlayProcess {
     this.event = new EventEmitter();
     this.keybind = new Keybind([]);
     this.mapsKeybind = new Keybind(readMapsKeybindKeys());
+    this.layoutHotkey = new LayoutHotkey();
     this.refreshMapsKeybind = () => {
       const keys = readMapsKeybindKeys();
-      if (keys.join("+") !== this.mapsKeybind.keys.join("+")) {
-        this.mapsKeybind = new Keybind(keys);
+      if (keys.join("+") === this.mapsKeybind.keys.join("+")) return;
+      this.mapsKeybind = new Keybind(keys);
+      if (keys.length === 0) {
+        if (this.mapsEnabled) void this.forceCloseMaps("disabled");
+      } else {
+        void mapsPreload(this.window.webContents);
       }
     };
+    // Settings changes are rare; a slow poll keeps the overlay process idle.
     for (const file of MAPS_KEYBIND_FILES) {
-      fs.watchFile(file, { interval: 150, persistent: false }, this.refreshMapsKeybind);
+      fs.watchFile(file, { interval: 1000, persistent: false }, this.refreshMapsKeybind);
     }
     this.inputs = [];
     this.configurationEnabled = false;
@@ -265,6 +410,11 @@ class OverlayProcess {
         }
       }
 
+      // Keyboard layout switch while the panel owns input (Windows can't see the hotkey then)
+      if (this.mapsEnabled && this.layoutHotkey.update(keyEvent.key, keyEvent.state)) {
+        requestNextKeyboardLayout();
+      }
+
       // Maps Browser Hotkey (Ctrl + Shift + M)
       if (this.mapsKeybind.update(keyEvent.key, keyEvent.state)) {
         this.keybind.reset();
@@ -283,10 +433,10 @@ class OverlayProcess {
         overlay.blockInput(this.configurationEnabled);
 
         if (this.configurationEnabled) {
-          this.inputs.push(ElectronOverlayInput.connect({ id: windowId, overlay }, window.webContents));
+          this.inputs.push(connectInput({ id: windowId, overlay }, window.webContents));
           const targetWindowId = this.surface.info.ty.windowId;
           if (targetWindowId && targetWindowId !== windowId) {
-            this.inputs.push(ElectronOverlayInput.connect({ id: targetWindowId, overlay }, window.webContents));
+            this.inputs.push(connectInput({ id: targetWindowId, overlay }, window.webContents));
           }
           this.openConfiguration();
         } else {
@@ -296,18 +446,16 @@ class OverlayProcess {
       }
     });
 
-    // Close from UI (X button) and log console output
+    // Close request from UI (X button). Only warnings/errors are logged, asynchronously,
+    // so the overlay never blocks on disk I/O for regular console output.
     this.window.webContents.on("console-message", (event, level, message) => {
       const text = consoleMessageText(event, level, message);
-      try {
-        const line = `[${new Date().toISOString()}] [lvl:${level}] ${text}\n`;
-        fs.appendFileSync(path.join(process.cwd(), "overlay-console.log"), line);
-        fs.appendFileSync(path.join(path.dirname(process.execPath), "overlay-console.log"), line);
-      } catch {
-        /* ignore */
-      }
       if (text.includes("__TOSU_GUI_MAPS_CLOSE__")) {
         void this.forceCloseMaps("ui-close");
+        return;
+      }
+      if (isWarnOrError(event, level)) {
+        appendOverlayLog(`[${new Date().toISOString()}] ${text}\n`);
       }
     });
 
@@ -327,9 +475,9 @@ class OverlayProcess {
       }
     });
 
-    // Preload Maps Browser script into webContents on load
+    // Preload Maps Browser script into webContents on load (skipped while disabled)
     this.window.webContents.on("did-finish-load", () => {
-      void mapsPreload(this.window.webContents);
+      if (this.mapsKeybind.keys.length > 0) void mapsPreload(this.window.webContents);
     });
   }
 
@@ -376,6 +524,7 @@ class OverlayProcess {
   async forceCloseMaps(reason) {
     this.mapsEnabled = false;
     this.mapsKeybind.reset();
+    this.layoutHotkey.reset();
     this.keybind.reset();
 
     try {
@@ -391,7 +540,7 @@ class OverlayProcess {
   }
 
   async toggleMapsMode(windowId) {
-    if (this._togglingMaps) return;
+    if (this._togglingMaps || this.mapsKeybind.keys.length === 0) return;
     this._togglingMaps = true;
 
     try {
@@ -418,10 +567,10 @@ class OverlayProcess {
       this.resetInputs();
 
       const { overlay } = this.surface;
-      this.inputs.push(ElectronOverlayInput.connect({ id: windowId, overlay }, this.window.webContents));
+      this.inputs.push(connectInput({ id: windowId, overlay }, this.window.webContents));
       const targetWindowId = this.surface.info.ty.windowId;
       if (targetWindowId && targetWindowId !== windowId) {
-        this.inputs.push(ElectronOverlayInput.connect({ id: targetWindowId, overlay }, this.window.webContents));
+        this.inputs.push(connectInput({ id: targetWindowId, overlay }, this.window.webContents));
       }
 
       this.window.focusOnWebView();

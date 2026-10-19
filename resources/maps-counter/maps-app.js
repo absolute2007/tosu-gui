@@ -7,7 +7,7 @@
  * simple gameplay preview without downloading the full set (osu!preview-style).
  */
 ;(function (global) {
-  var APP_VERSION = 32
+  var APP_VERSION = 34
   if (global.__TosuGuiMapsApp && global.__TosuGuiMapsAppVersion === APP_VERSION) return
   if (global.__TosuGuiMapsApp) {
     try {
@@ -48,7 +48,7 @@
       modeAll: 'Все',
       showMore: 'Показать ещё',
       noTrack: 'Нет трека',
-      selectBeatmap: 'Выберите карту ▶',
+      selectBeatmap: 'Выберите карту',
       pause: 'Пауза',
       play: 'Играть',
       prevTrack: 'Предыдущая',
@@ -56,11 +56,12 @@
       seek: 'Перемотка',
       volume: 'Громкость',
       muteOsuOn: 'Глушить osu!',
-      muteOsuOff: 'Звук osu!',
+      muteOsuOff: 'Глушить osu!',
       muteOsuTitle: 'Заглушать звук osu! во время превью',
       previewModalTitle: 'Превью',
       previewMapBtn: 'Предпросмотр карты',
       listen: 'Слушать',
+      previewFailed: 'Не удалось воспроизвести превью',
       installed: 'Есть',
       download: 'Скачать',
       loading: 'Загрузка…',
@@ -80,11 +81,58 @@
       loggedInAs: 'Вы вошли как ',
       hintNoGui: 'Запусти tosu GUI — без него поиск не работает.',
       hintLogin: 'Войдите в osu!, затем ищите карты.',
-      hintActive: 'Ввод активен · «{keybind}» / Esc / ✕ — закрыть',
+      hintActive: 'Закрыть: «{keybind}» или кнопка ✕',
       cardsCount: '{n} карт',
       diffSingular: '{n} сложность',
       diffFew: '{n} сложности',
       diffMany: '{n} сложностей',
+      back: 'Назад',
+      mappedBy: 'автор карты',
+      submitted: 'загружена',
+      rankedOn: 'ранкнута',
+      updated: 'Обновлена',
+      length: 'Длина',
+      circles: 'Ноты',
+      sliders: 'Слайдеры',
+      spinners: 'Спиннеры',
+      maxCombo: 'Макс. комбо',
+      plays: 'Игры',
+      favourites: 'В избранном',
+      passRate: 'Проходимость',
+      source: 'Источник',
+      tags: 'Теги',
+      difficulties: 'Сложности',
+      statsTitle: 'Статистика',
+      infoTitle: 'Информация',
+      attrsTitle: 'Параметры сложности',
+      attrCs: 'Размер нот (CS)',
+      attrHp: 'Потеря HP (HP)',
+      attrOd: 'Точность (OD)',
+      attrAr: 'Скорость (AR)',
+      keys: 'Клавиши',
+      stars: 'Звёзды',
+      video: 'Видео',
+      storyboard: 'Сториборд',
+      queued: 'Очередь',
+      noVideo: 'Без видео',
+      withVideo: 'С видео',
+      dlNoVideoTitle: 'Скачать без видео',
+      dlWithVideoTitle: 'Скачать с видео',
+      dlDefaultNoVideo: 'Без видео — как в настройках профиля osu!',
+      dlDefaultVideo: 'С видео — как в настройках профиля osu!',
+      installing: 'Установка',
+      cancel: 'Отменить',
+      retry: 'Повторить',
+      errTimeout: 'Сервер не ответил вовремя — попробуйте ещё раз',
+      errAborted: 'Запрос прерван',
+      errServer: 'Сервер временно недоступен',
+      status_ranked: 'Ranked',
+      status_approved: 'Approved',
+      status_qualified: 'Qualified',
+      status_loved: 'Loved',
+      status_pending: 'Pending',
+      status_wip: 'WIP',
+      status_graveyard: 'Graveyard',
       langOptions: [
         ['any', 'Любой язык'],
         ['english', 'English'],
@@ -125,7 +173,7 @@
       modeAll: 'All',
       showMore: 'Show more',
       noTrack: 'No track',
-      selectBeatmap: 'Select beatmap ▶',
+      selectBeatmap: 'Select a beatmap',
       pause: 'Pause',
       play: 'Play',
       prevTrack: 'Previous',
@@ -133,11 +181,12 @@
       seek: 'Seek',
       volume: 'Volume',
       muteOsuOn: 'Mute osu!',
-      muteOsuOff: 'osu! audio',
+      muteOsuOff: 'Mute osu!',
       muteOsuTitle: 'Mute osu! sound during beatmap preview',
       previewModalTitle: 'Preview',
       previewMapBtn: 'Preview beatmap',
       listen: 'Listen',
+      previewFailed: 'Could not play the preview',
       installed: 'Installed',
       download: 'Download',
       loading: 'Loading…',
@@ -157,11 +206,58 @@
       loggedInAs: 'Logged in as ',
       hintNoGui: 'Start tosu GUI — search does not work without it.',
       hintLogin: 'Log in to osu!, then search for beatmaps.',
-      hintActive: 'Input active · «{keybind}» / Esc / ✕ — close',
+      hintActive: 'Close: «{keybind}» or the ✕ button',
       cardsCount: '{n} beatmaps',
       diffSingular: '{n} difficulty',
       diffFew: '{n} difficulties',
       diffMany: '{n} difficulties',
+      back: 'Back',
+      mappedBy: 'mapped by',
+      submitted: 'submitted',
+      rankedOn: 'ranked',
+      updated: 'Updated',
+      length: 'Length',
+      circles: 'Circles',
+      sliders: 'Sliders',
+      spinners: 'Spinners',
+      maxCombo: 'Max combo',
+      plays: 'Plays',
+      favourites: 'Favourites',
+      passRate: 'Pass rate',
+      source: 'Source',
+      tags: 'Tags',
+      difficulties: 'Difficulties',
+      statsTitle: 'Statistics',
+      infoTitle: 'Info',
+      attrsTitle: 'Difficulty attributes',
+      attrCs: 'Circle Size',
+      attrHp: 'HP Drain',
+      attrOd: 'Accuracy',
+      attrAr: 'Approach Rate',
+      keys: 'Key Count',
+      stars: 'Star Rating',
+      video: 'Video',
+      storyboard: 'Storyboard',
+      queued: 'Queued',
+      noVideo: 'No video',
+      withVideo: 'With video',
+      dlNoVideoTitle: 'Download without video',
+      dlWithVideoTitle: 'Download with video',
+      dlDefaultNoVideo: 'Without video — per your osu! profile setting',
+      dlDefaultVideo: 'With video — per your osu! profile setting',
+      installing: 'Installing',
+      cancel: 'Cancel',
+      retry: 'Retry',
+      errTimeout: 'The server took too long to respond — try again',
+      errAborted: 'Request was interrupted',
+      errServer: 'The server is temporarily unavailable',
+      status_ranked: 'Ranked',
+      status_approved: 'Approved',
+      status_qualified: 'Qualified',
+      status_loved: 'Loved',
+      status_pending: 'Pending',
+      status_wip: 'WIP',
+      status_graveyard: 'Graveyard',
       langOptions: [
         ['any', 'Any language'],
         ['english', 'English'],
@@ -239,6 +335,8 @@
     }
   } catch (e) {}
   var downloads = {}
+  /** osu! profile "download without video" preference (from /api/maps/auth) */
+  var prefersNoVideo = false
   var debounceTimer = null
   var apiOk = false
   var mapsKeybind = 'Control + Shift + M'
@@ -333,10 +431,44 @@
     els.muteBtn.classList.toggle('-on', muteOsuOnPreview)
     els.muteBtn.setAttribute('aria-pressed', muteOsuOnPreview ? 'true' : 'false')
     var ico = els.muteBtn.querySelector('.mg-mute-ico')
-    if (ico) ico.textContent = muteOsuOnPreview ? '🔇' : '🔈'
+    if (ico) ico.innerHTML = icon(muteOsuOnPreview ? 'volX' : 'vol', 14)
     var label = els.muteBtn.querySelector('.mg-mute-label')
     if (label) label.textContent = muteOsuOnPreview ? t('muteOsuOn') : t('muteOsuOff')
     els.muteBtn.title = t('muteOsuTitle')
+  }
+
+  var ICONS = {
+    play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+    pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+    prev: '<path d="m15 18-6-6 6-6"/>',
+    next: '<path d="m9 18 6-6-6-6"/>',
+    vol: '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/>',
+    volX: '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+    video: '<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/>',
+    videoOff: '<path d="M10.66 6H14a2 2 0 0 1 2 2v2.5l5.248-3.062A.5.5 0 0 1 22 7.87v8.196"/><path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/><path d="m2 2 20 20"/>',
+    heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
+    plays: '<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+    circle: '<circle cx="12" cy="12" r="9"/>',
+    slider: '<path d="M7 7h10a5 5 0 0 1 0 10H7A5 5 0 0 1 7 7z"/>',
+    spinner: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    combo: '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
+  }
+
+  function icon(name, size) {
+    var sz = size || 14
+    return (
+      '<svg class="mg-ico" width="' + sz + '" height="' + sz + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      (ICONS[name] || '') +
+      '</svg>'
+    )
   }
 
   function esc(t) {
@@ -463,22 +595,43 @@
     return '<span class="mg-diffico"' + tt + ' style="color:' + color + '"><svg viewBox="0 0 1000 1000" width="' + (size || 14) + '" height="' + (size || 14) + '"><g transform="translate(0,1000) scale(1,-1)"><path fill="currentColor" fill-rule="evenodd" d="' + d + '"/></g></svg></span>'
   }
 
+  var DEFAULT_API_TIMEOUT_MS = 10000
+
+  /** `opts.timeout` in ms; 0 disables it (long operations: download, login window). */
   async function api(path, opts) {
-    var timeoutSignal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(5000) : null
+    opts = opts || {}
+    var timeoutMs = opts.timeout == null ? DEFAULT_API_TIMEOUT_MS : opts.timeout
+    var signal = opts.signal
+    if (!signal && timeoutMs > 0 && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      signal = AbortSignal.timeout(timeoutMs)
+    }
     var res = await fetch(API + path, {
-      ...opts,
-      signal: (opts && opts.signal) || timeoutSignal || undefined,
-      headers: {
-        Accept: 'application/json',
-        ...(opts && opts.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(opts && opts.headers),
-      },
+      method: opts.method,
+      body: opts.body,
+      signal: signal,
+      headers: Object.assign(
+        { Accept: 'application/json' },
+        opts.body ? { 'Content-Type': 'application/json' } : {},
+        opts.headers || {}
+      ),
     })
     var data = await res.json().catch(function () {
       return {}
     })
     if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status)
     return data
+  }
+
+  /** Human-readable text for fetch/network failures instead of raw "Failed to fetch" etc. */
+  function friendlyError(err) {
+    var msg = err && err.message ? String(err.message) : String(err || '')
+    var name = err && err.name ? String(err.name) : ''
+    if (name === 'TimeoutError' || /timed? ?out|timeout/i.test(msg)) return t('errTimeout')
+    if (name === 'AbortError' || /aborted/i.test(msg)) return t('errAborted')
+    if (/failed to fetch|networkerror|load failed|fetch failed|ERR_CONNECTION|ECONNREFUSED/i.test(msg)) return t('noGuiConnection')
+    if (/^HTTP 5\d\d/.test(msg)) return t('errServer')
+    if (/^HTTP \d{3}/.test(msg) || !msg) return t('errGeneric')
+    return msg
   }
 
   function setLine(t) {
@@ -510,11 +663,12 @@
     previewAudio.preload = 'none'
     previewAudio.volume = previewVolume
     previewAudio.addEventListener('ended', function () {
+      var endedId = previewId
       previewId = null
       previewPaused = false
       notifyPreviewState(false, 'mini-player')
       if (visible) {
-        renderList()
+        patchSet(endedId)
         syncPlayerUi()
       }
     })
@@ -541,8 +695,10 @@
         /* ignore */
       }
     }
+    var stoppedId = previewId
     previewId = null
     previewPaused = false
+    if (stoppedId && visible) patchSet(stoppedId)
     syncPlayerUi()
   }
 
@@ -552,9 +708,10 @@
     try {
       audio.pause()
       audio.volume = previewVolume
+      var prevId = previewId
       previewId = id
       previewPaused = false
-      renderList()
+      syncPreviewMarks(prevId)
       syncPlayerUi()
 
       var urls = audioUrlsForSet(id)
@@ -565,8 +722,8 @@
           previewId = null
           previewPaused = false
           notifyPreviewState(false, 'mini-player')
-          setLine('Не удалось воспроизвести превью')
-          renderList()
+          setLine(t('previewFailed'))
+          patchSet(id)
           syncPlayerUi()
           return
         }
@@ -609,13 +766,13 @@
           stopPreview()
         })
         syncPlayerUi()
-        renderList()
+        patchSet(id)
       } else {
         audio.pause()
         previewPaused = true
         notifyPreviewState(false, 'mini-player')
         syncPlayerUi()
-        renderList()
+        patchSet(id)
       }
       return
     }
@@ -683,7 +840,7 @@
     }
     if (els.playerPlay) {
       var playing = active && previewAudio && !previewAudio.paused && !previewPaused
-      els.playerPlay.textContent = playing ? '❚❚' : '▶'
+      els.playerPlay.innerHTML = icon(playing ? 'pause' : 'play', 15)
       els.playerPlay.title = playing ? t('pause') : t('play')
     }
     if (els.volRange) {
@@ -692,6 +849,7 @@
     if (els.volLabel) {
       els.volLabel.textContent = Math.round(previewVolume * 100) + '%'
     }
+    if (els.volIco) els.volIco.innerHTML = icon(previewVolume <= 0 ? 'volX' : 'vol', 14)
     syncPlayerProgress()
   }
 
@@ -734,115 +892,381 @@
     if (isLoading) setLine(message || t('loading'))
   }
 
+  function isBusy(dl) {
+    return !!dl && (dl.phase === 'downloading' || dl.phase === 'installing' || dl.phase === 'queued')
+  }
+
+  function fmtNum(n) {
+    n = Number(n) || 0
+    try {
+      return n.toLocaleString(uiLang === 'en' ? 'en-US' : 'ru-RU')
+    } catch (e) {
+      return String(n)
+    }
+  }
+
+  function fmtShort(n) {
+    n = Number(n) || 0
+    if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M'
+    if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'K'
+    return String(n)
+  }
+
+  function fmtLength(sec) {
+    sec = Math.max(0, Math.round(Number(sec) || 0))
+    var m = Math.floor(sec / 60)
+    var s = sec % 60
+    return m + ':' + (s < 10 ? '0' : '') + s
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return ''
+    var d = new Date(iso)
+    if (isNaN(d.getTime())) return ''
+    try {
+      return d.toLocaleDateString(uiLang === 'en' ? 'en-US' : 'ru-RU', { year: 'numeric', month: 'short', day: 'numeric' })
+    } catch (e) {
+      return d.toISOString().slice(0, 10)
+    }
+  }
+
+  function statusLabel(st) {
+    var key = 'status_' + String(st || '').toLowerCase()
+    var v = t(key)
+    return v === key ? String(st || '') : v
+  }
+
+  function findSet(id) {
+    for (var i = 0; i < sets.length; i++) if (sets[i].id === id) return sets[i]
+    return detail.set && detail.set.id === id ? detail.set : null
+  }
+
+  function visibleBeatmaps(s) {
+    var all = s.beatmaps || []
+    var matching = all.filter(function (b) {
+      return mode === 'any' || normalizeOsuMode(b.mode) === mode
+    })
+    return matching.length ? matching : all
+  }
+
+  /** Download / installed / progress control shared by cards and the detail view. */
+  function downloadControlHtml(s, big) {
+    var cls = big ? ' mg-btn-lg' : ''
+    if (localIds.has(s.id)) {
+      return '<button type="button" class="mg-btn mg-owned' + cls + '" disabled>' + icon('check') + esc(t('installed')) + '</button>'
+    }
+    var dl = downloads[s.id]
+    if (isBusy(dl)) {
+      var pct = dl.progress != null ? Math.round(dl.progress) : 0
+      var label = dl.phase === 'queued' ? t('queued') : dl.phase === 'installing' ? t('installing') : pct + '%'
+      return (
+        '<button type="button" class="mg-btn mg-busy' + cls + '" data-cancel="' + s.id + '" title="' + esc(t('cancel')) + '">' +
+        '<span class="mg-busy-fill" style="width:' + pct + '%"></span><span class="mg-busy-label">' + icon('x', 13) + esc(label) + '</span></button>'
+      )
+    }
+    var failed = dl && dl.phase === 'error'
+    var title = failed && dl.error ? dl.error : s.hasVideo ? t(prefersNoVideo ? 'dlDefaultNoVideo' : 'dlDefaultVideo') : ''
+    return (
+      '<button type="button" class="mg-btn mg-primary' + cls + '" data-dl="' + s.id + '"' +
+      (title ? ' title="' + esc(title) + '"' : '') + '>' +
+      (failed ? icon('refresh', 13) + esc(t('retry')) : icon('download', 14) + esc(t('download'))) + '</button>'
+    )
+  }
+
+  /** Alternative to the profile default: "without video" (or "with video" if the profile says no video). */
+  function altVideoButtonHtml(s, big) {
+    if (!s.hasVideo || localIds.has(s.id) || isBusy(downloads[s.id])) return ''
+    var alt = !prefersNoVideo
+    return (
+      '<button type="button" class="mg-btn' + (big ? ' mg-btn-lg' : ' mg-icon-btn') + '" data-dl="' + s.id + '" data-novideo="' + (alt ? '1' : '0') + '" title="' +
+      esc(t(alt ? 'dlNoVideoTitle' : 'dlWithVideoTitle')) + '">' +
+      icon(alt ? 'videoOff' : 'video', 14) + (big ? esc(t(alt ? 'noVideo' : 'withVideo')) : '') + '</button>'
+    )
+  }
+
+  function cardHtml(s) {
+    var sc = statusClass(s.status)
+    var cover = s.listCoverUrl || s.coverUrl || ''
+    var bg = s.cardCoverUrl || s.coverUrl || ''
+    var playing = previewId === s.id && !previewPaused
+    var bms = visibleBeatmaps(s)
+    var icons = bms.slice(0, 14).map(function (b) {
+      return diffIconHtml(b.mode, b.stars || 0, 14, esc(b.version + ' · ' + (b.stars || 0).toFixed(2) + '★'))
+    }).join('')
+    if (bms.length > 14) icons += '<span class="mg-diff-more">+' + (bms.length - 14) + '</span>'
+    var dl = downloads[s.id]
+    var pct = isBusy(dl) && dl.progress != null ? Math.round(dl.progress) : 0
+    return (
+      '<div class="mg-card ' + sc + '" data-set="' + s.id + '">' +
+      (bg ? '<div class="mg-card-bg" style="background-image:url(&quot;' + esc(bg) + '&quot;)"></div>' : '') +
+      '<button type="button" class="mg-card-thumb' + (playing ? ' -playing' : '') + '" data-preview="' + s.id + '" title="' + esc(playing ? t('pause') : t('listen')) + '">' +
+      (cover ? '<img src="' + esc(cover) + '" alt="" loading="lazy" decoding="async" draggable="false" />' : '') +
+      '<span class="mg-thumb-play">' + icon(playing ? 'pause' : 'play', 22) + '</span></button>' +
+      '<div class="mg-card-body" data-open="' + s.id + '">' +
+      '<div class="mg-card-title">' + esc(s.title) + '</div>' +
+      '<div class="mg-card-artist">' + esc(s.artist) + '</div>' +
+      '<div class="mg-card-mapper">' + esc(t('mappedBy')) + ' <b>' + esc(s.creator) + '</b></div>' +
+      '<div class="mg-card-foot">' +
+      '<span class="mg-badge ' + sc + '">' + esc(statusLabel(s.status)) + '</span>' +
+      '<span class="mg-stat" title="' + esc(t('favourites')) + '">' + icon('heart', 11) + fmtShort(s.favouriteCount) + '</span>' +
+      '<span class="mg-stat" title="' + esc(t('plays')) + '">' + icon('plays', 11) + fmtShort(s.playCount) + '</span>' +
+      '<span class="mg-diff-icons">' + icons + '</span>' +
+      '</div></div>' +
+      '<div class="mg-card-actions" data-actions="' + s.id + '">' +
+      '<div class="mg-card-actions-row" data-alt-row="1">' +
+      '<button type="button" class="mg-btn mg-icon-btn" data-gp="' + s.id + '" title="' + esc(t('previewMapBtn')) + '"' +
+      ((s.beatmaps || []).length ? '' : ' disabled') + '>' + icon('eye', 15) + '</button>' +
+      altVideoButtonHtml(s, false) +
+      '</div>' +
+      downloadControlHtml(s, false) +
+      '</div>' +
+      '<div class="mg-card-progress" style="width:' + pct + '%"></div>' +
+      '</div>'
+    )
+  }
+
+  var cardEls = new Map()
+
   function renderList() {
     if (!els.list) return
+    cardEls.clear()
     if (!sets.length) {
       els.list.innerHTML =
         '<div class="mg-empty">' +
         (loading
           ? '<div class="mg-spinner"></div><div class="mg-empty-text">' + esc(t('loading')) + '</div>'
-          : loggedIn
-            ? esc(t('emptyNoResults'))
-            : esc(t('emptyLoginPrompt'))) +
+          : esc(loggedIn ? t('emptyNoResults') : t('emptyLoginPrompt'))) +
         '</div>'
       if (els.more) els.more.hidden = true
       return
     }
-
-    var banner = loading
-      ? '<div class="mg-loading-banner"><span class="mg-spinner"></span><span>' + esc(t('updatingList')) + '</span></div>'
-      : ''
-
     els.list.innerHTML =
-      banner +
-      sets
-        .map(function (s) {
-          var owned = localIds.has(s.id)
-          var dl = downloads[s.id]
-          var busy =
-            dl &&
-            (dl.phase === 'downloading' || dl.phase === 'installing' || dl.phase === 'queued')
-          var pct = dl && dl.progress != null ? Math.round(dl.progress) : 0
-          var cover = s.listCoverUrl || s.coverUrl || ''
-          var sc = statusClass(s.status)
-          var btn
-          if (owned) {
-            btn = '<button type="button" class="mg-btn mg-owned" disabled>' + esc(t('installed')) + '</button>'
-          } else if (busy) {
-            btn =
-              '<button type="button" class="mg-btn mg-busy" data-cancel="' +
-              s.id +
-              '">✕ ' +
-              pct +
-              '%</button>'
-          } else {
-            btn =
-              '<button type="button" class="mg-btn mg-primary" data-dl="' +
-              s.id +
-              '">' + esc(t('download')) + '</button>'
-          }
-          var playing = previewId === s.id && !previewPaused
-          var previewBtn =
-            '<button type="button" class="mg-btn mg-preview' +
-            (playing ? ' -playing' : '') +
-            '" data-preview="' +
-            s.id +
-            '" title="' +
-            (playing ? esc(t('pause')) : esc(t('listen'))) +
-            '">' +
-            (playing ? '❚❚' : '▶') +
-            '</button>'
-          var hasBm = s.beatmaps && s.beatmaps.length
-          var gpBtn =
-            '<button type="button" class="mg-btn mg-gp" data-gp="' +
-            s.id +
-            '" title="' + esc(t('previewMapBtn')) + '" ' +
-            (hasBm ? '' : 'disabled') +
-            '>◎</button>'
-          var matchingBm = (s.beatmaps || []).filter(function (b) {
-            return mode === 'any' || normalizeOsuMode(b.mode) === mode
-          })
-          var bmsToDisplay = matchingBm.length > 0 ? matchingBm : (s.beatmaps || [])
-          var totalCount = s.beatmaps && s.beatmaps.length ? s.beatmaps.length : (s.modes && s.modes.length ? s.modes.length : 1)
-          var countLabel = pluralizeDiffs(matchingBm.length > 0 && mode !== 'any' ? matchingBm.length : totalCount)
-          var diffIconsHtml = bmsToDisplay.slice(0, 16).map(function (b) {
-            return diffIconHtml(b.mode, b.stars || 0, 13, esc(b.version + ' (' + (b.stars || 0).toFixed(2) + '★)'))
-          }).join('')
-          if (bmsToDisplay.length > 16) {
-            diffIconsHtml += '<span class="mg-diff-more">+' + (bmsToDisplay.length - 16) + '</span>'
-          }
-
-          return (
-            '<div class="mg-row ' +
-            sc +
-            '">' +
-            (cover
-              ? '<img class="mg-cover" src="' + cover + '" alt="" loading="lazy" draggable="false" />'
-              : '<div class="mg-cover"></div>') +
-            '<div class="mg-meta"><div class="mg-title">' +
-            esc(s.artist + ' — ' + s.title) +
-            '</div><div class="mg-sub">' +
-            esc(s.creator) +
-            ' · <span class="mg-diff-count">' +
-            countLabel +
-            '</span> · <span class="mg-badge ' +
-            sc +
-            '">' +
-            esc(s.status) +
-            '</span></div>' +
-            (diffIconsHtml ? '<div class="mg-diff-icons-row" title="' + countLabel + '">' + diffIconsHtml + '</div>' : '') +
-            '</div>' +
-            '<div class="mg-actions">' +
-            previewBtn +
-            gpBtn +
-            btn +
-            '</div></div>'
-          )
-        })
-        .join('')
-
+      (loading
+        ? '<div class="mg-loading-banner"><span class="mg-spinner"></span><span>' + esc(t('updatingList')) + '</span></div>'
+        : '') +
+      '<div class="mg-grid">' + sets.map(cardHtml).join('') + '</div>'
+    var nodes = els.list.querySelectorAll('[data-set]')
+    for (var i = 0; i < nodes.length; i++) cardEls.set(Number(nodes[i].getAttribute('data-set')), nodes[i])
     if (els.more) els.more.hidden = !hasMore || loading
-    if (els.list) els.list.classList.toggle('-loading', !!loading)
+    els.list.classList.toggle('-loading', !!loading)
+  }
+
+  /** Update one set's controls in place (progress ticks, preview state) without rebuilding the list. */
+  function patchSet(id) {
+    var s = findSet(id)
+    if (!s) return
+    var card = cardEls.get(id)
+    if (card && card.isConnected) {
+      var actions = card.querySelector('[data-actions]')
+      var dlBtn = actions && actions.lastElementChild
+      if (dlBtn) dlBtn.outerHTML = downloadControlHtml(s, false)
+      var altRow = actions && actions.querySelector('[data-alt-row]')
+      if (altRow) {
+        var oldAlt = altRow.querySelector('[data-novideo]')
+        if (oldAlt) oldAlt.remove()
+        altRow.insertAdjacentHTML('beforeend', altVideoButtonHtml(s, false))
+      }
+      var dl = downloads[id]
+      var bar = card.querySelector('.mg-card-progress')
+      if (bar) bar.style.width = (isBusy(dl) && dl.progress != null ? Math.round(dl.progress) : 0) + '%'
+      var thumb = card.querySelector('.mg-card-thumb')
+      if (thumb) {
+        var playing = previewId === id && !previewPaused
+        thumb.classList.toggle('-playing', playing)
+        thumb.title = playing ? t('pause') : t('listen')
+        var ico = thumb.querySelector('.mg-thumb-play')
+        if (ico) ico.innerHTML = icon(playing ? 'pause' : 'play', 22)
+      }
+    }
+    if (detail.set && detail.set.id === id) patchDetailActions()
+  }
+
+  function syncPreviewMarks(prevId) {
+    if (prevId && prevId !== previewId) patchSet(prevId)
+    if (previewId) patchSet(previewId)
+  }
+
+  // --- Beatmap detail view (osu! website / lazer overlay style) ---
+
+  var detail = { set: null, beatmapId: 0 }
+
+  function openDetail(id) {
+    var s = findSet(id)
+    if (!s || !els.detail) return
+    detail.set = s
+    var bms = visibleBeatmaps(s)
+    var pick = bms.length ? bms[bms.length - 1] : null
+    detail.beatmapId = pick ? pick.id : 0
+    closeMenus()
+    renderDetail()
+    els.detail.hidden = false
+    if (els.detailScroll) els.detailScroll.scrollTop = 0
+  }
+
+  function closeDetail() {
+    detail.set = null
+    detail.beatmapId = 0
+    if (els.detail) {
+      els.detail.hidden = true
+      els.detail.innerHTML = ''
+    }
+    els.detailScroll = null
+  }
+
+  function attrBar(label, value, max, accent) {
+    var v = Number(value) || 0
+    var pct = Math.max(0, Math.min(100, (v / max) * 100))
+    return (
+      '<div class="mg-attr"><span class="mg-attr-k">' + esc(label) + '</span>' +
+      '<span class="mg-attr-track"><span class="mg-attr-fill" style="width:' + pct.toFixed(1) + '%' + (accent ? ';background:' + accent : '') + '"></span></span>' +
+      '<span class="mg-attr-v">' + (Math.round(v * 100) / 100) + '</span></div>'
+    )
+  }
+
+  function infoRow(label, value) {
+    if (value == null || value === '') return ''
+    return '<div class="mg-info-row"><span class="mg-info-k">' + esc(label) + '</span><span class="mg-info-v">' + value + '</span></div>'
+  }
+
+  function detailActionsHtml(s) {
+    var playing = previewId === s.id && !previewPaused
+    return (
+      '<button type="button" class="mg-btn mg-btn-lg' + (playing ? ' -active' : '') + '" data-preview="' + s.id + '">' +
+      (playing ? icon('pause') + esc(t('pause')) : icon('play') + esc(t('listen'))) + '</button>' +
+      '<button type="button" class="mg-btn mg-btn-lg" data-gp="' + s.id + '" data-gp-beatmap="' + detail.beatmapId + '"' +
+      ((s.beatmaps || []).length ? '' : ' disabled') + '>' + icon('eye') + esc(t('previewMapBtn')) + '</button>' +
+      downloadControlHtml(s, true) +
+      altVideoButtonHtml(s, true)
+    )
+  }
+
+  function patchDetailActions() {
+    if (!els.detail || !detail.set) return
+    var box = els.detail.querySelector('[data-detail-actions]')
+    if (box) box.innerHTML = detailActionsHtml(detail.set)
+  }
+
+  function renderDetail() {
+    var s = detail.set
+    if (!s || !els.detail) return
+    var sc = statusClass(s.status)
+    var bms = s.beatmaps || []
+    var bm = bms.find(function (b) { return b.id === detail.beatmapId }) || bms[bms.length - 1] || null
+    var hero = s.headerCoverUrl || s.cardCoverUrl || s.coverUrl || ''
+    var m = bm ? normalizeOsuMode(bm.mode) : 'osu'
+    var starColor = bm ? getDiffColour(bm.stars || 0) : '#aaa'
+
+    var picker = bms.map(function (b) {
+      return (
+        '<button type="button" class="mg-diff-pick' + (bm && b.id === bm.id ? ' -on' : '') + '" data-diff-select="' + b.id + '" title="' +
+        esc(b.version + ' · ' + (b.stars || 0).toFixed(2) + '★') + '">' + diffIconHtml(b.mode, b.stars || 0, 22, '') + '</button>'
+      )
+    }).join('')
+
+    var tags = String(s.tags || '').split(/\s+/).filter(Boolean).slice(0, 40)
+    var tagsHtml = tags.map(function (tag) {
+      return '<button type="button" class="mg-tag" data-search="' + esc(tag) + '">' + esc(tag) + '</button>'
+    }).join('')
+
+    var passRate = bm && bm.playCount ? Math.round(((bm.passCount || 0) / bm.playCount) * 1000) / 10 : null
+    var attrs = ''
+    if (bm) {
+      attrs +=
+        (m === 'mania' ? attrBar(t('keys'), bm.cs, 10) : attrBar(t('attrCs'), bm.cs, 10)) +
+        attrBar(t('attrHp'), bm.hp, 10) +
+        attrBar(t('attrOd'), bm.od, 10) +
+        (m === 'osu' || m === 'fruits' ? attrBar(t('attrAr'), bm.ar, 10) : '') +
+        attrBar(t('stars'), bm.stars, 10, starColor)
+    }
+
+    els.detail.innerHTML =
+      '<div class="mg-detail-scroll" id="mg-detail-scroll">' +
+      '<div class="mg-hero">' +
+      (hero ? '<div class="mg-hero-bg" style="background-image:url(&quot;' + esc(hero) + '&quot;)"></div>' : '') +
+      '<div class="mg-hero-shade"></div>' +
+      '<div class="mg-hero-inner">' +
+      '<div class="mg-hero-top">' +
+      '<button type="button" class="mg-btn mg-back" data-detail-back="1">' + icon('prev') + esc(t('back')) + '</button>' +
+      '<span class="mg-badge ' + sc + '">' + esc(statusLabel(s.status)) + '</span>' +
+      (s.hasVideo ? '<span class="mg-flag">' + esc(t('video')) + '</span>' : '') +
+      (s.hasStoryboard ? '<span class="mg-flag">' + esc(t('storyboard')) + '</span>' : '') +
+      (s.nsfw ? '<span class="mg-flag -warn">NSFW</span>' : '') +
+      '</div>' +
+      '<div class="mg-diff-picker">' + picker + '</div>' +
+      (bm
+        ? '<div class="mg-hero-diff"><span class="mg-hero-diffname">' + esc(bm.version) + '</span>' +
+          '<span class="mg-star-pill" style="background:' + starColor + '">★ ' + (bm.stars || 0).toFixed(2) + '</span></div>'
+        : '') +
+      '<div class="mg-hero-title">' + esc(s.title) + '</div>' +
+      '<div class="mg-hero-artist">' + esc(s.artist) + '</div>' +
+      '<div class="mg-hero-mapper">' + esc(t('mappedBy')) + ' <button type="button" class="mg-link" data-search="' + esc(s.creator) + '">' + esc(s.creator) + '</button>' +
+      (s.submittedDate ? ' · ' + esc(t('submitted')) + ' ' + esc(fmtDate(s.submittedDate)) : '') +
+      (s.rankedDate ? ' · ' + esc(t('rankedOn')) + ' ' + esc(fmtDate(s.rankedDate)) : '') +
+      '</div>' +
+      '<div class="mg-hero-actions" data-detail-actions="1">' + detailActionsHtml(s) + '</div>' +
+      '</div></div>' +
+      '<div class="mg-detail-grid">' +
+      '<div class="mg-detail-col">' +
+      '<div class="mg-group">' +
+      '<div class="mg-group-head">' + esc(t('statsTitle')) + '</div>' +
+      '<div class="mg-stats-grid">' +
+      statTile('clock', t('length'), bm ? fmtLength(bm.totalLength) : '—') +
+      statTile('music', 'BPM', bm && bm.bpm ? String(Math.round(bm.bpm * 10) / 10) : s.bpm ? String(s.bpm) : '—') +
+      statTile('circle', t('circles'), bm ? fmtNum(bm.circles) : '—') +
+      statTile('slider', t('sliders'), bm ? fmtNum(bm.sliders) : '—') +
+      statTile('spinner', t('spinners'), bm ? fmtNum(bm.spinners) : '—') +
+      statTile('combo', t('maxCombo'), bm && bm.maxCombo ? fmtNum(bm.maxCombo) : '—') +
+      '</div></div>' +
+      '<div class="mg-group">' +
+      '<div class="mg-group-head">' + esc(t('infoTitle')) + '</div>' +
+      '<div class="mg-group-body">' +
+      infoRow(t('source'), s.source ? '<button type="button" class="mg-link" data-search="' + esc(s.source) + '">' + esc(s.source) + '</button>' : '') +
+      infoRow(t('difficulties'), esc(pluralizeDiffs(bms.length))) +
+      infoRow(t('updated'), esc(fmtDate(s.lastUpdated))) +
+      (tagsHtml ? '<div class="mg-info-row -col"><span class="mg-info-k">' + esc(t('tags')) + '</span><div class="mg-tags">' + tagsHtml + '</div></div>' : '') +
+      '</div></div>' +
+      '</div>' +
+      '<div class="mg-detail-col -side">' +
+      '<div class="mg-group">' +
+      '<div class="mg-group-body">' +
+      infoRow(t('plays'), fmtNum(bm && bm.playCount ? bm.playCount : s.playCount)) +
+      infoRow(t('favourites'), fmtNum(s.favouriteCount)) +
+      (passRate != null ? infoRow(t('passRate'), passRate + '%') : '') +
+      '</div></div>' +
+      (attrs ? '<div class="mg-group"><div class="mg-group-head">' + esc(t('attrsTitle')) + '</div><div class="mg-group-body">' + attrs + '</div></div>' : '') +
+      '</div>' +
+      '</div>' +
+      '</div>'
+    els.detailScroll = els.detail.querySelector('#mg-detail-scroll')
+  }
+
+  function statTile(iconName, label, value) {
+    return (
+      '<div class="mg-stat-tile"><span class="mg-stat-ico">' + icon(iconName, 14) + '</span>' +
+      '<span class="mg-stat-v">' + esc(value) + '</span><span class="mg-stat-k">' + esc(label) + '</span></div>'
+    )
+  }
+
+  function searchFor(text) {
+    if (!els.q) return
+    closeDetail()
+    els.q.value = String(text || '')
+    if (els.qClear) els.qClear.hidden = !els.q.value
+    clearTimeout(debounceTimer)
+    void search(false)
+  }
+
+  function onProgress(p) {
+    if (!p || !p.setId) return
+    var prev = downloads[p.setId]
+    downloads[p.setId] = p
+    var becameOwned = p.phase === 'done' && !localIds.has(p.setId)
+    if (p.phase === 'done') localIds.add(p.setId)
+    if (p.phase === 'error' && p.error && (!prev || prev.phase !== 'error')) setLine(friendlyError(p.error))
+    if (!visible) return
+    if (becameOwned || !prev || prev.phase !== p.phase || Math.round(prev.progress || 0) !== Math.round(p.progress || 0)) {
+      patchSet(p.setId)
+    }
   }
 
   async function loadConfig() {
@@ -885,6 +1309,7 @@
       if (a && typeof a.loggedIn === 'boolean') {
         loggedIn = a.loggedIn
         username = a.username || ''
+        prefersNoVideo = a.beatmapDownload === 'no_video'
         try {
           if (loggedIn) {
             localStorage.setItem(MAPS_AUTH_KEY, JSON.stringify({ loggedIn: loggedIn, username: username }))
@@ -965,7 +1390,7 @@
       setLine(sets.length ? t('cardsCount', { n: sets.length }) : t('emptyNoResults'))
     } catch (err) {
       if (seq !== searchSeq) return
-      setLine(err.message || t('errSearch'))
+      setLine(friendlyError(err) || t('errSearch'))
       if (!append && !sets.length) sets = []
     } finally {
       if (seq === searchSeq) {
@@ -1051,6 +1476,7 @@
   }
 
   function setLanguage(v) {
+    closeDetail()
     languageFilter = v || 'any'
     closeMenus()
     syncFilterUi()
@@ -1058,6 +1484,7 @@
   }
 
   function setStatus(v) {
+    closeDetail()
     statusFilter = v || 'ranked'
     closeMenus()
     syncFilterUi()
@@ -1065,6 +1492,7 @@
   }
 
   function setMode(v) {
+    closeDetail()
     mode = v || 'any'
     syncFilterUi()
     void search(false)
@@ -1273,17 +1701,23 @@
 
   function startGpLoop() {
     stopGpAnimation()
+    var lastDraw = 0
     function tick(now) {
       if (!gp.open || !gp.parsed) return
+      lastDraw = performance.now()
       drawGameplay(now)
       gp.raf = requestAnimationFrame(tick)
     }
     gp.raf = requestAnimationFrame(tick)
+    // Offscreen overlay windows can throttle rAF; draw from the timer only when frames stop arriving.
     gp.timer = setInterval(function () {
-      if (gp.open && gp.parsed) {
-        drawGameplay(performance.now())
+      if (!gp.open || !gp.parsed) return
+      var now = performance.now()
+      if (now - lastDraw > 40) {
+        lastDraw = now
+        drawGameplay(now)
       }
-    }, 16)
+    }, 20)
   }
 
   function closeGameplayPreview() {
@@ -1373,11 +1807,8 @@
     }
   }
 
-  async function openGameplayPreview(setId) {
-    console.log('[maps-gp] openGameplayPreview called for setId:', setId)
-    var set = sets.find(function (s) {
-      return s.id === setId
-    })
+  async function openGameplayPreview(setId, preferredBeatmapId) {
+    var set = findSet(setId)
     if (!set) {
       console.warn('[maps-gp] set not found for id:', setId)
       return
@@ -1389,6 +1820,10 @@
     }
     // Prefer osu!standard with valid ID
     var pick =
+      (preferredBeatmapId &&
+        bms.find(function (b) {
+          return b.id === preferredBeatmapId
+        })) ||
       bms.find(function (b) {
         return (b.mode === 'osu' || b.mode === '0') && b.id
       }) || bms.find(function (b) { return b.id }) || bms[0]
@@ -1556,7 +1991,7 @@
     } catch (err) {
       console.error('[maps-gp] loadGameplayDiff failed:', err)
       gp.loading = false
-      gp.error = err.message || t('errGeneric')
+      gp.error = friendlyError(err)
       if (els.gpSub) els.gpSub.textContent = gp.error
     }
   }
@@ -1641,6 +2076,7 @@
     syncPlayerUi()
     syncMuteBtnUi()
     renderList()
+    if (detail.set) renderDetail()
   }
 
   function bindUi() {
@@ -1674,7 +2110,11 @@
       void (async function () {
         if (!apiOk && !(await checkApi())) return
         setLine(t('loginWindow'))
-        await api('/api/maps/login', { method: 'POST', body: '{}' })
+        try {
+          await api('/api/maps/login', { method: 'POST', body: '{}', timeout: 0 })
+        } catch (err) {
+          setLine(friendlyError(err))
+        }
         await refreshAuth()
         if (loggedIn) {
           await refreshLocal()
@@ -1783,6 +2223,10 @@
     els.list.addEventListener('click', function (e) {
       handleListAction(e)
     })
+    if (els.detail) {
+      els.detail.addEventListener('pointerup', handleListAction)
+      els.detail.addEventListener('click', handleListAction)
+    }
 
     // Mini-player
     if (els.playerPrev) {
@@ -1868,10 +2312,7 @@
       var es = new EventSource(API + '/api/maps/progress')
       es.onmessage = function (ev) {
         try {
-          var p = JSON.parse(ev.data)
-          downloads[p.setId] = p
-          if (p.phase === 'done') localIds.add(p.setId)
-          if (visible) renderList()
+          onProgress(JSON.parse(ev.data))
         } catch (e) {
           /* ignore */
         }
@@ -1882,83 +2323,105 @@
   }
 
   var lastListActionAt = 0
+  function attrOf(target, name) {
+    var node = target.closest ? target.closest('[' + name + ']') : null
+    return node ? node.getAttribute(name) : null
+  }
+
+  /** Delegated handler for the card grid and the detail view (pointerup + click, de-duplicated). */
   function handleListAction(e) {
-    var t = e.target
-    if (!(t instanceof Element)) return
+    var tgt = e.target
+    if (!(tgt instanceof Element)) return
     var now = Date.now()
     if (now - lastListActionAt < 60) {
       e.preventDefault()
       return
     }
-
-    var previewBtn = t.closest ? t.closest('[data-preview]') : null
-    var previewAttr =
-      (previewBtn && previewBtn.getAttribute('data-preview')) || t.getAttribute('data-preview')
-    if (previewAttr) {
+    var hit = function () {
       lastListActionAt = now
       e.preventDefault()
       e.stopPropagation()
+    }
+
+    if (attrOf(tgt, 'data-detail-back')) {
+      hit()
+      closeDetail()
+      return
+    }
+
+    var diffSel = attrOf(tgt, 'data-diff-select')
+    if (diffSel) {
+      hit()
+      detail.beatmapId = Number(diffSel)
+      renderDetail()
+      return
+    }
+
+    var searchText = attrOf(tgt, 'data-search')
+    if (searchText) {
+      hit()
+      searchFor(searchText)
+      return
+    }
+
+    var previewAttr = attrOf(tgt, 'data-preview')
+    if (previewAttr) {
+      hit()
       togglePreview(Number(previewAttr))
       return
     }
 
-    var gpBtn = t.closest ? t.closest('[data-gp]') : null
-    var gpAttr = (gpBtn && gpBtn.getAttribute('data-gp')) || t.getAttribute('data-gp')
+    var gpAttr = attrOf(tgt, 'data-gp')
     if (gpAttr) {
-      lastListActionAt = now
-      e.preventDefault()
-      e.stopPropagation()
-      void openGameplayPreview(Number(gpAttr))
+      hit()
+      void openGameplayPreview(Number(gpAttr), Number(attrOf(tgt, 'data-gp-beatmap')) || 0)
       return
     }
 
-    var cancelBtn = t.closest ? t.closest('[data-cancel]') : null
-    var cancelId =
-      (cancelBtn && cancelBtn.getAttribute('data-cancel')) || t.getAttribute('data-cancel')
+    var cancelId = attrOf(tgt, 'data-cancel')
     if (cancelId) {
-      lastListActionAt = now
-      e.preventDefault()
+      hit()
       void api('/api/maps/cancel', {
         method: 'POST',
         body: JSON.stringify({ setId: Number(cancelId) }),
+      }).catch(function (err) {
+        setLine(friendlyError(err))
       })
       return
     }
 
-    var dlBtn = t.closest ? t.closest('[data-dl]') : null
-    var dlId = (dlBtn && dlBtn.getAttribute('data-dl')) || t.getAttribute('data-dl')
+    var dlId = attrOf(tgt, 'data-dl')
     if (dlId) {
-      lastListActionAt = now
-      e.preventDefault()
-      e.stopPropagation()
-      var id = Number(dlId)
-      var set = sets.find(function (s) {
-        return s.id === id
-      })
-      if (!set) return
-      downloads[id] = { setId: id, phase: 'queued', progress: 0 }
-      renderList()
-      void api('/api/maps/download', {
-        method: 'POST',
-        body: JSON.stringify({ setId: id, artist: set.artist, title: set.title }),
-      })
-        .then(function (r) {
-          if (r.cancelled) downloads[id] = { setId: id, phase: 'cancelled', progress: 0 }
-          else if (r.ok) {
-            downloads[id] = { setId: id, phase: 'done', progress: 100 }
-            localIds.add(id)
-          } else {
-            downloads[id] = { setId: id, phase: 'error', progress: 0 }
-            setLine(r.error || 'Ошибка')
-          }
-          renderList()
-        })
-        .catch(function (err) {
-          downloads[id] = { setId: id, phase: 'error', progress: 0 }
-          setLine(err.message || 'Ошибка')
-          renderList()
-        })
+      hit()
+      var nv = attrOf(tgt, 'data-novideo')
+      startDownload(Number(dlId), nv == null ? undefined : nv === '1')
+      return
     }
+
+    var openId = attrOf(tgt, 'data-open')
+    if (openId) {
+      hit()
+      openDetail(Number(openId))
+    }
+  }
+
+  function startDownload(id, noVideo) {
+    var set = findSet(id)
+    if (!set || isBusy(downloads[id])) return
+    onProgress({ setId: id, phase: 'queued', progress: 0 })
+    // No client timeout: the server streams progress over SSE and answers when the file is in Songs.
+    void api('/api/maps/download', {
+      method: 'POST',
+      timeout: 0,
+      body: JSON.stringify({ setId: id, artist: set.artist, title: set.title, noVideo: noVideo }),
+    })
+      .then(function (r) {
+        if (r.cancelled) onProgress({ setId: id, phase: 'cancelled', progress: 0 })
+        else if (r.ok) onProgress({ setId: id, phase: 'done', progress: 100 })
+      })
+      .catch(function (err) {
+        onProgress({ setId: id, phase: 'error', progress: 0, error: friendlyError(err) })
+      })
   }
 
   function chip(kind, value, label, on) {
@@ -1996,10 +2459,7 @@
     if (mounted) return
     mounted = true
 
-    var style = document.createElement('style')
-    style.id = 'tosu-gui-maps-style'
-    style.textContent = CSS_TEXT
-    document.documentElement.appendChild(style)
+    applyStyles()
 
     rootEl = document.createElement('div')
     rootEl.id = ROOT_ID
@@ -2007,29 +2467,32 @@
       '<div class="mg-shade" data-mg-close="1"></div>' +
       '<div class="mg-panel" role="dialog">' +
       '<header class="mg-top">' +
+      '<div class="mg-brand">' +
       '<div class="mg-top-title" id="mg-top-title">' + esc(t('title')) + '</div>' +
-      '<div class="mg-top-spacer"></div>' +
-      '<button type="button" class="mg-btn mg-ui-lang-btn" id="mg-ui-lang-btn" title="Сменить язык / Switch language">' + uiLang.toUpperCase() + '</button>' +
-      '<span class="mg-auth" id="mg-auth">…</span>' +
-      '<button type="button" class="mg-btn mg-primary mg-login-btn" id="mg-login" hidden>' + esc(t('login')) + '</button>' +
-      '<button type="button" class="mg-x" id="mg-close" title="' + esc(t('close')) + '" aria-label="' + esc(t('close')) + '">×</button>' +
-      '</header>' +
       '<p class="mg-hint" id="mg-hint"></p>' +
+      '</div>' +
+      '<div class="mg-top-spacer"></div>' +
+      '<span class="mg-auth" id="mg-auth">…</span>' +
+      '<button type="button" class="mg-btn mg-primary" id="mg-login" hidden>' + esc(t('login')) + '</button>' +
+      '<button type="button" class="mg-btn" id="mg-ui-lang-btn" title="Сменить язык / Switch language">' + uiLang.toUpperCase() + '</button>' +
+      '<button type="button" class="mg-x" id="mg-close" title="' + esc(t('close')) + '" aria-label="' + esc(t('close')) + '">' + icon('x', 16) + '</button>' +
+      '</header>' +
+      '<div class="mg-filters">' +
       '<div class="mg-toolbar">' +
       '<div class="mg-search-wrap">' +
+      '<span class="mg-search-ico">' + icon('search', 15) + '</span>' +
       '<input class="mg-input" id="mg-q" type="search" placeholder="' + esc(t('searchPlaceholder')) + '" autocomplete="off" spellcheck="false" />' +
-      '<button type="button" class="mg-q-clear" id="mg-q-clear" title="' + esc(t('clearSearch')) + '" aria-label="' + esc(t('clearSearch')) + '" hidden>×</button>' +
+      '<button type="button" class="mg-q-clear" id="mg-q-clear" title="' + esc(t('clearSearch')) + '" aria-label="' + esc(t('clearSearch')) + '" hidden>' + icon('x', 13) + '</button>' +
       '</div>' +
       '<div class="mg-dd" id="mg-lang-wrap">' +
       '<button type="button" class="mg-dd-btn" id="mg-lang-btn" title="' + esc(t('anyLang')) + '">' + esc(langLabel()) + '</button>' +
-      '<div class="mg-dd-menu" id="mg-lang-menu" hidden>' +
-      menuItems(getLangOptions(), 'data-lang') +
-      '</div></div>' +
-      '<button type="button" class="mg-btn mg-refresh" id="mg-refresh" title="' + esc(t('refresh')) + '">↻</button>' +
+      '<div class="mg-dd-menu" id="mg-lang-menu" hidden>' + menuItems(getLangOptions(), 'data-lang') + '</div>' +
       '</div>' +
-      '<div class="mg-label" id="mg-lbl-status">' + esc(t('statusLabel')) + '</div>' +
-      '<div class="mg-status-row">' +
-      '<div class="mg-chips mg-chips-inline" id="mg-statuses">' +
+      '<button type="button" class="mg-btn mg-icon-btn mg-refresh" id="mg-refresh" title="' + esc(t('refresh')) + '">' + icon('refresh', 15) + '</button>' +
+      '</div>' +
+      '<div class="mg-filter-row">' +
+      '<span class="mg-label" id="mg-lbl-status">' + esc(t('statusLabel')) + '</span>' +
+      '<div class="mg-seg" id="mg-statuses">' +
       chip('status', 'ranked', 'Ranked', true) +
       chip('status', 'qualified', 'Qualified', false) +
       chip('status', 'loved', 'Loved', false) +
@@ -2037,22 +2500,26 @@
       '</div>' +
       '<div class="mg-dd" id="mg-more-wrap">' +
       '<button type="button" class="mg-dd-btn mg-dd-btn-sm" id="mg-more-btn" title="' + esc(t('statusMore')) + '">' + esc(moreStatusLabel()) + '</button>' +
-      '<div class="mg-dd-menu" id="mg-more-menu" hidden>' +
-      menuItems(getMoreStatusOptions(), 'data-more-status') +
-      '</div></div>' +
+      '<div class="mg-dd-menu" id="mg-more-menu" hidden>' + menuItems(getMoreStatusOptions(), 'data-more-status') + '</div>' +
       '</div>' +
-      '<div class="mg-label" id="mg-lbl-mode">' + esc(t('modeLabel')) + '</div>' +
-      '<div class="mg-chips" id="mg-modes">' +
+      '<span class="mg-filter-gap"></span>' +
+      '<span class="mg-label" id="mg-lbl-mode">' + esc(t('modeLabel')) + '</span>' +
+      '<div class="mg-seg" id="mg-modes">' +
       chip('mode', 'any', t('modeAll'), true) +
       chip('mode', 'osu', 'osu!', false) +
       chip('mode', 'taiko', 'Taiko', false) +
       chip('mode', 'fruits', 'Catch', false) +
       chip('mode', 'mania', 'Mania', false) +
       '</div>' +
+      '</div>' +
+      '</div>' +
+      '<div class="mg-content">' +
       '<div class="mg-list" id="mg-list"></div>' +
+      '<div class="mg-detail" id="mg-detail" hidden></div>' +
+      '</div>' +
       '<div class="mg-footer">' +
-      '<button type="button" class="mg-btn" id="mg-more" hidden>' + esc(t('showMore')) + '</button>' +
       '<div class="mg-line" id="mg-line"></div>' +
+      '<button type="button" class="mg-btn" id="mg-more" hidden>' + esc(t('showMore')) + '</button>' +
       '</div>' +
       // Mini-player (osu website style)
       '<div class="mg-player" id="mg-player">' +
@@ -2064,17 +2531,17 @@
       '<div class="mg-player-sub" id="mg-player-sub">' + esc(t('selectBeatmap')) + '</div>' +
       '</div>' +
       '<div class="mg-player-controls">' +
-      '<button type="button" class="mg-pbtn" id="mg-player-prev" title="' + esc(t('prevTrack')) + '">⏮</button>' +
-      '<button type="button" class="mg-pbtn mg-pbtn-main" id="mg-player-play" title="' + esc(t('play')) + '">▶</button>' +
-      '<button type="button" class="mg-pbtn" id="mg-player-next" title="' + esc(t('nextTrack')) + '">⏭</button>' +
+      '<button type="button" class="mg-pbtn" id="mg-player-prev" title="' + esc(t('prevTrack')) + '">' + icon('prev', 16) + '</button>' +
+      '<button type="button" class="mg-pbtn mg-pbtn-main" id="mg-player-play" title="' + esc(t('play')) + '">' + icon('play', 15) + '</button>' +
+      '<button type="button" class="mg-pbtn" id="mg-player-next" title="' + esc(t('nextTrack')) + '">' + icon('next', 16) + '</button>' +
       '</div>' +
       '<div class="mg-player-vol" title="' + esc(t('volume')) + '">' +
-      '<span class="mg-vol-ico">♪</span>' +
+      '<span class="mg-vol-ico" id="mg-vol-ico">' + icon('vol', 14) + '</span>' +
       '<input type="range" class="mg-vol-range" id="mg-vol" min="0" max="100" value="55" />' +
       '<span class="mg-vol-label" id="mg-vol-label">55%</span>' +
       '</div>' +
       '<button type="button" class="mg-mute-btn' + (muteOsuOnPreview ? ' -on' : '') + '" id="mg-mute-osu" title="' + esc(t('muteOsuTitle')) + '" aria-pressed="' + (muteOsuOnPreview ? 'true' : 'false') + '">' +
-      '<span class="mg-mute-ico">' + (muteOsuOnPreview ? '🔇' : '🔈') + '</span>' +
+      '<span class="mg-mute-ico">' + icon(muteOsuOnPreview ? 'volX' : 'vol', 14) + '</span>' +
       '<span class="mg-mute-label">' + (muteOsuOnPreview ? esc(t('muteOsuOn')) : esc(t('muteOsuOff'))) + '</span>' +
       '</button>' +
       '</div></div>' +
@@ -2087,7 +2554,7 @@
       '<div class="mg-gp-title" id="mg-gp-title">' + esc(t('previewModalTitle')) + '</div>' +
       '<div class="mg-gp-sub" id="mg-gp-sub"></div>' +
       '</div>' +
-      '<button type="button" class="mg-x" id="mg-gp-close" title="' + esc(t('close')) + '">×</button>' +
+      '<button type="button" class="mg-x" id="mg-gp-close" title="' + esc(t('close')) + '">' + icon('x', 16) + '</button>' +
       '</div>' +
       '<div class="mg-gp-diffs" id="mg-gp-diffs"></div>' +
       '<canvas class="mg-gp-canvas" id="mg-gp-canvas" width="640" height="480"></canvas>' +
@@ -2117,6 +2584,8 @@
       moreBtn: rootEl.querySelector('#mg-more-btn'),
       moreMenu: rootEl.querySelector('#mg-more-menu'),
       list: rootEl.querySelector('#mg-list'),
+      detail: rootEl.querySelector('#mg-detail'),
+      detailScroll: null,
       more: rootEl.querySelector('#mg-more'),
       line: rootEl.querySelector('#mg-line'),
       refresh: rootEl.querySelector('#mg-refresh'),
@@ -2133,6 +2602,7 @@
       playerProgress: rootEl.querySelector('#mg-player-progress'),
       volRange: rootEl.querySelector('#mg-vol'),
       volLabel: rootEl.querySelector('#mg-vol-label'),
+      volIco: rootEl.querySelector('#mg-vol-ico'),
       muteBtn: rootEl.querySelector('#mg-mute-osu'),
       gpModal: rootEl.querySelector('#mg-gp-modal'),
       gpBackdrop: rootEl.querySelector('#mg-gp-backdrop'),
@@ -2145,7 +2615,6 @@
 
     if (els.volRange) els.volRange.value = String(Math.round(previewVolume * 100))
     if (els.volLabel) els.volLabel.textContent = Math.round(previewVolume * 100) + '%'
-    syncMuteBtnUi()
 
     els.shade.addEventListener('pointerup', function (e) {
       e.preventDefault()
@@ -2155,6 +2624,8 @@
       e.preventDefault()
       requestClose()
     })
+
+    if (global.__TOSU_MAPS_EMBEDDED) rootEl.classList.add('-embedded')
 
     bindUi()
     rootEl.style.setProperty('display', 'none', 'important')
@@ -2208,7 +2679,7 @@
         if (loggedIn && !didInitialSearch) {
           void search(false)
         } else if (loggedIn && sets.length) {
-          setLine(sets.length + ' карт')
+          setLine(t('cardsCount', { n: sets.length }))
         }
       }).catch(function () {})
 
@@ -2243,338 +2714,224 @@
     }
   }
 
-  var CSS_TEXT =
-    '@font-face{font-family:"SF Pro Text";src:url("http://127.0.0.1:24777/fonts/sf-pro-text_regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}' +
-    '@font-face{font-family:"SF Pro Text";src:url("http://127.0.0.1:24777/fonts/sf-pro-text_semibold.woff2") format("woff2");font-weight:600;font-style:normal;font-display:swap}' +
-    '@font-face{font-family:"SF Pro Display";src:url("http://127.0.0.1:24777/fonts/sf-pro-display_regular.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}' +
-    '@font-face{font-family:"SF Pro Display";src:url("http://127.0.0.1:24777/fonts/sf-pro-display_medium.woff2") format("woff2");font-weight:500;font-style:normal;font-display:swap}' +
-    '@font-face{font-family:"SF Pro Display";src:url("http://127.0.0.1:24777/fonts/sf-pro-display_semibold.woff2") format("woff2");font-weight:600;font-style:normal;font-display:swap}' +
-    '#' +
-    ROOT_ID +
-    ',#' +
-    ROOT_ID +
-    ' *{user-select:none;-webkit-user-select:none;font-family:"SF Pro Text",-apple-system,BlinkMacSystemFont,"Helvetica Neue","Segoe UI",sans-serif!important;-webkit-font-smoothing:antialiased!important;-moz-osx-font-smoothing:grayscale!important;text-rendering:optimizeLegibility!important}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-input,.mg-vol-range{user-select:text;-webkit-user-select:text}' +
-    '#' +
-    ROOT_ID +
-    '{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;display:none;align-items:stretch;justify-content:flex-end;padding:12px;box-sizing:border-box;font-size:13px;line-height:1.35;color:rgba(255,255,255,.92);pointer-events:auto}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-shade{position:absolute;inset:0;background:rgba(0,0,0,.65)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-panel{position:relative;z-index:1;width:min(640px,100%);height:100%;max-height:100%;min-height:0;display:flex;flex-direction:column;background:#1c1c1e;border:1px solid rgba(255,255,255,.14);border-radius:12px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.6)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-top{flex-shrink:0;display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:10px;padding:16px 16px 8px 18px;min-height:52px;box-sizing:border-box}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-top-title{font-family:"SF Pro Display","SF Pro Text",-apple-system,BlinkMacSystemFont,sans-serif!important;font-size:18px;font-weight:600;letter-spacing:-.02em;line-height:38px;height:38px;flex-shrink:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-top-spacer{flex:1;min-width:8px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-auth{font-size:13px;color:rgba(255,255,255,.58);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;line-height:38px;height:38px;flex-shrink:1}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-ui-lang-btn{height:38px;padding:0 12px;border:none;border-radius:10px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.92);font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-ui-lang-btn:hover{background:rgba(255,255,255,.18);color:#fff}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-login-btn{height:38px;flex-shrink:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-x{width:38px;height:38px;border:none;border-radius:10px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.92);padding:0;margin:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:22px;line-height:1;flex-shrink:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-x:hover{background:rgba(255,69,58,.25);color:#ff453a}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-hint{flex-shrink:0;padding:0 18px 10px;margin:0;font-size:12px;line-height:1.4;color:rgba(255,255,255,.42)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-toolbar{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 16px 10px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-search-wrap{position:relative;flex:1;min-width:0;display:flex;align-items:center}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-input{flex:1;min-width:0;width:100%;height:40px;padding:0 36px 0 12px;border-radius:8px;border:.5px solid rgba(255,255,255,.14);background:rgba(0,0,0,.35);color:rgba(255,255,255,.94);outline:none;font-size:15px;box-sizing:border-box}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;display:none}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-input:focus{border-color:#0a84ff;box-shadow:0 0 0 3px rgba(10,132,255,.22)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-q-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:none;border-radius:6px;background:transparent;color:rgba(255,255,255,.55);font-size:18px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;z-index:2}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-q-clear:hover{color:rgba(255,255,255,.95);background:rgba(255,255,255,.08)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-q-clear[hidden]{display:none!important}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-dd{position:relative;flex-shrink:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-dd-btn{height:40px;padding:0 12px;border-radius:8px;border:.5px solid rgba(255,255,255,.14);background:rgba(0,0,0,.35);color:rgba(255,255,255,.92);outline:none;font-size:13px;cursor:pointer;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-dd-btn-sm{height:32px;max-width:140px;font-size:12px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-dd-btn.-active,.mg-dd-btn.-open{border-color:rgba(10,132,255,.55);color:#fff}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-dd-menu{position:absolute;top:calc(100% + 4px);right:0;z-index:20;min-width:160px;max-height:240px;overflow:auto;padding:4px;border-radius:10px;background:#242428;border:1px solid rgba(255,255,255,.14);box-shadow:0 12px 32px rgba(0,0,0,.55)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-dd-item{display:block;width:100%;text-align:left;border:none;background:transparent;color:rgba(255,255,255,.88);padding:8px 10px;border-radius:6px;font-size:13px;cursor:pointer}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-dd-item:hover{background:rgba(255,255,255,.08)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-dd-item.-on{background:rgba(10,132,255,.28);color:#fff}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-status-row{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 16px 10px;min-width:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-refresh{width:40px;height:40px;padding:0;flex-shrink:0;font-size:20px;line-height:1;display:inline-flex;align-items:center;justify-content:center}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-label{flex-shrink:0;padding:0 16px 4px;font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:rgba(255,255,255,.38)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-chips{flex-shrink:0;display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 10px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-chips-inline{flex:1;min-width:0;padding:0;flex-wrap:wrap}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-chip{height:32px;padding:0 12px;border-radius:8px;border:none;background:rgba(255,255,255,.07);color:rgba(255,255,255,.58);cursor:pointer;font-size:13px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-chip.-on{background:rgba(10,132,255,.32);color:#fff}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-list{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;padding:0 12px 8px;position:relative}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-list.-loading{opacity:.72}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-loading-banner{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 12px;margin-bottom:8px;border-radius:10px;background:rgba(10,132,255,.16);border:1px solid rgba(10,132,255,.28);color:rgba(255,255,255,.88);font-size:13px;font-weight:500}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#0a84ff;border-radius:50%;animation:mg-spin .7s linear infinite;flex-shrink:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-refresh.-spin{animation:mg-spin .8s linear infinite;opacity:.85}' +
-    '@keyframes mg-spin{to{transform:rotate(360deg)}}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:48px 16px;text-align:center;color:rgba(255,255,255,.42);font-size:15px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;margin-bottom:6px;min-height:64px;background:rgba(255,255,255,.04);border-left:3px solid transparent}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-row.st-ranked{background:rgba(102,204,255,.08);border-left-color:#66ccff}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-row.st-loved{background:rgba(255,102,171,.1);border-left-color:#ff66ab}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-row.st-qualified{background:rgba(255,217,102,.1);border-left-color:#ffd966}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-row.st-pending{background:rgba(220,171,78,.08);border-left-color:#dcab4e}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-row.st-graveyard{background:rgba(255,255,255,.03);border-left-color:rgba(255,255,255,.2)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-row:hover{filter:brightness(1.06)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-cover{width:72px;height:50px;border-radius:7px;object-fit:cover;background:rgba(255,255,255,.06);flex-shrink:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-meta{flex:1;min-width:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-title{font-size:15px;font-weight:600;letter-spacing:-.015em;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-sub{margin-top:4px;font-size:12px;line-height:1.3;color:rgba(255,255,255,.52);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-badge{display:inline-block;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;vertical-align:middle}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-badge.st-ranked{color:#66ccff;background:rgba(102,204,255,.16)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-badge.st-loved{color:#ff66ab;background:rgba(255,102,171,.18)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-badge.st-qualified{color:#ffd966;background:rgba(255,217,102,.16)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-badge.st-pending{color:#dcab4e;background:rgba(220,171,78,.16)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-badge.st-graveyard,.mg-badge.st-other{color:rgba(255,255,255,.5);background:rgba(255,255,255,.08)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-diff-icons-row{display:flex;align-items:center;gap:3px;margin-top:4px;flex-wrap:wrap}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-diffico{display:inline-flex;align-items:center;justify-content:center;line-height:1;transition:transform .12s ease;cursor:default}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-diffico:hover{transform:scale(1.22)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-diff-count{color:rgba(255,255,255,.75);font-weight:500}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-diff-more{font-size:10px;color:rgba(255,255,255,.45);margin-left:2px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-actions{flex-shrink:0;display:flex;align-items:center;gap:5px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-btn{flex-shrink:0;height:34px;padding:0 12px;border-radius:8px;border:.5px solid rgba(255,255,255,.12);background:rgba(255,255,255,.09);color:rgba(255,255,255,.92);cursor:pointer;font-size:13px;white-space:nowrap}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-btn:disabled{opacity:.45;cursor:default}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-preview,.mg-gp{width:34px;min-width:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:12px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-preview.-playing{color:#0a84ff;border-color:rgba(10,132,255,.4);background:rgba(10,132,255,.16)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-gp{font-size:14px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-primary{background:#0a84ff;border-color:transparent;color:#fff}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-owned{color:#32d74b;border-color:rgba(50,215,75,.3)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-busy{color:#ff453a;border-color:rgba(255,69,58,.3);min-width:72px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-footer{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 16px 4px;border-top:1px solid rgba(255,255,255,.08)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-line{font-size:12px;color:rgba(255,255,255,.45);min-height:14px;text-align:center}' +
+  // Styles mirror the tosu GUI design tokens (src/styles/global.css) so the in-game panel matches the app.
+  var CSS_TEXT = [
+    '@font-face{font-family:"SF Pro Text";src:url("' + API + '/fonts/sf-pro-text_regular.woff2") format("woff2");font-weight:400;font-display:swap}',
+    '@font-face{font-family:"SF Pro Text";src:url("' + API + '/fonts/sf-pro-text_semibold.woff2") format("woff2");font-weight:600;font-display:swap}',
+    '@font-face{font-family:"SF Pro Display";src:url("' + API + '/fonts/sf-pro-display_regular.woff2") format("woff2");font-weight:400;font-display:swap}',
+    '@font-face{font-family:"SF Pro Display";src:url("' + API + '/fonts/sf-pro-display_medium.woff2") format("woff2");font-weight:500;font-display:swap}',
+    '@font-face{font-family:"SF Pro Display";src:url("' + API + '/fonts/sf-pro-display_semibold.woff2") format("woff2");font-weight:600;font-display:swap}',
+    '@font-face{font-family:"SF Pro Display";src:url("' + API + '/fonts/sf-pro-display_bold.woff2") format("woff2");font-weight:700;font-display:swap}',
+    '#R{--bg:#1e1e1e;--bar:#242424;--group:#2c2c2e;--group-hover:#363638;--input:rgba(0,0,0,.28);--fill:rgba(255,255,255,.09);--fill-strong:rgba(255,255,255,.14);--sep:rgba(255,255,255,.1);--hair:rgba(255,255,255,.12);--t1:rgba(255,255,255,.92);--t2:rgba(255,255,255,.58);--t3:rgba(255,255,255,.38);--accent:#0a84ff;--accent-hover:#409cff;--success:#32d74b;--danger:#ff453a;--r-group:10px;--r-ctl:7px}',
+    '#R,#R *{box-sizing:border-box;user-select:none;-webkit-user-select:none;font-family:"SF Pro Text",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;-webkit-font-smoothing:antialiased}',
+    '#R .mg-input{user-select:text;-webkit-user-select:text}',
+    '#R{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;display:none;align-items:center;justify-content:center;padding:28px;font-size:13px;line-height:1.35;color:var(--t1);pointer-events:auto}',
+    '#R button{font:inherit;color:inherit}',
+    '#R [hidden]{display:none!important}',
+    '#R ::-webkit-scrollbar{width:10px;height:10px}',
+    '#R ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:8px;border:3px solid transparent;background-clip:padding-box}',
+    '#R ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.24);background-clip:padding-box}',
+    '#R ::-webkit-scrollbar-track{background:transparent}',
+    '#R .mg-shade{position:absolute;inset:0;background:rgba(0,0,0,.62)}',
+    '#R .mg-panel{position:relative;z-index:1;width:min(1280px,100%);height:min(900px,100%);display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--hair);border-radius:12px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.6)}',
+    // Header
+    '#R .mg-top{flex-shrink:0;display:flex;align-items:center;gap:10px;min-height:68px;padding:12px 16px 12px 20px;background:var(--bar);border-bottom:1px solid var(--sep)}',
+    '#R .mg-ico{display:block;flex-shrink:0}',
+    '#R .mg-brand{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;flex:1}',
+    '#R .mg-top-title{font-family:"SF Pro Display","SF Pro Text",sans-serif!important;font-size:20px;font-weight:600;letter-spacing:-.02em;line-height:1.2}',
+    '#R .mg-hint{margin:0;font-size:12px;line-height:1.35;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '#R .mg-top-spacer{display:none}',
+    '#R .mg-auth{flex-shrink:0;font-size:13px;line-height:1.3;color:var(--t2);white-space:nowrap}',
+    '#R .mg-top .mg-btn{height:34px}',
+    '#R .mg-x{width:34px;height:34px;border:none;border-radius:8px;background:var(--fill);padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:20px;line-height:1;flex-shrink:0}',
+    '#R .mg-x:hover{background:rgba(255,69,58,.22);color:var(--danger)}',
+    // Filters
+    '#R .mg-filters{flex-shrink:0;padding:12px 20px 10px;border-bottom:1px solid var(--sep)}',
+    '#R .mg-toolbar{display:flex;align-items:center;gap:8px}',
+    '#R .mg-search-wrap{position:relative;flex:1;min-width:0;display:flex;align-items:center}',
+    '#R .mg-search-ico{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--t3);pointer-events:none}',
+    '#R .mg-input{width:100%;height:34px;padding:0 34px 0 32px;border-radius:var(--r-ctl);border:.5px solid #424244;background:var(--input);color:var(--t1);outline:none;font-size:14px}',
+    '#R .mg-input::-webkit-search-cancel-button{-webkit-appearance:none;display:none}',
+    '#R .mg-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(10,132,255,.28)}',
+    '#R .mg-q-clear{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:24px;height:24px;border:none;border-radius:6px;background:transparent;color:var(--t3);font-size:16px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}',
+    '#R .mg-q-clear:hover{color:var(--t1);background:var(--fill)}',
+    '#R .mg-q-clear[hidden]{display:none!important}',
+    '#R .mg-filter-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px}',
+    '#R .mg-filter-gap{width:10px}',
+    '#R .mg-label{font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--t3)}',
+    '#R .mg-seg{display:flex;gap:2px;padding:3px;background:rgba(0,0,0,.22);border:.5px solid var(--hair);border-radius:9px}',
+    '#R .mg-chip{height:26px;padding:0 12px;border:none;border-radius:7px;background:transparent;color:var(--t2);font-size:13px;cursor:pointer;white-space:nowrap}',
+    '#R .mg-chip:hover{color:var(--t1)}',
+    '#R .mg-chip.-on{background:var(--fill-strong);color:var(--t1);font-weight:600;box-shadow:0 .5px 1px rgba(0,0,0,.2)}',
+    '#R .mg-dd{position:relative;flex-shrink:0}',
+    '#R .mg-dd-btn{height:34px;padding:0 26px 0 12px;border-radius:var(--r-ctl);border:.5px solid #424244;background:var(--input);color:var(--t1);font-size:13px;cursor:pointer;max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative}',
+    '#R .mg-dd-btn:after{content:"";position:absolute;right:11px;top:50%;width:6px;height:6px;border-right:1.5px solid var(--t2);border-bottom:1.5px solid var(--t2);transform:translateY(-70%) rotate(45deg)}',
+    '#R .mg-dd-btn-sm{height:32px;max-width:170px}',
+    '#R .mg-dd-btn.-active,#R .mg-dd-btn.-open{border-color:rgba(10,132,255,.55)}',
+    '#R .mg-dd-menu{position:absolute;top:calc(100% + 4px);left:0;z-index:40;min-width:180px;max-height:300px;overflow:auto;padding:4px;border-radius:var(--r-group);background:#2a2a2c;border:1px solid var(--hair);box-shadow:0 12px 32px rgba(0,0,0,.55)}',
+    '#R .mg-dd-menu[hidden]{display:none!important}',
+    '#R #mg-lang-menu{left:auto;right:0}',
+    '#R .mg-dd-item{display:block;width:100%;text-align:left;border:none;background:transparent;color:var(--t1);padding:7px 10px;border-radius:6px;font-size:13px;cursor:pointer}',
+    '#R .mg-dd-item:hover{background:var(--fill)}',
+    '#R .mg-dd-item.-on{background:var(--accent);color:#fff}',
+    // Buttons
+    '#R .mg-btn{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:30px;padding:0 12px;border-radius:var(--r-ctl);border:.5px solid var(--hair);background:var(--fill);color:var(--t1);cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap;position:relative;overflow:hidden}',
+    '#R .mg-btn:hover:not(:disabled){background:var(--fill-strong)}',
+    '#R .mg-btn:disabled{opacity:.45;cursor:default}',
+    '#R .mg-btn.-active{color:var(--accent);border-color:rgba(10,132,255,.4);background:rgba(10,132,255,.14)}',
+    '#R .mg-btn-lg{height:36px;padding:0 16px;font-size:14px}',
+    '#R .mg-icon-btn{width:30px;padding:0;font-size:15px}',
+    '#R .mg-refresh{width:34px;height:34px;font-size:17px}',
+    '#R .mg-refresh.-spin{animation:mg-spin .8s linear infinite}',
+    '#R .mg-primary{background:var(--accent);border-color:transparent;color:#fff;box-shadow:0 1px 2px rgba(10,132,255,.25)}',
+    '#R .mg-primary:hover:not(:disabled){background:var(--accent-hover)}',
+    '#R .mg-owned{color:var(--success);border-color:rgba(50,215,75,.3);background:rgba(50,215,75,.08)}',
+    '#R .mg-owned:disabled{opacity:1}',
+    '#R .mg-busy{color:var(--t1);border-color:rgba(10,132,255,.4);background:rgba(10,132,255,.1);min-width:86px}',
+    '#R .mg-busy:hover:not(:disabled){border-color:rgba(255,69,58,.45);background:rgba(255,69,58,.12)}',
+    '#R .mg-busy-fill{position:absolute;left:0;top:0;bottom:0;background:rgba(10,132,255,.32);transition:width .2s linear}',
+    '#R .mg-busy-label{position:relative;font-variant-numeric:tabular-nums}',
+    // Content
+    '#R .mg-content{position:relative;flex:1;min-height:0;display:flex}',
+    '#R .mg-list{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:14px 20px 16px;overscroll-behavior:contain}',
+    '#R .mg-list.-loading .mg-grid{opacity:.6}',
+    '#R .mg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:8px;transition:opacity .15s}',
+    '#R .mg-loading-banner{display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 12px;margin-bottom:10px;border-radius:var(--r-group);background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.25);font-size:13px}',
+    '#R .mg-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:var(--accent);border-radius:50%;animation:mg-spin .7s linear infinite;flex-shrink:0}',
+    '@keyframes mg-spin{to{transform:rotate(360deg)}}',
+    '#R .mg-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:72px 16px;text-align:center;color:var(--t3);font-size:15px}',
+    // Card
+    '#R .mg-card{position:relative;display:flex;align-items:stretch;height:96px;border-radius:var(--r-group);background:var(--group);border:1px solid var(--hair);overflow:hidden;content-visibility:auto;contain-intrinsic-size:auto 96px}',
+    '#R .mg-card:hover{background:var(--group-hover);border-color:rgba(255,255,255,.18)}',
+    '#R .mg-card-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.2;pointer-events:none}',
+    '#R .mg-card:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(30,30,30,.2) 0,rgba(30,30,30,.86) 60%);pointer-events:none}',
+    '#R .mg-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;z-index:2;background:transparent}',
+    '#R .mg-card.st-ranked:before{background:#66ccff}',
+    '#R .mg-card.st-loved:before{background:#ff66ab}',
+    '#R .mg-card.st-qualified:before{background:#ffd966}',
+    '#R .mg-card.st-pending:before{background:#dcab4e}',
+    '#R .mg-card-thumb{position:relative;z-index:1;width:96px;height:100%;flex-shrink:0;padding:0;border:none;background:rgba(255,255,255,.05);cursor:pointer;overflow:hidden}',
+    '#R .mg-card-thumb img{width:100%;height:100%;object-fit:cover;display:block}',
+    '#R .mg-thumb-play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(0,0,0,.45);opacity:0;transition:opacity .12s}',
+    '#R .mg-card-thumb:hover .mg-thumb-play,#R .mg-card-thumb.-playing .mg-thumb-play{opacity:1}',
+    '#R .mg-card-thumb.-playing .mg-thumb-play{background:rgba(10,132,255,.45)}',
+    '#R .mg-card-body{position:relative;z-index:1;flex:1;min-width:0;padding:9px 12px;display:flex;flex-direction:column;cursor:pointer}',
+    '#R .mg-card-title{font-family:"SF Pro Display","SF Pro Text",sans-serif!important;font-size:15px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '#R .mg-card-artist{font-size:12px;color:var(--t1);opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '#R .mg-card-mapper{margin-top:1px;font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '#R .mg-card-mapper b{color:var(--t2);font-weight:600}',
+    '#R .mg-card-foot{margin-top:auto;display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden}',
+    '#R .mg-stat{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--t2);white-space:nowrap;font-variant-numeric:tabular-nums}',
+    '#R .mg-diff-icons{display:flex;align-items:center;gap:2px;min-width:0;overflow:hidden}',
+    '#R .mg-diffico{display:inline-flex;align-items:center;justify-content:center;line-height:1}',
+    '#R .mg-diff-more{font-size:10px;color:var(--t3);margin-left:2px}',
+    '#R .mg-card-actions{position:relative;z-index:1;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:6px;padding:0 12px}',
+    '#R .mg-card-actions-row{display:flex;gap:6px}',
+    '#R .mg-card-actions .mg-primary,#R .mg-card-actions .mg-owned,#R .mg-card-actions .mg-busy{min-width:104px}',
+    '#R .mg-card-progress{position:absolute;left:0;bottom:0;height:2px;z-index:3;background:var(--accent);transition:width .2s linear;pointer-events:none}',
+    '#R .mg-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;color:var(--t2);background:var(--fill)}',
+    '#R .mg-badge.st-ranked{color:#66ccff;background:rgba(102,204,255,.14)}',
+    '#R .mg-badge.st-loved{color:#ff66ab;background:rgba(255,102,171,.14)}',
+    '#R .mg-badge.st-qualified{color:#ffd966;background:rgba(255,217,102,.14)}',
+    '#R .mg-badge.st-pending{color:#dcab4e;background:rgba(220,171,78,.14)}',
+    // Detail view
+    '#R .mg-detail{position:absolute;inset:0;z-index:5;background:var(--bg);display:flex;flex-direction:column}',
+    '#R .mg-detail[hidden]{display:none!important}',
+    '#R .mg-detail-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}',
+    '#R .mg-hero{position:relative;min-height:300px;display:flex;overflow:hidden;border-bottom:1px solid var(--sep)}',
+    '#R .mg-hero-bg{position:absolute;inset:0;background-size:cover;background-position:center}',
+    '#R .mg-hero-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(30,30,30,.35) 0,rgba(30,30,30,.7) 55%,var(--bg) 100%)}',
+    '#R .mg-hero-inner{position:relative;flex:1;display:flex;flex-direction:column;padding:16px 24px 20px;min-width:0}',
+    '#R .mg-hero-top{display:flex;align-items:center;gap:8px}',
+    '#R .mg-back{background:rgba(0,0,0,.4);border-color:rgba(255,255,255,.16)}',
+    '#R .mg-flag{padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:var(--t1);background:rgba(0,0,0,.45);border:.5px solid var(--hair)}',
+    '#R .mg-flag.-warn{color:var(--danger)}',
+    '#R .mg-diff-picker{display:flex;flex-wrap:wrap;gap:4px;margin-top:16px;padding:4px;border-radius:var(--r-group);background:rgba(0,0,0,.45);width:fit-content;max-width:100%}',
+    '#R .mg-diff-pick{width:34px;height:34px;border:1px solid transparent;border-radius:7px;background:transparent;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}',
+    '#R .mg-diff-pick:hover{background:var(--fill)}',
+    '#R .mg-diff-pick.-on{background:var(--fill-strong);border-color:rgba(255,255,255,.3)}',
+    '#R .mg-hero-diff{display:flex;align-items:center;gap:8px;margin-top:10px}',
+    '#R .mg-hero-diffname{font-size:14px;font-weight:600}',
+    '#R .mg-star-pill{padding:1px 8px;border-radius:999px;font-size:12px;font-weight:700;color:#111;font-variant-numeric:tabular-nums}',
+    '#R .mg-hero-title{margin-top:auto;padding-top:14px;font-family:"SF Pro Display","SF Pro Text",sans-serif!important;font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.15;text-shadow:0 2px 12px rgba(0,0,0,.5)}',
+    '#R .mg-hero-artist{font-size:17px;color:var(--t1);opacity:.85;margin-top:2px}',
+    '#R .mg-hero-mapper{font-size:12px;color:var(--t2);margin-top:6px}',
+    '#R .mg-link{border:none;background:none;padding:0;color:var(--accent-hover)!important;font-weight:600;cursor:pointer}',
+    '#R .mg-link:hover{text-decoration:underline}',
+    '#R .mg-hero-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}',
+    '#R .mg-hero-actions .mg-btn:not(.mg-primary):not(.mg-owned):not(.mg-busy):not(.-active){background:rgba(0,0,0,.4);border-color:rgba(255,255,255,.16)}',
+    '#R .mg-hero-actions .mg-primary,#R .mg-hero-actions .mg-owned,#R .mg-hero-actions .mg-busy{min-width:140px}',
+    '#R .mg-detail-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16px 24px 24px}',
+    '#R .mg-detail-col{display:flex;flex-direction:column;gap:16px;min-width:0}',
+    '#R .mg-group{border-radius:var(--r-group);background:var(--group);border:1px solid var(--hair);overflow:hidden}',
+    '#R .mg-group-head{padding:10px 14px 0;font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--t3)}',
+    '#R .mg-group-body{padding:6px 14px 10px}',
+    '#R .mg-stats-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;margin-top:10px;background:var(--sep);border-top:1px solid var(--sep)}',
+    '#R .mg-stat-tile{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:10px 14px;background:var(--group)}',
+    '#R .mg-stat-ico{display:inline-flex;color:var(--t3)}',
+    '#R .mg-stat-v{font-family:"SF Pro Display","SF Pro Text",sans-serif!important;font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}',
+    '#R .mg-stat-k{font-size:11px;color:var(--t2)}',
+    '#R .mg-info-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--sep)}',
+    '#R .mg-info-row:last-child{border-bottom:none}',
+    '#R .mg-info-row.-col{flex-direction:column;align-items:stretch;gap:8px}',
+    '#R .mg-info-k{font-size:12px;color:var(--t2);flex-shrink:0}',
+    '#R .mg-info-v{font-size:13px;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}',
+    '#R .mg-tags{display:flex;flex-wrap:wrap;gap:4px}',
+    '#R .mg-tag{height:22px;padding:0 8px;border:.5px solid var(--hair);border-radius:6px;background:var(--fill);font-size:11px;color:var(--t2);cursor:pointer}',
+    '#R .mg-tag:hover{color:var(--t1);background:var(--fill-strong)}',
+    '#R .mg-attr{display:grid;grid-template-columns:110px 1fr 40px;align-items:center;gap:10px;padding:6px 0}',
+    '#R .mg-attr-k{font-size:12px;color:var(--t2)}',
+    '#R .mg-attr-track{height:6px;border-radius:3px;background:var(--fill);overflow:hidden}',
+    '#R .mg-attr-fill{display:block;height:100%;border-radius:3px;background:var(--t1)}',
+    '#R .mg-attr-v{font-size:12px;text-align:right;font-variant-numeric:tabular-nums}',
+    // Footer
+    '#R .mg-footer{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:40px;padding:5px 20px;border-top:1px solid var(--sep);background:var(--bar)}',
+    '#R .mg-footer .mg-btn[hidden]{display:none}',
+    '#R .mg-line{font-size:12px;color:var(--t2);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     // Mini-player
-    '#' +
-    ROOT_ID +
-    ' .mg-player{flex-shrink:0;border-top:1px solid rgba(255,255,255,.1);background:#121214}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-player-bar{height:3px;background:rgba(255,255,255,.08);cursor:pointer}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-player-progress{height:100%;width:0;background:#0a84ff;transition:width .1s linear}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-player-body{display:flex;align-items:center;gap:10px;padding:8px 12px 10px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-player-cover{width:42px;height:42px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,.06);flex-shrink:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-player-cover img{width:100%;height:100%;object-fit:cover;display:block}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-player-meta{flex:1;min-width:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-player-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-player-sub{font-size:11px;color:rgba(255,255,255,.48);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-player-controls{display:flex;align-items:center;gap:4px;flex-shrink:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-pbtn{width:32px;height:32px;border:none;border-radius:50%;background:rgba(255,255,255,.08);color:#fff;cursor:pointer;font-size:12px;display:inline-flex;align-items:center;justify-content:center;padding:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-pbtn-main{width:36px;height:36px;background:#0a84ff;font-size:13px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-player-vol{display:flex;align-items:center;gap:6px;flex-shrink:0;min-width:120px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-vol-ico{font-size:12px;color:rgba(255,255,255,.5)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-vol-range{width:72px;accent-color:#0a84ff;cursor:pointer}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-vol-label{font-size:11px;color:rgba(255,255,255,.5);min-width:32px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-mute-btn{flex-shrink:0;height:26px;padding:0 8px;border-radius:6px;border:.5px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:rgba(255,255,255,.68);cursor:pointer;font-size:11px;font-weight:500;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;transition:all .15s ease}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-mute-btn:hover{background:rgba(255,255,255,.12);color:#fff}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-mute-btn.-on{background:rgba(10,132,255,.2);border-color:rgba(10,132,255,.45);color:#5ac8fa}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-mute-ico{font-size:12px;line-height:1}' +
+    '#R .mg-player{flex-shrink:0;border-top:1px solid var(--sep);background:#181818}',
+    '#R .mg-player-bar{height:3px;background:var(--fill);cursor:pointer}',
+    '#R .mg-player-progress{height:100%;width:0;background:var(--accent)}',
+    '#R .mg-player-body{display:flex;align-items:center;gap:12px;padding:8px 20px 10px}',
+    '#R .mg-player-cover{width:40px;height:40px;border-radius:6px;overflow:hidden;background:var(--fill);flex-shrink:0}',
+    '#R .mg-player-cover img{width:100%;height:100%;object-fit:cover;display:block}',
+    '#R .mg-player-meta{flex:1;min-width:0}',
+    '#R .mg-player-title{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '#R .mg-player-sub{font-size:11px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}',
+    '#R .mg-player-controls{display:flex;align-items:center;gap:6px;flex-shrink:0}',
+    '#R .mg-pbtn{width:32px;height:30px;border:.5px solid var(--hair);border-radius:var(--r-ctl);background:var(--fill);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}',
+    '#R .mg-pbtn:hover{background:var(--fill-strong)}',
+    '#R .mg-pbtn-main{width:36px;background:var(--accent);border-color:transparent;color:#fff;box-shadow:0 1px 2px rgba(10,132,255,.25)}',
+    '#R .mg-pbtn-main:hover{background:var(--accent-hover)}',
+    '#R .mg-player-vol{display:flex;align-items:center;gap:6px;flex-shrink:0}',
+    '#R .mg-vol-ico{display:inline-flex;color:var(--t2)}',
+    '#R .mg-vol-range{width:96px;accent-color:var(--accent);cursor:pointer}',
+    '#R .mg-vol-label{font-size:11px;color:var(--t2);min-width:32px;font-variant-numeric:tabular-nums}',
+    '#R .mg-mute-btn{flex-shrink:0;height:30px;padding:0 10px;border-radius:var(--r-ctl);border:1px solid rgba(255,255,255,.1);background:var(--fill);color:var(--t2);cursor:pointer;font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}',
+    '#R .mg-mute-btn:hover{background:var(--fill-strong);color:var(--t1);border-color:rgba(255,255,255,.2)}',
+    '#R .mg-mute-btn.-on{background:rgba(10,132,255,.18);border-color:rgba(10,132,255,.45);color:#5ac8fa}',
+    '#R .mg-mute-btn.-on:hover{background:rgba(10,132,255,.28);border-color:rgba(10,132,255,.65)}',
+    '#R .mg-mute-ico{display:inline-flex}',
     // Gameplay modal
-    '#' +
-    ROOT_ID +
-    ' .mg-gp-modal{position:absolute;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-gp-modal[hidden]{display:none!important}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-gp-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.75)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-gp-panel{position:relative;z-index:1;width:min(680px,100%);background:#16161a;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:12px;box-shadow:0 20px 48px rgba(0,0,0,.65)}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-gp-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-gp-head-text{flex:1;min-width:0}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-gp-title{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-gp-sub{font-size:12px;color:rgba(255,255,255,.5);margin-top:2px}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-gp-diffs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;max-height:72px;overflow:auto}' +
-    '#' +
-    ROOT_ID +
-    ' .mg-gp-canvas{width:100%;height:auto;aspect-ratio:4/3;border-radius:8px;background:#0b0b10;display:block}'
+    '#R .mg-gp-modal{position:absolute;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:24px}',
+    '#R .mg-gp-modal[hidden]{display:none!important}',
+    '#R .mg-gp-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.7)}',
+    '#R .mg-gp-panel{position:relative;z-index:1;width:min(920px,100%);max-height:100%;display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--hair);border-radius:12px;padding:14px;box-shadow:0 20px 48px rgba(0,0,0,.65)}',
+    '#R .mg-gp-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}',
+    '#R .mg-gp-head-text{flex:1;min-width:0}',
+    '#R .mg-gp-title{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '#R .mg-gp-sub{font-size:12px;color:var(--t2);margin-top:2px}',
+    '#R .mg-gp-diffs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;max-height:76px;overflow:auto}',
+    '#R .mg-gp-diffs .mg-chip{display:inline-flex;align-items:center;gap:6px;background:var(--fill);height:28px}',
+    '#R .mg-gp-diffs .mg-chip.-on{background:var(--fill-strong);box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}',
+    '#R .mg-gp-canvas{width:100%;height:auto;aspect-ratio:4/3;max-height:calc(100vh - 220px);object-fit:contain;border-radius:8px;background:#0b0b10;display:block}',
+    '#R.-embedded{padding:0;position:fixed!important}',
+    '#R.-embedded .mg-shade,#R.-embedded #mg-close,#R.-embedded .mg-hint{display:none!important}',
+    '#R.-embedded .mg-panel{width:100%;height:100%;border:none;border-radius:0;box-shadow:none}',
+    '@media (max-width:1100px){#R .mg-detail-grid{grid-template-columns:1fr}#R .mg-grid{grid-template-columns:1fr}}',
+  ]
+    .join('')
+    .replace(/#R/g, '#' + ROOT_ID)
 
   global.__TosuGuiMapsAppVersion = APP_VERSION
   global.__TosuGuiMapsApp = {

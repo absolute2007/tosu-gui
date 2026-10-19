@@ -4,71 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Maps Browser</title>
-  <link rel="stylesheet" href="index.css" />
+  <style>html,body{margin:0;height:100%;background:#1e1e1e}</style>
 </head>
 <body>
-  <div id="app">
-    <header class="top">
-      <div class="top-title" id="top-title">Карты</div>
-      <div class="top-actions">
-        <button type="button" id="btn-ui-lang" class="btn" title="Сменить язык / Switch language">RU</button>
-        <button type="button" id="btn-mute-osu" class="btn btn-mute-toggle -on" title="Заглушать звук osu! во время превью" aria-pressed="true">🔇 Глушить osu!</button>
-        <span id="auth-label" class="auth-label">…</span>
-        <button type="button" id="btn-login" class="btn -primary" hidden>Войти</button>
-      </div>
-    </header>
-    <p class="hint" id="hint"></p>
-    <div class="toolbar">
-      <input id="q" class="input" type="search" placeholder="Поиск…" autocomplete="off" spellcheck="false" />
-      <select id="language" class="select" title="Язык" aria-label="Язык">
-        <option value="any" selected>Любой язык</option>
-        <option value="english">English</option>
-        <option value="japanese">Japanese</option>
-        <option value="chinese">Chinese</option>
-        <option value="korean">Korean</option>
-        <option value="russian">Russian</option>
-        <option value="instrumental">Instrumental</option>
-        <option value="french">French</option>
-        <option value="german">German</option>
-        <option value="spanish">Spanish</option>
-        <option value="italian">Italian</option>
-        <option value="swedish">Swedish</option>
-        <option value="polish">Polish</option>
-        <option value="unspecified">Не указан</option>
-        <option value="other">Другой</option>
-      </select>
-    </div>
-    <div class="filters-label" id="lbl-status">Статус</div>
-    <div class="status-row">
-      <div class="statuses" id="statuses">
-        <button type="button" data-status="ranked" class="chip -on">Ranked</button>
-        <button type="button" data-status="qualified" class="chip">Qualified</button>
-        <button type="button" data-status="loved" class="chip">Loved</button>
-        <button type="button" data-status="any" class="chip">Любой</button>
-      </div>
-      <select id="more-status" class="select select-more" title="Другие категории" aria-label="Другие категории">
-        <option value="">Ещё…</option>
-        <option value="pending">На рассмотрении</option>
-        <option value="wip">В разработке</option>
-        <option value="graveyard">Graveyard</option>
-        <option value="favourites">Избранное</option>
-        <option value="mine">Мои карты</option>
-      </select>
-    </div>
-    <div class="filters-label" id="lbl-mode">Режим</div>
-    <div class="modes" id="modes">
-      <button type="button" data-mode="any" class="chip -on">Все</button>
-      <button type="button" data-mode="osu" class="chip">osu!</button>
-      <button type="button" data-mode="taiko" class="chip">Taiko</button>
-      <button type="button" data-mode="fruits" class="chip">Catch</button>
-      <button type="button" data-mode="mania" class="chip">Mania</button>
-    </div>
-    <div id="list" class="list"></div>
-    <div class="footer">
-      <button type="button" id="btn-more" class="btn" hidden>Показать ещё</button>
-      <div id="status-line" class="status-line"></div>
-    </div>
-  </div>
-  <script src="index.js"></script>
+  <!-- Same panel the in-game overlay opens with the Maps hotkey, embedded to fill this page. -->
+  <script>window.__TOSU_MAPS_EMBEDDED = true</script>
+  <script src="osu-preview-engine.js"></script>
+  <script src="maps-app.js"></script>
+  <script>window.__TosuGuiMapsApp && window.__TosuGuiMapsApp.show()</script>
 </body>
 </html>

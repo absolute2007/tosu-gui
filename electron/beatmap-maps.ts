@@ -1,14 +1,14 @@
 /**
  * Official osu.ppy.sh beatmap search + download (website session).
- * Cancelable downloads; no community mirrors.
+ * Cancelable downloads with mirror fallback when osu.ppy.sh is slow or unavailable.
  */
 import fs from 'fs'
 import path from 'path'
-import { Readable } from 'stream'
 import { app, dialog, BrowserWindow } from 'electron'
 import {
   buildOsuHeaders,
   getOsuSession,
+  fetchOsuAccount,
   hasOsuSessionCookie,
   OSU_ORIGIN,
   osuJsonGet,
@@ -68,6 +68,18 @@ export interface MapBeatmapSummary {
   stars: number
   /** Total length in seconds when available */
   totalLength: number
+  /** Difficulty attributes (website search payload; 0 when the source omits them) */
+  cs?: number
+  ar?: number
+  od?: number
+  hp?: number
+  bpm?: number
+  circles?: number
+  sliders?: number
+  spinners?: number
+  maxCombo?: number
+  playCount?: number
+  passCount?: number
 }
 
 export interface MapSetSummary {
@@ -90,6 +102,15 @@ export interface MapSetSummary {
   lastUpdated: string | null
   /** Difficulties for in-overlay gameplay preview (no download) */
   beatmaps: MapBeatmapSummary[]
+  /** Wide header cover (beatmap page), card cover — used by the in-game detail view */
+  headerCoverUrl?: string | null
+  cardCoverUrl?: string | null
+  source?: string
+  tags?: string
+  submittedDate?: string | null
+  rankedDate?: string | null
+  hasStoryboard?: boolean
+  nsfw?: boolean
 }
 
 export interface MapSearchResult {
@@ -188,6 +209,17 @@ function normalizeBeatmap(raw: Record<string, unknown>): MapBeatmapSummary | nul
     mode: parseMode(raw),
     stars: Math.round(num(raw.difficulty_rating ?? raw.DifficultyRating ?? raw.stars) * 100) / 100,
     totalLength: Math.round(num(raw.total_length ?? raw.TotalLength ?? raw.hit_length)),
+    cs: num(raw.cs ?? raw.CS),
+    ar: num(raw.ar ?? raw.AR),
+    od: num(raw.accuracy ?? raw.OD ?? raw.od),
+    hp: num(raw.drain ?? raw.HP ?? raw.hp),
+    bpm: num(raw.bpm ?? raw.BPM),
+    circles: Math.round(num(raw.count_circles)),
+    sliders: Math.round(num(raw.count_sliders)),
+    spinners: Math.round(num(raw.count_spinners)),
+    maxCombo: Math.round(num(raw.max_combo ?? raw.MaxCombo)),
+    playCount: Math.round(num(raw.playcount ?? raw.Playcount)),
+    passCount: Math.round(num(raw.passcount ?? raw.Passcount)),
   }
 }
 
@@ -236,6 +268,14 @@ function normalizeSet(raw: Record<string, unknown>): MapSetSummary | null {
     hasVideo: Boolean(raw.video ?? raw.HasVideo),
     lastUpdated: str(raw.last_updated ?? raw.LastUpdate, '') || null,
     beatmaps,
+    headerCoverUrl: covers ? str(covers['cover@2x'] || covers.cover, '') || null : null,
+    cardCoverUrl: covers ? str(covers['card@2x'] || covers.card, '') || null : null,
+    source: str(raw.source ?? raw.Source, ''),
+    tags: str(raw.tags ?? raw.Tags, ''),
+    submittedDate: str(raw.submitted_date, '') || null,
+    rankedDate: str(raw.ranked_date ?? raw.RankedDate, '') || null,
+    hasStoryboard: Boolean(raw.storyboard ?? raw.HasStoryboard),
+    nsfw: Boolean(raw.nsfw),
   }
 }
 
@@ -354,6 +394,17 @@ interface SearchCacheEntry {
 
 const searchCache = new Map<string, SearchCacheEntry>()
 const SEARCH_CACHE_TTL_MS = 60_000
+const SEARCH_CACHE_MAX = 40
+
+function rememberSearch(key: string, data: MapSearchResult) {
+  searchCache.delete(key)
+  searchCache.set(key, { timestamp: Date.now(), data })
+  while (searchCache.size > SEARCH_CACHE_MAX) {
+    const oldest = searchCache.keys().next().value
+    if (oldest === undefined) break
+    searchCache.delete(oldest)
+  }
+}
 
 function getSearchCacheKey(params: MapSearchParams): string {
   return [
@@ -462,7 +513,7 @@ export async function searchMapSets(params: MapSearchParams): Promise<MapSearchR
   if (!isLogged) {
     const mirrorResult = await searchMapSetsMirror(params)
     if (mirrorResult.sets.length > 0) {
-      searchCache.set(cacheKey, { timestamp: Date.now(), data: mirrorResult })
+      rememberSearch(cacheKey, mirrorResult)
       return mirrorResult
     }
     throw new Error('Войдите в osu!, чтобы искать карты')
@@ -535,13 +586,13 @@ export async function searchMapSets(params: MapSearchParams): Promise<MapSearchR
       total: total >= 0 ? total : null,
     }
 
-    searchCache.set(cacheKey, { timestamp: Date.now(), data: result })
+    rememberSearch(cacheKey, result)
     return result
   } catch (err) {
     console.warn('[maps] osu.ppy.sh search failed, falling back to mirrors:', err)
     const mirrorResult = await searchMapSetsMirror(params)
     if (mirrorResult.sets.length > 0) {
-      searchCache.set(cacheKey, { timestamp: Date.now(), data: mirrorResult })
+      rememberSearch(cacheKey, mirrorResult)
       return mirrorResult
     }
     throw err
@@ -604,25 +655,46 @@ class DownloadCancelledError extends Error {
   }
 }
 
+/** No response headers within this window → treat source as dead and try the next one. */
+const CONNECT_TIMEOUT_MS = 15_000
+/** No bytes received for this long mid-transfer → stalled, try the next source. */
+const STALL_TIMEOUT_MS = 20_000
+/** Progress events are throttled so IPC/SSE are not flooded on every network chunk. */
+const PROGRESS_INTERVAL_MS = 150
+
 async function downloadToFileCancelable(
   url: string,
   dest: string,
   headers: Record<string, string>,
   active: ActiveDownload,
-  onProgress: (pct: number) => void,
-  timeoutMs = 600_000
+  onProgress: (pct: number) => void
 ): Promise<void> {
+  if (active.cancelled) throw new DownloadCancelledError()
+
   const controller = new AbortController()
   active.abortController = controller
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let timeoutReason: string | null = null
+  let watchdog: NodeJS.Timeout | null = null
+  const arm = (ms: number, reason: string) => {
+    if (watchdog) clearTimeout(watchdog)
+    watchdog = setTimeout(() => {
+      timeoutReason = reason
+      controller.abort()
+    }, ms)
+  }
 
-  try {
-    if (active.cancelled) {
-      throw new DownloadCancelledError()
+  const removeDest = () => {
+    try {
+      if (fs.existsSync(dest)) fs.unlinkSync(dest)
+    } catch {
+      /* ignore */
     }
+  }
 
-    const ses = getOsuSession()
-    const res = await ses.fetch(url, {
+  let file: fs.WriteStream | null = null
+  try {
+    arm(CONNECT_TIMEOUT_MS, 'Сервер не отвечает')
+    const res = await getOsuSession().fetch(url, {
       method: 'GET',
       headers: {
         ...headers,
@@ -632,115 +704,77 @@ async function downloadToFileCancelable(
       signal: controller.signal,
     })
 
-    if (active.cancelled) {
-      throw new DownloadCancelledError()
-    }
+    if (active.cancelled) throw new DownloadCancelledError()
 
     if (!res.ok) {
       if (res.status === 401 || res.status === 403) {
         throw new Error('Нужно войти в osu! или нет доступа к скачиванию')
       }
-      if (res.status === 429) {
-        throw new Error('Лимит скачиваний osu! — подождите')
-      }
-      throw new Error(`HTTP ${res.status}`)
+      if (res.status === 404) throw new Error('Карта не найдена на сервере')
+      if (res.status === 429) throw new Error('Лимит скачиваний osu! — подождите')
+      throw new Error(`Сервер ответил ошибкой (${res.status})`)
     }
 
     const contentType = String(res.headers.get('content-type') || '')
-    if (contentType.includes('text/html')) {
-      throw new Error('osu! вернул страницу вместо файла — войдите заново')
+    if (contentType.includes('text/html') || contentType.includes('application/json')) {
+      throw new Error('Сервер вернул страницу вместо файла — войдите заново')
     }
-
-    if (!res.body) {
-      throw new Error('Пустой ответ от сервера osu!')
-    }
+    if (!res.body) throw new Error('Пустой ответ от сервера')
 
     const total = parseInt(res.headers.get('content-length') || '0', 10)
     let received = 0
-    const file = fs.createWriteStream(dest)
+    let lastEmit = 0
+    file = fs.createWriteStream(dest)
     active.file = file
     active.tempPath = dest
 
-    const nodeStream = Readable.fromWeb(res.body as import('stream/web').ReadableStream)
-
-    await new Promise<void>((resolve, reject) => {
-      nodeStream.on('data', (chunk: Buffer) => {
-        if (active.cancelled) {
-          nodeStream.destroy()
-          file.destroy()
-          return
-        }
-        received += chunk.length
+    const reader = res.body.getReader()
+    arm(STALL_TIMEOUT_MS, 'Скачивание зависло')
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (active.cancelled) throw new DownloadCancelledError()
+      if (done) break
+      arm(STALL_TIMEOUT_MS, 'Скачивание зависло')
+      received += value.byteLength
+      if (!file.write(value)) {
+        await new Promise<void>((resolve, reject) => {
+          file!.once('drain', resolve)
+          file!.once('error', reject)
+        })
+      }
+      const now = Date.now()
+      if (now - lastEmit >= PROGRESS_INTERVAL_MS) {
+        lastEmit = now
         if (total > 0) onProgress(Math.min(96, (received / total) * 96))
         else onProgress(Math.min(90, received / (512 * 1024)))
-      })
-
-      nodeStream.pipe(file)
-
-      file.on('finish', () => {
-        file.close(() => {
-          if (active.cancelled) {
-            try {
-              if (fs.existsSync(dest)) fs.unlinkSync(dest)
-            } catch {
-              /* ignore */
-            }
-            reject(new DownloadCancelledError())
-            return
-          }
-          try {
-            const size = fs.statSync(dest).size
-            if (size < MIN_OSZ_BYTES) {
-              try {
-                fs.unlinkSync(dest)
-              } catch {
-                /* ignore */
-              }
-              reject(new Error('Файл слишком маленький — скачивание не удалось'))
-              return
-            }
-            onProgress(98)
-            resolve()
-          } catch (err) {
-            reject(err)
-          }
-        })
-      })
-
-      nodeStream.on('error', (err) => {
-        try {
-          file.destroy()
-          if (fs.existsSync(dest)) fs.unlinkSync(dest)
-        } catch {
-          /* ignore */
-        }
-        if (active.cancelled) reject(new DownloadCancelledError())
-        else reject(err)
-      })
-
-      file.on('error', (err) => {
-        try {
-          nodeStream.destroy()
-          if (fs.existsSync(dest)) fs.unlinkSync(dest)
-        } catch {
-          /* ignore */
-        }
-        if (active.cancelled) reject(new DownloadCancelledError())
-        else reject(err)
-      })
-    })
-  } catch (err) {
-    if (active.cancelled || (err instanceof Error && err.name === 'AbortError' && active.cancelled)) {
-      try {
-        if (fs.existsSync(dest)) fs.unlinkSync(dest)
-      } catch {
-        /* ignore */
       }
-      throw new DownloadCancelledError()
     }
+    if (watchdog) clearTimeout(watchdog)
+
+    await new Promise<void>((resolve, reject) => {
+      file!.once('error', reject)
+      file!.end(() => resolve())
+    })
+
+    if (active.cancelled) throw new DownloadCancelledError()
+    if (received < MIN_OSZ_BYTES || (total > 0 && received < total)) {
+      throw new Error('Файл скачан не полностью')
+    }
+    onProgress(98)
+  } catch (err) {
+    try {
+      file?.destroy()
+    } catch {
+      /* ignore */
+    }
+    removeDest()
+    if (active.cancelled || err instanceof DownloadCancelledError) throw new DownloadCancelledError()
+    if (timeoutReason) throw new Error(timeoutReason)
     throw err
   } finally {
-    clearTimeout(timer)
+    if (watchdog) clearTimeout(watchdog)
+    active.file = null
+    active.abortController = null
   }
 }
 
@@ -775,7 +809,11 @@ export async function downloadMapSet(
   const tempPath = path.join(app.getPath('temp'), `tosu-gui-map-${setId}-${Date.now()}.osz`)
   active.tempPath = tempPath
 
-  const noVideo = meta?.noVideo !== false
+  // Explicit choice wins; otherwise follow the osu! profile setting ("download without video").
+  const noVideo =
+    typeof meta?.noVideo === 'boolean'
+      ? meta.noVideo
+      : (await fetchOsuAccount().catch(() => null))?.beatmapDownload === 'no_video'
   const url = `${OSU_ORIGIN}/beatmapsets/${setId}/download${noVideo ? '?noVideo=1' : ''}`
 
   try {
@@ -797,16 +835,16 @@ export async function downloadMapSet(
       if (active.cancelled || officialErr instanceof DownloadCancelledError) throw officialErr
       console.warn('[maps] osu.ppy.sh download failed, trying mirrors:', officialErr)
 
-      const mirrorUrls = [
-        `https://api.nerinyan.moe/d/${setId}${noVideo ? '?noVideo=true' : ''}`,
-        `https://catboy.best/d/${setId}`,
+      const mirrors: Array<{ name: string; url: string }> = [
+        { name: 'Catboy', url: `https://catboy.best/d/${setId}${noVideo ? 'n' : ''}` },
+        { name: 'osu.direct', url: `https://osu.direct/api/d/${setId}${noVideo ? '?noVideo' : ''}` },
+        { name: 'Nerinyan', url: `https://api.nerinyan.moe/d/${setId}${noVideo ? '?noVideo=true' : ''}` },
       ]
 
       let downloaded = false
-      for (const mUrl of mirrorUrls) {
+      for (const { name: mirrorName, url: mUrl } of mirrors) {
         if (active.cancelled) throw new DownloadCancelledError()
         try {
-          const mirrorName = mUrl.includes('nerinyan') ? 'Nerinyan' : 'Catboy'
           onProgress({ setId, phase: 'downloading', progress: 0, message: `Скачивание с зеркала (${mirrorName})…` })
           await downloadToFileCancelable(mUrl, tempPath, { 'User-Agent': 'tosu-gui' }, active, (pct) => {
             if (!active.cancelled) {

@@ -22,6 +22,8 @@ export interface GuiSettings {
    * Written to tosu/maps-overlay-keybind.txt for tosu-ingame-overlay.
    */
   mapsOverlayKeybind: string
+  /** In-game Maps Browser panel. When false the hotkey is ignored and nothing is preloaded. */
+  mapsOverlayEnabled: boolean
   /**
    * Mute osu! audio while previewing beatmaps (mini-player or gameplay preview).
    */
@@ -43,6 +45,7 @@ const DEFAULTS: GuiSettings = {
   skinsPath: '',
   skinsBrowserEnabled: true,
   mapsOverlayKeybind: 'Control + Shift + M',
+  mapsOverlayEnabled: true,
   muteOsuOnPreview: true,
   disableHardwareAcceleration: false,
 }
@@ -51,22 +54,28 @@ function getSettingsPath() {
   return path.join(app.getPath('userData'), 'gui-settings.json')
 }
 
+/** This process is the only writer, so the parsed file is cached instead of re-read on every call. */
+let cached: GuiSettings | null = null
+
 export function readGuiSettings(): GuiSettings {
+  if (cached) return { ...cached }
   try {
     const file = getSettingsPath()
-    if (!fs.existsSync(file)) return { ...DEFAULTS }
-    const data = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<GuiSettings>
-    return { ...DEFAULTS, ...data }
+    const data = fs.existsSync(file)
+      ? (JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<GuiSettings>)
+      : {}
+    cached = { ...DEFAULTS, ...data }
   } catch {
-    return { ...DEFAULTS }
+    cached = { ...DEFAULTS }
   }
+  return { ...cached }
 }
 
 export function writeGuiSettings(updates: Partial<GuiSettings>) {
-  const current = readGuiSettings()
-  const next = { ...current, ...updates }
+  const next = { ...readGuiSettings(), ...updates }
   const file = getSettingsPath()
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify(next, null, 2), 'utf8')
-  return next
+  cached = next
+  return { ...next }
 }

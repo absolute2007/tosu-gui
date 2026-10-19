@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { OsuAccountInfo } from '../../electron/preload'
 import { useI18n } from '../i18n/context'
+import { humanizeError } from '../lib/errors'
 
 const CACHE_KEY = 'tosu_cached_osu_account'
 
@@ -91,7 +92,7 @@ export function useOsuAuth(onToast?: (msg: string, type: 'success' | 'error') =>
       }
       return info
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err ?? (lang === 'en' ? 'Login error' : 'Ошибка входа'))
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Login error' : 'Ошибка входа'))
       const clean = msg.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
       onToast?.(clean || (lang === 'en' ? 'Login error' : 'Ошибка входа'), 'error')
       throw err

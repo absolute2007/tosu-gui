@@ -801,3 +801,38 @@ html.window-maximized .app-shell {
   font-family: 'SF Pro Text', ui-monospace, monospace;
   color: var(--text-secondary);
 }
+.counters-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-group);
+  background: rgba(255, 214, 10, 0.08);
+  border: 1px solid rgba(255, 214, 10, 0.22);
+}
+
+.counters-notice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.counters-notice-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.counters-notice-text span {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.counters-notice-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}

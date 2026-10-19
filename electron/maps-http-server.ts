@@ -21,6 +21,11 @@ import {
 import { fetchOsuAccount, loginWithOsuWindow } from './osu-session'
 import { readGuiSettings, writeGuiSettings } from './gui-settings'
 import { osuAudio } from './osu-audio'
+import { humanizeError } from './error-text'
+
+function uiLang(): 'ru' | 'en' {
+  return readGuiSettings().language === 'en' ? 'en' : 'ru'
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -59,20 +64,29 @@ function tryServeStatic(req: IncomingMessage, res: ServerResponse, urlPath: stri
     return false
   }
   const ext = path.extname(filePath).toLowerCase()
-  const body = fs.readFileSync(filePath)
+  // Fonts, skin images and hitsounds never change between releases; scripts/pages may.
+  const immutable = ext !== '.html' && ext !== '.js' && ext !== '.css'
+  const stat = fs.statSync(filePath)
   res.writeHead(200, {
     'Content-Type': MIME[ext] || 'application/octet-stream',
-    'Content-Length': body.length,
+    'Content-Length': stat.size,
     'Access-Control-Allow-Origin': '*',
-    'Cache-Control': 'no-store',
+    'Cache-Control': immutable ? 'public, max-age=604800' : 'no-store',
   })
-  res.end(body)
+  if (req.method === 'HEAD') {
+    res.end()
+    return true
+  }
+  fs.createReadStream(filePath).pipe(res)
   return true
 }
 
 export const MAPS_HTTP_PORT = 24777
 
 let server: http.Server | null = null
+/** Recently played ~10s preview clips — the mini-player and gameplay preview request the same set repeatedly. */
+const audioPreviewCache = new Map<number, { buf: Buffer; type: string }>()
+const AUDIO_PREVIEW_CACHE_MAX = 12
 const progressListeners = new Set<(p: MapDownloadProgress) => void>()
 const lastProgress = new Map<number, MapDownloadProgress>()
 
@@ -153,6 +167,7 @@ async function handleApi(
     sendJson(res, 200, {
       /** Hotkey that opens THIS maps UI inside inject overlay */
       mapsKeybind,
+      mapsEnabled: gui.mapsOverlayEnabled !== false,
       /** tosu layout editor hotkey (not for maps) */
       overlayKeybind: layoutKeybind,
       port: MAPS_HTTP_PORT,
@@ -173,7 +188,7 @@ async function handleApi(
       }
       sendJson(res, 400, { error: 'Invalid language' })
     } catch (err) {
-      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) })
+      sendJson(res, 400, { error: humanizeError(err, uiLang()) })
     }
     return
   }
@@ -199,7 +214,7 @@ async function handleApi(
       }
       sendJson(res, 200, osuAudio.getState())
     } catch (err) {
-      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) })
+      sendJson(res, 400, { error: humanizeError(err, uiLang()) })
     }
     return
   }
@@ -246,7 +261,7 @@ async function handleApi(
       const result = await searchMapSets(params)
       sendJson(res, 200, result)
     } catch (err) {
-      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) })
+      sendJson(res, 400, { error: humanizeError(err, uiLang()) })
     }
     return
   }
@@ -258,7 +273,7 @@ async function handleApi(
       const result = await fetchBeatmapOsuFile(beatmapId)
       sendJson(res, 200, result)
     } catch (err) {
-      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) })
+      sendJson(res, 400, { error: humanizeError(err, uiLang()) })
     }
     return
   }
@@ -268,6 +283,20 @@ async function handleApi(
     const setId = parseInt(url.searchParams.get('setId') || '0', 10) || 0
     if (!setId) {
       sendJson(res, 400, { error: 'setId required' })
+      return
+    }
+
+    const cachedAudio = audioPreviewCache.get(setId)
+    if (cachedAudio) {
+      audioPreviewCache.delete(setId)
+      audioPreviewCache.set(setId, cachedAudio)
+      res.writeHead(200, {
+        'Content-Type': cachedAudio.type,
+        'Content-Length': cachedAudio.buf.length,
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=86400',
+      })
+      res.end(cachedAudio.buf)
       return
     }
 
@@ -287,6 +316,12 @@ async function handleApi(
           const contentType = audioRes.headers.get('content-type') || 'audio/mpeg'
           const buf = Buffer.from(await audioRes.arrayBuffer())
           if (buf.length > 500) {
+            audioPreviewCache.set(setId, { buf, type: contentType })
+            while (audioPreviewCache.size > AUDIO_PREVIEW_CACHE_MAX) {
+              const oldest = audioPreviewCache.keys().next().value
+              if (oldest === undefined) break
+              audioPreviewCache.delete(oldest)
+            }
             res.writeHead(200, {
               'Content-Type': contentType,
               'Content-Length': buf.length,
@@ -308,7 +343,7 @@ async function handleApi(
 
   if (pathName === '/api/maps/download' && req.method === 'POST') {
     const raw = await readBody(req)
-    let body: { setId?: number; artist?: string; title?: string } = {}
+    let body: { setId?: number; artist?: string; title?: string; noVideo?: boolean } = {}
     try {
       body = JSON.parse(raw || '{}') as typeof body
     } catch {
@@ -330,7 +365,11 @@ async function handleApi(
         setId,
         songs,
         (p) => emitMapsHttpProgress(p),
-        { artist: body.artist || '', title: body.title || '' }
+        {
+          artist: body.artist || '',
+          title: body.title || '',
+          noVideo: typeof body.noVideo === 'boolean' ? body.noVideo : undefined,
+        }
       )
       try {
         await shell.openPath(result.filePath)
@@ -343,7 +382,7 @@ async function handleApi(
         sendJson(res, 200, { ok: false, cancelled: true })
         return
       }
-      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) })
+      sendJson(res, 400, { error: humanizeError(err, uiLang()) })
     }
     return
   }
@@ -423,7 +462,7 @@ export function startMapsHttpServer(deps: MapsHttpDeps): void {
     void handleApi(req, res, url, () => mapsHttpDeps?.getParent() ?? null).catch((err) => {
       console.error('[maps-http]', err)
       try {
-        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) })
+        sendJson(res, 500, { error: humanizeError(err, uiLang()) })
       } catch {
         /* ignore */
       }

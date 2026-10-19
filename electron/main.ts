@@ -45,7 +45,7 @@ import {
   loginWithOsuWindow,
 } from './osu-session'
 import { emitMapsHttpProgress, startMapsHttpServer, stopMapsHttpServer } from './maps-http-server'
-import { ensureMapsCounter, isProtectedMapsCounter } from './ensure-maps-counter'
+import { isProtectedMapsCounter, syncMapsCounter } from './ensure-maps-counter'
 import { writeMapsKeybindFile } from './maps-keybind-file'
 import { searchOsuckSkins, getOsuckSkinDetail, osuckImageHeaders, OSUCK_ORIGIN } from './skins-osuck'
 import {
@@ -78,6 +78,7 @@ import {
   type FollowPointsCustomOptions,
 } from './skins-customizer'
 import { osuAudio } from './osu-audio'
+import { lookupUserBeatmapScore } from './osu-user-score'
 
 
 const isWin = process.platform === 'win32'
@@ -445,9 +446,9 @@ if (gotLock) {
       try {
         await tosuProcess.start()
         const tosuDir = tosuProcess.getTosuDir()
-        ensureMapsCounter(tosuDir)
         const guiSettings = readGuiSettings()
-        writeMapsKeybindFile(tosuDir, guiSettings.mapsOverlayKeybind)
+        syncMapsCounter(tosuDir, guiSettings.mapsOverlayEnabled)
+        writeMapsKeybindFile(tosuDir)
         setOverlayAntialiasing(tosuDir, guiSettings.disableAntialiasing)
         osuAudio.init()
         startSocketBridge()
@@ -620,9 +621,10 @@ ipcMain.handle('gui:get-settings', async () => readGuiSettings())
 
 ipcMain.handle('gui:save-settings', async (_e, updates: Partial<ReturnType<typeof readGuiSettings>>) => {
   const next = writeGuiSettings(updates)
-  if (updates && Object.prototype.hasOwnProperty.call(updates, 'mapsOverlayKeybind')) {
+  if (updates && ('mapsOverlayKeybind' in updates || 'mapsOverlayEnabled' in updates)) {
     try {
-      writeMapsKeybindFile(tosuProcess.getTosuDir(), next.mapsOverlayKeybind)
+      if ('mapsOverlayEnabled' in updates) syncMapsCounter(tosuProcess.getTosuDir(), next.mapsOverlayEnabled)
+      writeMapsKeybindFile(tosuProcess.getTosuDir())
     } catch {
       /* ignore */
     }
@@ -707,7 +709,7 @@ ipcMain.handle(
   'maps:download',
   async (
     _e,
-    payload: { setId?: number; artist?: string; title?: string }
+    payload: { setId?: number; artist?: string; title?: string; noVideo?: boolean }
   ) => {
     const setId = Number(payload?.setId) || 0
     if (!setId) throw new Error('Некорректный set id')
@@ -727,6 +729,7 @@ ipcMain.handle(
         {
           artist: typeof payload?.artist === 'string' ? payload.artist : '',
           title: typeof payload?.title === 'string' ? payload.title : '',
+          noVideo: typeof payload?.noVideo === 'boolean' ? payload.noVideo : undefined,
         }
       )
       invalidateLocalSetIdsCache()

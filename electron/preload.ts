@@ -137,6 +137,7 @@ const api = {
     setId: number
     artist?: string
     title?: string
+    noVideo?: boolean
   }): Promise<{ ok: boolean; filePath?: string; source?: string; cancelled?: boolean }> =>
     ipcRenderer.invoke('maps:download', payload),
   cancelMapDownload: (setId: number): Promise<{ ok: boolean }> =>

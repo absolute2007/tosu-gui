@@ -511,7 +511,7 @@ export async function resolveOsuckDownload(options: {
   const tryHosts =
     ordered.length === 1 && ordered[0] === 'mega'
       ? ordered
-      : ordered.filter((h) => h !== 'mega').concat(ordered.includes('mega') ? ['mega'] : [])
+      : ordered.filter((h): boolean => h !== 'mega').concat(ordered.includes('mega') ? ['mega'] : [])
 
   const location = `/skins/${skinId}?tab=downloads`
   const jar: CookieJar = new Map()

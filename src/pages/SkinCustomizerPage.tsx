@@ -29,6 +29,7 @@ import type {
 } from '../../electron/preload'
 import type { FollowPointPreviewFrame } from '../../electron/skins-customizer'
 import './SkinCustomizerPage.css'
+import { humanizeError } from '../lib/errors'
 
 interface Props {
   visible?: boolean
@@ -119,7 +120,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         setCustomData(null)
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Не удалось загрузить список скинов'
+      const msg = humanizeError(err, lang, 'Не удалось загрузить список скинов')
       onToast(msg, 'error')
     } finally {
       setLoadingSkins(false)
@@ -137,7 +138,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       const data = await window.tosuGui.getSkinCustomization(skinPath)
       setCustomData(data)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка считывания настроек скина'
+      const msg = humanizeError(err, lang, 'Ошибка считывания настроек скина')
       onToast(msg, 'error')
     } finally {
       setLoadingCustomData(false)
@@ -176,7 +177,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         'success'
       )
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to apply tweak' : 'Ошибка применения настройки')
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Failed to apply tweak' : 'Ошибка применения настройки'))
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -200,7 +201,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         'success'
       )
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to update tweak' : 'Ошибка обновления настройки')
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Failed to update tweak' : 'Ошибка обновления настройки'))
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -224,7 +225,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         'success'
       )
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to reset element' : 'Ошибка сброса элемента')
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Failed to reset element' : 'Ошибка сброса элемента'))
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -243,7 +244,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       setCustomData(updated)
       onToast(lang === 'en' ? 'Cursor color successfully updated in skin' : 'Цвет курсора успешно обновлен в скине', 'success')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to recolor cursor' : 'Ошибка применения цвета курсора')
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Failed to recolor cursor' : 'Ошибка применения цвета курсора'))
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -263,7 +264,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         'success'
       )
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to revert cursor color' : 'Ошибка возврата цвета курсора')
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Failed to revert cursor color' : 'Ошибка возврата цвета курсора'))
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -281,7 +282,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       setCustomData(updated)
       onToast(lang === 'en' ? 'Combo note colors saved to skin.ini' : 'Цвета комбо-нот успешно сохранены в скине', 'success')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to save combo colors' : 'Ошибка сохранения цветов комбо')
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Failed to save combo colors' : 'Ошибка сохранения цветов комбо'))
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -297,7 +298,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       setShowResetModal(false)
       onToast(lang === 'en' ? 'All skin modifications successfully reset to original' : 'Все настройки скина успешно сброшены к оригиналу', 'success')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to reset skin modifications' : 'Ошибка сброса настроек скина')
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Failed to reset skin modifications' : 'Ошибка сброса настроек скина'))
       onToast(msg, 'error')
     } finally {
       setResettingAll(false)
@@ -308,7 +309,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
     try {
       await window.tosuGui.openSkinsFolder()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Skins folder not found' : 'Папка Skins не найдена')
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Skins folder not found' : 'Папка Skins не найдена'))
       onToast(msg, 'error')
     }
   }
@@ -328,7 +329,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       setCustomData(updated)
       onToast(t('skinCustomizer.textureReplaced'), 'success')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка замены текстуры'
+      const msg = humanizeError(err, lang, 'Ошибка замены текстуры')
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -345,7 +346,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         await handleReplaceTexture(tweak, { filePath: pickedPath })
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка выбора файла'
+      const msg = humanizeError(err, lang, 'Ошибка выбора файла')
       onToast(msg, 'error')
     }
   }
@@ -361,7 +362,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       setCustomData(updated)
       onToast(lang === 'en' ? 'Follow points applied to skin' : 'Линии следования применены в скине', 'success')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Failed to apply follow points' : 'Ошибка применения линий следования')
+      const msg = humanizeError(err, lang, (lang === 'en' ? 'Failed to apply follow points' : 'Ошибка применения линий следования'))
       onToast(msg, 'error')
     } finally {
       setBusyTweakId(null)
@@ -378,7 +379,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
       const data = await window.tosuGui.getSkinOptimizerData(skinPath)
       setOptimizerData(data)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка считывания данных оптимизатора'
+      const msg = humanizeError(err, lang, 'Ошибка считывания данных оптимизатора')
       onToast(msg, 'error')
     } finally {
       setLoadingOptimizer(false)
@@ -412,7 +413,7 @@ export function SkinCustomizerPage({ visible, onToast }: Props) {
         'success'
       )
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Ошибка оптимизации спрайтов'
+      const msg = humanizeError(err, lang, 'Ошибка оптимизации спрайтов')
       onToast(msg, 'error')
     } finally {
       setOptimizingBatch(false)

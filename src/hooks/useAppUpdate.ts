@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppUpdateInfo, AppUpdateProgress } from '../../electron/app-updater'
 import { useI18n } from '../i18n/context'
+import { humanizeError } from '../lib/errors'
 
 export function useAppUpdate(onToast: (msg: string, type: 'success' | 'error') => void) {
   const { lang } = useI18n()
@@ -69,7 +70,7 @@ export function useAppUpdate(onToast: (msg: string, type: 'success' | 'error') =
         return info
       } catch (err) {
         if (notify) {
-          const msg = err instanceof Error ? err.message : (lang === 'en' ? 'Update check failed' : 'Ошибка проверки обновлений')
+          const msg = humanizeError(err, lang, (lang === 'en' ? 'Update check failed' : 'Ошибка проверки обновлений'))
           onToast(msg, 'error')
         }
         return null
@@ -111,7 +112,7 @@ export function useAppUpdate(onToast: (msg: string, type: 'success' | 'error') =
       )
       setVisible(false)
     } catch (err) {
-      const raw = err instanceof Error ? err.message : String(err ?? (lang === 'en' ? 'Update failed' : 'Ошибка обновления'))
+      const raw = humanizeError(err, lang, (lang === 'en' ? 'Update failed' : 'Ошибка обновления'))
       const msg = raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
       onToast(msg || (lang === 'en' ? 'Update failed' : 'Ошибка обновления'), 'error')
     } finally {

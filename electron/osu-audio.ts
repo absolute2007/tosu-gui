@@ -4,8 +4,6 @@ import path from 'path'
 import { app } from 'electron'
 import { readGuiSettings, writeGuiSettings } from './gui-settings'
 
-const CREATE_NO_WINDOW = 0x08000000
-
 function getAudioControllerExe(): string | null {
   if (process.platform !== 'win32') return null
 
@@ -74,7 +72,6 @@ class OsuAudioManager {
       const proc = spawn(exe, ['--daemon'], {
         windowsHide: true,
         stdio: ['pipe', 'pipe', 'ignore'],
-        creationFlags: CREATE_NO_WINDOW,
       })
 
       proc.stdout?.on('data', (chunk: Buffer) => {

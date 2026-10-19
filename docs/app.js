@@ -113,7 +113,7 @@ const I18N = {
       "Внутриигровой оверлей поверх osu!: быстрый вызов по Ctrl+Shift+M, поиск и скачивание карт прямо во время игры в любом режиме экрана. PP-счётчики настраиваются прямо в клиенте.",
     shotPanelTitle: "Внутриигровая панель",
     shotPanelBody:
-      "Компактная панель прямо в игре: быстрый доступ к каталогу карт, загрузка в один клик и управление активным треком.",
+      "Большая панель карт прямо в игре в стиле приложения: подробная страница каждой карты (сложности, CS/AR/OD/HP, статистика, теги), скачивание с видео или без, превью и управление треком. Отключается одним переключателем.",
     shotMapsTitle: "Карты",
     shotMapsBody:
       "Поиск и скачивание beatmap-сетов с osu.ppy.sh. Фильтры по статусу, режиму и языку, превью трека и установка в Songs — в GUI и во внутриигровой панели.",
@@ -163,7 +163,7 @@ const I18N = {
       "In-game overlay inside osu!: press Ctrl+Shift+M to search and download beatmaps directly during gameplay in any screen mode. PP counters can be moved in-game.",
     shotPanelTitle: "In-game Panel",
     shotPanelBody:
-      "Compact overlay sidebar: quick beatmap catalog search, instant download, and current track controls directly inside osu!.",
+      "Large in-game beatmap panel styled like the app: a detailed page for every beatmap (difficulties, CS/AR/OD/HP, stats, tags), download with or without video, previews and track controls. Turn it off with a single switch.",
     shotMapsTitle: "Maps",
     shotMapsBody:
       "Search and download beatmap sets from osu.ppy.sh. Status, mode, and language filters, track preview, and install into Songs — in the GUI and the in-game panel.",

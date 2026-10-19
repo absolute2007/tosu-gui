@@ -75,6 +75,10 @@ export const translations = {
       active: 'Активен',
       configure: 'Настроить',
       preview: 'Превью',
+      mapsDisabledTitle: 'Панель карт в игре выключена',
+      mapsDisabledDesc: 'Maps Browser убран из оверлея. Включите, чтобы вернуть его.',
+      mapsEnable: 'Включить',
+      mapsToggleTitle: 'Панель карт в игре: вкл/выкл (без удаления)',
     },
     maps: {
       title: 'Карты osu!',
@@ -289,6 +293,7 @@ export const translations = {
       instafadeColorCustom: 'Свой цвет',
       instantFadeTimingBadge: 'Мгновенно (0 ms)',
       normalFadeTimingBadge: 'Затухание (240 ms)',
+      previewCanvasTitle: 'Нажмите для превью',
       tweaks: {
         'cursor-color': {
           title: 'Цвет курсора и шлейфа',
@@ -428,7 +433,9 @@ export const translations = {
       sectionMaps: 'Карты',
       songsFolder: 'Папка Songs',
       songsFolderDesc: 'Куда скачивать .osz. Сейчас: {path}',
-      inGameMaps: 'Карты в игре',
+      inGameMapsEnabled: 'Панель карт в игре',
+      inGameMapsEnabledDesc: 'Встроенный браузер карт поверх osu!. Выключите, чтобы не загружать его в оверлей — счётчик не удаляется.',
+      inGameMaps: 'Хоткей панели карт',
       inGameMapsDesc: 'Хоткей панели карт поверх osu! (нужен in-game overlay). По умолчанию Control+Shift+M.',
       sectionSkins: 'Скины',
       skinsSection: 'Раздел «Скины»',
@@ -537,6 +544,10 @@ export const translations = {
       active: 'Active',
       configure: 'Configure',
       preview: 'Preview',
+      mapsDisabledTitle: 'In-game beatmaps panel is off',
+      mapsDisabledDesc: 'Maps Browser is removed from the overlay. Turn it on to bring it back.',
+      mapsEnable: 'Turn on',
+      mapsToggleTitle: 'In-game beatmaps panel on/off (nothing is deleted)',
     },
     maps: {
       title: 'osu! Beatmaps',
@@ -751,6 +762,7 @@ export const translations = {
       instafadeColorCustom: 'Custom Color',
       instantFadeTimingBadge: 'Instant (0 ms)',
       normalFadeTimingBadge: 'Fade-out (240 ms)',
+      previewCanvasTitle: 'Click to preview',
       tweaks: {
         'cursor-color': {
           title: 'Cursor & Trail Color',
@@ -890,7 +902,9 @@ export const translations = {
       sectionMaps: 'Beatmaps',
       songsFolder: 'Songs Folder',
       songsFolderDesc: 'Destination for .osz beatmap downloads. Currently: {path}',
-      inGameMaps: 'In-Game Beatmaps',
+      inGameMapsEnabled: 'In-game beatmaps panel',
+      inGameMapsEnabledDesc: 'Built-in beatmap browser over osu!. Turn off to keep it out of the overlay — nothing gets deleted.',
+      inGameMaps: 'Beatmaps panel hotkey',
       inGameMapsDesc: 'Hotkey for beatmaps panel over osu! (requires in-game overlay). Default: Control+Shift+M.',
       sectionSkins: 'Skins',
       skinsSection: '«Skins» Section',
