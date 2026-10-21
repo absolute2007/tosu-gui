@@ -592,7 +592,7 @@
     var m = normalizeOsuMode(mode)
     var d = modePath(m)
     var tt = title ? ' title="' + title + '"' : ' title="' + (stars || 0).toFixed(2) + '★"'
-    return '<span class="mg-diffico"' + tt + ' style="color:' + color + '"><svg viewBox="0 0 1000 1000" width="' + (size || 14) + '" height="' + (size || 14) + '"><g transform="translate(0,1000) scale(1,-1)"><path fill="currentColor" fill-rule="evenodd" d="' + d + '"/></g></svg></span>'
+    return '<span class="mg-diffico"' + tt + ' style="color:' + color + '"><svg viewBox="0 0 1000 1000" width="' + (size || 14) + '" height="' + (size || 14) + '"><g transform="translate(0,850) scale(1,-1)"><path fill="currentColor" fill-rule="evenodd" d="' + d + '"/></g></svg></span>'
   }
 
   var DEFAULT_API_TIMEOUT_MS = 10000
@@ -1853,7 +1853,7 @@
             '" data-gp-diff="' +
             b.id +
             '">' +
-            '<span class="mg-diffico" style="color:' + getDiffColour(b.stars || 0) + '"><svg viewBox="0 0 1000 1000" width="18" height="18"><g transform="translate(0,1000) scale(1,-1)"><path fill="currentColor" fill-rule="evenodd" d="' + modePath(b.mode) + '"/></g></svg></span>' +
+            '<span class="mg-diffico" style="color:' + getDiffColour(b.stars || 0) + '"><svg viewBox="0 0 1000 1000" width="18" height="18"><g transform="translate(0,850) scale(1,-1)"><path fill="currentColor" fill-rule="evenodd" d="' + modePath(b.mode) + '"/></g></svg></span>' +
             esc(b.version) + '</button>'
           )
         })
@@ -2782,7 +2782,7 @@
     '#R .mg-btn-lg{height:36px;padding:0 16px;font-size:14px}',
     '#R .mg-icon-btn{width:30px;padding:0;font-size:15px}',
     '#R .mg-refresh{width:34px;height:34px;font-size:17px}',
-    '#R .mg-refresh.-spin{animation:mg-spin .8s linear infinite}',
+    '#R .mg-refresh.-spin .mg-ico{animation:mg-spin .8s linear infinite;transform-origin:50% 50%;will-change:transform}',
     '#R .mg-primary{background:var(--accent);border-color:transparent;color:#fff;box-shadow:0 1px 2px rgba(10,132,255,.25)}',
     '#R .mg-primary:hover:not(:disabled){background:var(--accent-hover)}',
     '#R .mg-owned{color:var(--success);border-color:rgba(50,215,75,.3);background:rgba(50,215,75,.08)}',

@@ -22,6 +22,7 @@ import { humanizeError } from './lib/errors'
 
 const MapsPage = lazy(() => import('./pages/MapsPage').then((m) => ({ default: m.MapsPage })))
 const SkinsPage = lazy(() => import('./pages/SkinsPage').then((m) => ({ default: m.SkinsPage })))
+const TabletPage = lazy(() => import('./pages/TabletPage').then((m) => ({ default: m.TabletPage })))
 const SkinCustomizerPage = lazy(() =>
   import('./pages/SkinCustomizerPage').then((m) => ({ default: m.SkinCustomizerPage }))
 )
@@ -36,7 +37,7 @@ function PageFallback() {
   )
 }
 
-export type Page = 'status' | 'counters' | 'maps' | 'skins' | 'skin-customizer' | 'overlay' | 'settings'
+export type Page = 'status' | 'counters' | 'maps' | 'skins' | 'skin-customizer' | 'overlay' | 'tablet' | 'settings'
 
 
 interface ToastState {
@@ -296,6 +297,11 @@ export default function App() {
                 <span>{lang === 'en' ? 'Loading overlay…' : 'Загрузка оверлея…'}</span>
               </div>
             </div>
+          )}
+          {page === 'tablet' && (
+            <Suspense fallback={<PageFallback />}>
+              <TabletPage onToast={showToast} />
+            </Suspense>
           )}
           {page === 'settings' && tosuSettings.settings && (
             <SettingsPage

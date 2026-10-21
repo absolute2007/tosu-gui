@@ -53,6 +53,9 @@ export class TosuSocketBridge {
   private safeCloseWs(ws: WebSocket | null) {
     if (!ws) return
     ws.removeAllListeners()
+    // terminate() on a CONNECTING socket emits 'error' asynchronously;
+    // without a listener it becomes an uncaught exception in main.
+    ws.on('error', () => {})
     try {
       if (ws.readyState === WebSocket.CONNECTING) {
         ws.terminate()

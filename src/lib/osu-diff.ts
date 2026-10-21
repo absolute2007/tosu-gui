@@ -133,7 +133,7 @@ export function diffIconSvg(mode: string | number | undefined, stars: number, si
   const d = modePath(mode)
   return (
     `<svg class="osu-diff-icon" width="${size}" height="${size}" viewBox="0 0 1000 1000" aria-hidden="true">` +
-    `<g transform="translate(0,1000) scale(1,-1)">` +
+    `<g transform="translate(0,850) scale(1,-1)">` +
     `<path fill="${color}" fill-rule="evenodd" d="${d}"/>` +
     `</g></svg>`
   )

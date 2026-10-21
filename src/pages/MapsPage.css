@@ -678,6 +678,19 @@
   overflow: auto;
 }
 
+.maps-gp-diffs .tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.maps-gp-diffs .tab-btn > svg,
+.maps-gp-diffs .tab-btn > img {
+  flex-shrink: 0;
+  display: block;
+}
+
 .maps-gp-canvas {
   width: 100%;
   height: auto;

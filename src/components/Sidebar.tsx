@@ -9,6 +9,7 @@ import {
   LogOut,
   Map as MapIcon,
   Palette,
+  PenTool,
   Settings,
   SlidersHorizontal,
   User,
@@ -27,6 +28,7 @@ const NAV: { id: Page; labelKey: TranslationKey; icon: typeof Activity; skinsOnl
   { id: 'skins', labelKey: 'sidebar.skins', icon: Palette, skinsOnly: true },
   { id: 'skin-customizer', labelKey: 'sidebar.skinCustomizer', icon: SlidersHorizontal, skinsOnly: true },
   { id: 'overlay', labelKey: 'sidebar.overlay', icon: Layers },
+  { id: 'tablet', labelKey: 'sidebar.tablet', icon: PenTool },
   { id: 'settings', labelKey: 'sidebar.settings', icon: Settings },
 ]
 

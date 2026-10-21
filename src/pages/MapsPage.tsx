@@ -746,6 +746,7 @@ export function MapsPage({
         const fallbackUrl = `https://catboy.best/preview/audio/${mapSet.id}`
         audio.src = primaryUrl
         audio.addEventListener('error', () => {
+          if (seq !== gpSeqRef.current) return
           if (audio.src !== fallbackUrl) {
             audio.src = fallbackUrl
             void audio.play().catch(() => {})
@@ -1582,7 +1583,6 @@ export function MapsPage({
                   type="button"
                   className={`tab-btn ${gpBeatmapId === b.id ? '-active' : ''}`}
                   onClick={() => void loadGameplayDiff(b.id, gpSet)}
-                  disabled={gpLoading}
                 >
                   <DiffIcon mode={b.mode} stars={b.stars || 0} size={18} />
                   {b.version}
